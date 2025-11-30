@@ -10,7 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
     <style>
         body {
@@ -29,19 +28,6 @@
             width: 100vw;
             height: 100vh;
             z-index: 1;
-        }
-
-        #video-feed {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 240px;
-            height: 180px;
-            transform: scaleX(-1);
-            border: 2px solid #00ffaa;
-            border-radius: 12px;
-            z-index: 2;
-            opacity: 0.6;
         }
 
         #ui-layer {
@@ -169,7 +155,6 @@
 <body>
 
     <video id="input-video" style="display:none"></video>
-    <canvas id="video-feed"></canvas>
     <div id="container"></div>
 
     <div id="ui-layer">
@@ -250,8 +235,6 @@
 
         // DOM
         const videoElement = document.getElementById('input-video');
-        const canvasFeed = document.getElementById('video-feed');
-        const ctxFeed = canvasFeed.getContext('2d');
         const scoreEl = document.getElementById('score');
         const comboEl = document.getElementById('combo');
         const healthEl = document.getElementById('bag-health');
@@ -440,20 +423,9 @@
 
         // --- Lógica de Pose (MediaPipe) ---
         function onResults(results) {
-            // Dibujar feed 2D
-            canvasFeed.width = videoElement.videoWidth;
-            canvasFeed.height = videoElement.videoHeight;
-            ctxFeed.save();
-            ctxFeed.clearRect(0, 0, canvasFeed.width, canvasFeed.height);
-            ctxFeed.drawImage(results.image, 0, 0, canvasFeed.width, canvasFeed.height);
-            
             if (results.poseLandmarks) {
-                drawConnectors(ctxFeed, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                drawLandmarks(ctxFeed, results.poseLandmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
-
                 updatePlayerPose(results.poseLandmarks);
             }
-            ctxFeed.restore();
         }
 
         function orientLimbLocal(segment, parent, startWorld, endWorld) {
