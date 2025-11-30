@@ -7,10 +7,10 @@
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- MediaPipe Pose & Hands -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.4.167/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.167/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.167/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.4.167/control_utils.js" crossorigin="anonymous"></script>
 
     <style>
         body {
@@ -197,6 +197,9 @@
         let bag, bagChain, targetSpot;
         let latestPoseLandmarks = null;
         let latestHandsResults = null;
+
+        const MEDIAPIPE_VERSION = '0.4.167';
+        const resolveMediaPipeAsset = (pkg, file) => `https://cdn.jsdelivr.net/npm/${pkg}@${MEDIAPIPE_VERSION}/${file}`;
 
         // MediaPipe Hands con `selfieMode: true` devuelve las manos espejadas
         // respecto al usuario cuando la cámara está configurada como espejo; mantener
@@ -982,9 +985,7 @@
             initThree();
 
             // Configurar MediaPipe Pose
-            const pose = new Pose({locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-            }});
+            const pose = new Pose({ locateFile: (file) => resolveMediaPipeAsset('@mediapipe/pose', file) });
 
             pose.setOptions({
                 modelComplexity: 1,
@@ -998,9 +999,7 @@
             pose.onResults(onPoseResults);
 
             // Configurar MediaPipe Hands
-            const hands = new Hands({ locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }});
+            const hands = new Hands({ locateFile: (file) => resolveMediaPipeAsset('@mediapipe/hands', file) });
 
             hands.setOptions({
                 maxNumHands: 2,
