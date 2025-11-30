@@ -435,7 +435,37 @@
             camera.position.y = Math.max(0.5, Math.min(2.2, camera.position.y));
 
             // --- 2. ARM TRACKING (Cinemática Inversa simplificada / Mapeo directo) ---
-            
+
+            function orientLimb(segment, start, end) {
+                const direction = new THREE.Vector3().subVectors(end, start);
+                const length = Math.max(direction.length(), 0.001);
+                const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                    new THREE.Vector3(0, -1, 0),
+                    direction.clone().normalize()
+                );
+
+                segment.position.copy(start);
+                segment.setRotationFromQuaternion(quaternion);
+                segment.scale.set(1, length, 1);
+            }
+
+            function pulseGlove(armObj, isCrit) {
+                const emissiveColor = isCrit ? 0xffff66 : 0x66ffff;
+                const targetScale = isCrit ? 1.35 : 1.2;
+
+                if (armObj.glove.material.emissive) {
+                    armObj.glove.material.emissive.setHex(emissiveColor);
+                }
+                armObj.glove.scale.setScalar(targetScale);
+
+                setTimeout(() => {
+                    if (armObj.glove.material.emissive) {
+                        armObj.glove.material.emissive.setHex(0x000000);
+                    }
+                    armObj.glove.scale.set(1, 1, 1);
+                }, isCrit ? 200 : 140);
+            }
+
             // Función para actualizar un brazo
             function updateArm(armObj, idxShoulder, idxElbow, idxWrist, isRight) {
                 const shoulderLM = landmarks[idxShoulder];
@@ -470,26 +500,12 @@
                 const vWrist = new THREE.Vector3(wX, wY, wZ);
 
                 // --- Actualizar Mallas ---
-                
+
                 // 1. Upper Arm (Hombro -> Codo)
-                armObj.upper.position.copy(vShoulder);
-                armObj.upper.lookAt(vElbow);
-                // Escalar longitud para conectar
-                const distUpper = vShoulder.distanceTo(vElbow);
-                armObj.upper.scale.set(1, 1, distUpper); // Cylinder escala en Y por defecto, pero rotamos
-                // Fix: Cylinder geometry oriented along Y. lookAt aligns +Z. 
-                // Necesitamos rotar la geometría o usar un truco.
-                // Truco: Usar lookAt y rotar geometria X -90.
-                armObj.upper.rotation.x -= Math.PI/2; 
-                // Ajuste escala (geometry height=1)
-                armObj.upper.scale.set(1, distUpper, 1);
+                orientLimb(armObj.upper, vShoulder, vElbow);
 
                 // 2. Lower Arm (Codo -> Muñeca)
-                armObj.lower.position.copy(vElbow);
-                armObj.lower.lookAt(vWrist);
-                const distLower = vElbow.distanceTo(vWrist);
-                armObj.lower.rotation.x -= Math.PI/2;
-                armObj.lower.scale.set(1, distLower, 1);
+                orientLimb(armObj.lower, vElbow, vWrist);
 
                 // 3. Guante
                 // Suavizado
@@ -499,7 +515,7 @@
                 armObj.glove.lookAt(new THREE.Vector3(vWrist.x, vWrist.y, vWrist.z - 1));
 
                 // --- Detección Golpes ---
-                checkHit(armObj.glove, isRight);
+                checkHit(armObj, isRight);
             }
 
             // Actualizar Izquierdo (Landmarks 11, 13, 15)
@@ -508,24 +524,24 @@
             updateArm(player.rightArm, 12, 14, 16, true);
         }
 
-        function checkHit(gloveMesh, isRight) {
+        function checkHit(armObj, isRight) {
             const bagPos = new THREE.Vector3();
             bag.getWorldPosition(bagPos);
 
-            const dist = gloveMesh.position.distanceTo(bagPos);
+            const dist = armObj.glove.position.distanceTo(bagPos);
             const now = Date.now();
 
             // Lógica de impacto mejorada
             if (dist < 0.6 && (now - gameState.lastHit > 200)) {
                 // Verificar que el golpe va hacia adelante (velocidad o posición Z)
-                if (gloveMesh.position.z < -0.5) { // Cerca del saco en profundidad
-                    
+                if (armObj.glove.position.z < -0.5) { // Cerca del saco en profundidad
+
                     // Fuerza del golpe (simulada random + velocidad teórica)
-                    const power = 1; 
+                    const power = 1;
 
                     // Vector de impacto (desde guante hacia saco)
-                    const impactVec = new THREE.Vector3().subVectors(bagPos, gloveMesh.position).normalize();
-                    
+                    const impactVec = new THREE.Vector3().subVectors(bagPos, armObj.glove.position).normalize();
+
                     // Aplicar físicas al saco
                     bagPhysics.angularVelX += impactVec.z * 0.15; // Golpear hacia fondo rota en X
                     bagPhysics.angularVelZ -= impactVec.x * 0.15; // Golpear lateral rota en Z
@@ -533,12 +549,12 @@
                     // Critico?
                     const targetPos = new THREE.Vector3();
                     targetSpot.getWorldPosition(targetPos);
-                    const distTarget = gloveMesh.position.distanceTo(targetPos);
+                    const distTarget = armObj.glove.position.distanceTo(targetPos);
                     const isCrit = distTarget < 0.3;
 
-                    registerHit(isCrit);
+                    registerHit(isCrit, armObj);
                     gameState.lastHit = now;
-                    
+
                     // Feedback luz
                     const light = isRight ? player.rightArm.light : player.leftArm.light;
                     light.intensity = 5;
@@ -547,8 +563,12 @@
             }
         }
 
-        function registerHit(isCrit) {
+        function registerHit(isCrit, armObj) {
             playSound(isCrit);
+
+            if (armObj) {
+                pulseGlove(armObj, isCrit);
+            }
 
             const dmg = isCrit ? 10 : 5;
             gameState.score += dmg * 10;
