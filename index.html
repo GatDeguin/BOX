@@ -135,7 +135,7 @@
 
         p { color: #aaa; max-width: 600px; text-align: center; font-size: 22px; line-height: 1.5; margin-bottom: 40px; }
 
-        button {
+        button { 
             background: #fff; color: #000;
             border: none; padding: 20px 60px;
             font-size: 30px; font-weight: 900;
@@ -148,7 +148,16 @@
         button:hover { background: #ff0055; color: #fff; box-shadow: 10px 10px 0 #fff; }
 
         .loading { margin-top: 20px; color: #00ffaa; font-family: monospace; display: none; }
-        
+
+        .error-message {
+            margin-top: 12px;
+            color: #ff5555;
+            font-size: 16px;
+            text-align: center;
+            max-width: 600px;
+            display: none;
+        }
+
         #instructions {
             margin-top: 30px;
             font-size: 16px;
@@ -192,6 +201,7 @@
         </p>
         <button id="start-btn">ENTRAR AL RING</button>
         <div class="loading" id="loading-text">Calibrando Sensores...</div>
+        <div class="error-message" id="error-message" aria-live="polite"></div>
         <div id="instructions">Aléjate ~2 metros de la cámara</div>
     </div>
 
@@ -232,6 +242,9 @@
         const scoreEl = document.getElementById('score');
         const comboEl = document.getElementById('combo');
         const healthEl = document.getElementById('bag-health');
+        const loadingEl = document.getElementById('loading-text');
+        const errorEl = document.getElementById('error-message');
+        const startScreen = document.getElementById('start-screen');
 
         // --- Three.js ---
         function initThree() {
@@ -637,10 +650,18 @@
 
         // --- Inicio ---
         const startBtn = document.getElementById('start-btn');
-        startBtn.addEventListener('click', async () => {
+        startBtn.addEventListener('click', () => {
             startBtn.disabled = true;
-            document.getElementById('loading-text').style.display = 'block';
-            
+            loadingEl.style.display = 'block';
+            errorEl.style.display = 'none';
+
+            startGame().catch((err) => {
+                console.error('No se pudo iniciar la captura de cámara o la detección de pose', err);
+                resetStartUIWithError('No se pudo acceder a la cámara. Revisa los permisos y vuelve a intentarlo.');
+            });
+        });
+
+        async function startGame() {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             initThree();
 
@@ -648,7 +669,7 @@
             const pose = new Pose({locateFile: (file) => {
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }});
-            
+
             pose.setOptions({
                 modelComplexity: 1,
                 smoothLandmarks: true,
@@ -657,7 +678,7 @@
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5
             });
-            
+
             pose.onResults(onResults);
 
             const cam = new Camera(videoElement, {
@@ -667,12 +688,20 @@
                 width: 640,
                 height: 480
             });
+
             await cam.start();
 
-            document.getElementById('start-screen').style.display = 'none';
+            startScreen.style.display = 'none';
             gameState.isPlaying = true;
             animate();
-        });
+        }
+
+        function resetStartUIWithError(message) {
+            loadingEl.style.display = 'none';
+            startBtn.disabled = false;
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
 
     </script>
 </body>
