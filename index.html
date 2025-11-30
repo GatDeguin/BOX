@@ -404,8 +404,6 @@
             );
             targetSpot.position.set(0, 0, 0.36);
             bag.add(targetSpot);
-            
-            animateTarget();
         }
 
         function animateTarget() {
@@ -1027,6 +1025,7 @@
 
             startScreen.style.display = 'none';
             gameState.isPlaying = true;
+            animateTarget();
             animate();
         }
 
