@@ -229,6 +229,7 @@
         };
 
         let lastPoseTime = 0;
+        let lastFrameTime = 0;
 
         const bagPhysics = {
             velocity: new THREE.Vector3(),
@@ -769,9 +770,6 @@
                 armObj.prevCenter = gloveCenter.clone();
                 armObj.velocity = velocity;
                 armObj.gloveCollider = { start: gloveStart, end: gloveEnd, radius: colliders.gloveRadius };
-
-                // --- Detección Golpes ---
-                checkHit(armObj);
             }
 
             // Actualizar Izquierdo (Landmarks 11, 13, 15)
@@ -780,18 +778,45 @@
             updateArm(player.rightArm, 12, 14, 16, true);
         }
 
-        function checkHit(armObj) {
+        function updateArmRenderState(armObj, deltaTime) {
             if (!armObj.gloveCollider) return;
+
+            if (!armObj.renderCollider) {
+                armObj.renderCollider = {
+                    start: armObj.gloveCollider.start.clone(),
+                    end: armObj.gloveCollider.end.clone(),
+                    radius: armObj.gloveCollider.radius
+                };
+            } else {
+                const lerpFactor = Math.min(1, deltaTime * 15);
+                armObj.renderCollider.start.lerp(armObj.gloveCollider.start, lerpFactor);
+                armObj.renderCollider.end.lerp(armObj.gloveCollider.end, lerpFactor);
+                armObj.renderCollider.radius = armObj.gloveCollider.radius;
+            }
+
+            if (armObj.velocity) {
+                if (!armObj.renderVelocity) {
+                    armObj.renderVelocity = armObj.velocity.clone();
+                } else {
+                    const lerpFactor = Math.min(1, deltaTime * 15);
+                    armObj.renderVelocity.lerp(armObj.velocity, lerpFactor);
+                }
+            }
+        }
+
+        function checkHit(armObj) {
+            const collider = armObj.renderCollider || armObj.gloveCollider;
+            const velocity = armObj.renderVelocity || armObj.velocity;
+            if (!collider) return;
 
             const now = Date.now();
             if (now - gameState.lastHit < 120) return;
 
             const bagCollider = getBagCollider();
-            const collision = intersectCapsules(armObj.gloveCollider, bagCollider);
+            const collision = intersectCapsules(collider, bagCollider);
 
             if (collision.penetration <= 0) return;
-
-            const approachSpeed = Math.max(0, armObj.velocity ? armObj.velocity.dot(collision.normal) : 0);
+            const approachSpeed = Math.max(0, velocity ? velocity.dot(collision.normal) : 0);
             if (approachSpeed < 0.2 && collision.penetration < 0.02) return;
 
             const impactStrength = approachSpeed * 0.6 + collision.penetration * 8;
@@ -860,6 +885,10 @@
         function animate() {
             requestAnimationFrame(animate);
 
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            const deltaTime = lastFrameTime ? (now - lastFrameTime) / 1000 : 0.016;
+            lastFrameTime = now;
+
             // Físicas del Saco (Spring Damper system simple)
             const gravity = 0.005;
             const damping = 0.95;
@@ -880,6 +909,12 @@
 
             // Saco gira un poco sobre su eje Y al ser golpeado de lado
             bag.rotation.y += bagPhysics.angularVelZ * 0.5;
+
+            updateArmRenderState(player.leftArm, deltaTime);
+            updateArmRenderState(player.rightArm, deltaTime);
+
+            checkHit(player.leftArm);
+            checkHit(player.rightArm);
 
             renderer.render(scene, camera);
         }
