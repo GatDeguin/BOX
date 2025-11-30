@@ -754,8 +754,10 @@
                 armObj.glove.position.lerp(wristLocal, 0.4);
                 armObj.glove.lookAt(new THREE.Vector3(wristLocal.x, wristLocal.y, wristLocal.z - 0.6));
 
-                const handLandmarks = getHandLandmarksForSide(handsResults, isRight);
-                updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, isRight);
+                // Intercambiamos la lateralidad para que cada brazo use la mano correcta
+                // (MediaPipe entrega las manos invertidas en esta escena espejada).
+                const handLandmarks = getHandLandmarksForSide(handsResults, !isRight);
+                updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, !isRight);
 
                 const gloveStart = wristWorld.clone();
                 const gloveEnd = (armObj.hitPoints.knuckle || gloveStart).clone();
