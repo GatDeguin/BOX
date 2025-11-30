@@ -6,8 +6,9 @@
     <title>Boxeo VR - Full Body Edition</title>
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- MediaPipe Pose (Cambio importante: De Hands a Pose) -->
+    <!-- MediaPipe Pose & Hands -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
 
@@ -194,11 +195,13 @@
         // --- Configuración Global ---
         let scene, camera, renderer, playerRig, headAnchor;
         let bag, bagChain, targetSpot;
+        let latestPoseLandmarks = null;
+        let latestHandsResults = null;
         
         // Player Body Parts
         const player = {
-            leftArm: { upper: null, lower: null, glove: null, light: null },
-            rightArm: { upper: null, lower: null, glove: null, light: null },
+            leftArm: { upper: null, lower: null, glove: null, light: null, hand: null, hitPoints: {} },
+            rightArm: { upper: null, lower: null, glove: null, light: null, hand: null, hitPoints: {} },
             headPos: new THREE.Vector3(0, 1.6, 0)
         };
 
@@ -379,6 +382,38 @@
                 return new THREE.Mesh(geo, mat);
             }
 
+            const handBoneGeo = new THREE.CylinderGeometry(0.01, 0.01, 1, 6);
+            const handConnections = {
+                palm: [[0, 1], [1, 2], [2, 5], [5, 9], [9, 0]],
+                thumb: [[1, 2], [2, 3], [3, 4]],
+                index: [[5, 6], [6, 7], [7, 8]],
+                middle: [[9, 10], [10, 11], [11, 12]]
+            };
+
+            function createHandRig(color) {
+                const group = new THREE.Group();
+                const segments = [];
+                const mat = new THREE.MeshBasicMaterial({
+                    color,
+                    transparent: true,
+                    opacity: 0.65
+                });
+
+                Object.entries(handConnections).forEach(([label, conns]) => {
+                    conns.forEach(([a, b]) => {
+                        const segment = new THREE.Mesh(handBoneGeo, mat);
+                        segment.name = `${label}-${a}-${b}`;
+                        group.add(segment);
+                        segments.push({ mesh: segment, a, b });
+                    });
+                });
+
+                headAnchor.add(group);
+                group.visible = false;
+
+                return { group, segments };
+            }
+
             function createArmRig(color) {
                 const shoulder = new THREE.Bone();
                 const elbow = new THREE.Bone();
@@ -404,6 +439,7 @@
             const gloveMatL = new THREE.MeshStandardMaterial({color: 0x00ffaa, roughness:0.2});
             player.leftArm.glove = new THREE.Mesh(gloveGeo, gloveMatL);
             headAnchor.add(player.leftArm.glove);
+            player.leftArm.hand = createHandRig(0x00ffaa);
 
             // Luz Guante Izquierdo
             player.leftArm.light = new THREE.PointLight(0x00ffaa, 1, 3);
@@ -415,6 +451,7 @@
             const gloveMatR = new THREE.MeshStandardMaterial({color: 0xffaa00, roughness:0.2});
             player.rightArm.glove = new THREE.Mesh(gloveGeo, gloveMatR);
             headAnchor.add(player.rightArm.glove);
+            player.rightArm.hand = createHandRig(0xffaa00);
 
             // Luz Guante Derecho
             player.rightArm.light = new THREE.PointLight(0xffaa00, 1, 3);
@@ -422,9 +459,17 @@
         }
 
         // --- Lógica de Pose (MediaPipe) ---
-        function onResults(results) {
+        function onPoseResults(results) {
             if (results.poseLandmarks) {
-                updatePlayerPose(results.poseLandmarks);
+                latestPoseLandmarks = results.poseLandmarks;
+                updatePlayerPose(results.poseLandmarks, latestHandsResults);
+            }
+        }
+
+        function onHandsResults(results) {
+            latestHandsResults = results;
+            if (latestPoseLandmarks) {
+                updatePlayerPose(latestPoseLandmarks, latestHandsResults);
             }
         }
 
@@ -445,6 +490,19 @@
             segment.scale.set(1, length, 1);
         }
 
+        function orientHandSegment(segment, startLocal, endLocal) {
+            const direction = new THREE.Vector3().subVectors(endLocal, startLocal);
+            const length = Math.max(direction.length(), 0.001);
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, 1, 0),
+                direction.clone().normalize()
+            );
+
+            segment.position.copy(startLocal.clone().add(endLocal).multiplyScalar(0.5));
+            segment.setRotationFromQuaternion(quaternion);
+            segment.scale.set(1, length, 1);
+        }
+
         function mapToPlayerSpace(landmark, rootLandmark) {
             // Coordenadas relativas al centro de la cadera para evitar deriva
             const relative = new THREE.Vector3(
@@ -460,7 +518,59 @@
             return new THREE.Vector3(x, y, z);
         }
 
-        function updatePlayerPose(landmarks) {
+        function getHandLandmarksForSide(handsResults, isRight) {
+            if (!handsResults || !handsResults.multiHandLandmarks || !handsResults.multiHandedness) return null;
+
+            for (let i = 0; i < handsResults.multiHandLandmarks.length; i++) {
+                const handedness = handsResults.multiHandedness[i]?.label?.toLowerCase();
+                if ((isRight && handedness === 'right') || (!isRight && handedness === 'left')) {
+                    return handsResults.multiHandLandmarks[i];
+                }
+            }
+            return null;
+        }
+
+        function updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, isRight) {
+            if (!armObj.hand) return;
+            if (!handLandmarks) {
+                armObj.hand.group.visible = false;
+                armObj.hitPoints = {};
+                return;
+            }
+
+            const smoothingOffset = isRight ? 200 : 100;
+            const handGroup = armObj.hand.group;
+            handGroup.visible = true;
+
+            const wristLocal = headAnchor.worldToLocal(wristWorld.clone());
+            handGroup.position.copy(wristLocal);
+
+            const positions = {};
+            const indicesNeeded = new Set();
+            armObj.hand.segments.forEach(({ a, b }) => { indicesNeeded.add(a); indicesNeeded.add(b); });
+            indicesNeeded.add(0); // palma
+            indicesNeeded.add(9); // nudillos medios
+
+            indicesNeeded.forEach((idx) => {
+                const mapped = mapToPlayerSpace(landmarkSmoother.get(smoothingOffset + idx, handLandmarks[idx]), rootLandmark);
+                const localToAnchor = headAnchor.worldToLocal(mapped.clone());
+                positions[idx] = localToAnchor.clone().sub(handGroup.position);
+            });
+
+            armObj.hand.segments.forEach(({ mesh, a, b }) => {
+                const start = positions[a];
+                const end = positions[b];
+                if (start && end) {
+                    orientHandSegment(mesh, start, end);
+                }
+            });
+
+            const palmWorld = mapToPlayerSpace(landmarkSmoother.get(smoothingOffset + 0, handLandmarks[0]), rootLandmark);
+            const knuckleWorld = mapToPlayerSpace(landmarkSmoother.get(smoothingOffset + 9, handLandmarks[9]), rootLandmark);
+            armObj.hitPoints = { palm: palmWorld, knuckle: knuckleWorld };
+        }
+
+        function updatePlayerPose(landmarks, handsResults) {
             // Landmarks importantes (MediaPipe Pose):
             // 0: Nariz
             // 11: Hombro Izquierdo, 12: Hombro Derecho
@@ -540,6 +650,9 @@
                 armObj.glove.position.lerp(wristLocal, 0.4);
                 armObj.glove.lookAt(new THREE.Vector3(wristLocal.x, wristLocal.y, wristLocal.z - 0.6));
 
+                const handLandmarks = getHandLandmarksForSide(handsResults, isRight);
+                updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, isRight);
+
                 // --- Detección Golpes ---
                 checkHit(armObj, isRight);
             }
@@ -556,20 +669,21 @@
 
             const gloveWorld = new THREE.Vector3();
             armObj.glove.getWorldPosition(gloveWorld);
+            const impactPoint = armObj.hitPoints.palm || armObj.hitPoints.knuckle || gloveWorld;
 
-            const dist = gloveWorld.distanceTo(bagPos);
+            const dist = impactPoint.distanceTo(bagPos);
             const now = Date.now();
 
             // Lógica de impacto mejorada
             if (dist < 0.6 && (now - gameState.lastHit > 200)) {
                 // Verificar que el golpe va hacia adelante (velocidad o posición Z)
-                if (gloveWorld.z < -0.5) { // Cerca del saco en profundidad
+                if (impactPoint.z < -0.5) { // Cerca del saco en profundidad
 
                     // Fuerza del golpe (simulada random + velocidad teórica)
                     const power = 1;
 
                     // Vector de impacto (desde guante hacia saco)
-                    const impactVec = new THREE.Vector3().subVectors(bagPos, gloveWorld).normalize();
+                    const impactVec = new THREE.Vector3().subVectors(bagPos, impactPoint).normalize();
 
                     // Aplicar físicas al saco
                     bagPhysics.angularVelX += impactVec.z * 0.15; // Golpear hacia fondo rota en X
@@ -695,11 +809,27 @@
                 minTrackingConfidence: 0.5
             });
 
-            pose.onResults(onResults);
+            pose.onResults(onPoseResults);
+
+            // Configurar MediaPipe Hands
+            const hands = new Hands({ locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+                selfieMode: true
+            });
+
+            hands.onResults(onHandsResults);
 
             const cam = new Camera(videoElement, {
                 onFrame: async () => {
                     await pose.send({image: videoElement});
+                    await hands.send({image: videoElement});
                 },
                 width: 640,
                 height: 480
