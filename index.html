@@ -207,14 +207,27 @@
 
     <script>
         // --- Configuración Global ---
-        let scene, camera, renderer;
+        let scene, camera, renderer, playerRig, headAnchor;
         let bag, bagChain, targetSpot;
         
         // Player Body Parts
         const player = {
             leftArm: { upper: null, lower: null, glove: null, light: null },
             rightArm: { upper: null, lower: null, glove: null, light: null },
-            headPos: new THREE.Vector3(0, 1.6, 4)
+            headPos: new THREE.Vector3(0, 1.6, 0)
+        };
+
+        const landmarkSmoother = {
+            cache: [],
+            lerpFactor: 0.35,
+            get(index, landmark) {
+                const vec = new THREE.Vector3(landmark.x, landmark.y, landmark.z);
+                if (!this.cache[index]) {
+                    this.cache[index] = vec.clone();
+                }
+                this.cache[index].lerp(vec, this.lerpFactor);
+                return this.cache[index].clone();
+            }
         };
 
         let audioCtx;
@@ -255,7 +268,17 @@
             scene.fog = new THREE.Fog(0x050505, 2, 15);
 
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 1.6, 4);
+
+            // Rig del jugador: la cámara queda anclada a la cabeza
+            playerRig = new THREE.Group();
+            scene.add(playerRig);
+
+            headAnchor = new THREE.Group();
+            headAnchor.position.copy(player.headPos);
+            playerRig.add(headAnchor);
+
+            headAnchor.add(camera);
+            camera.position.set(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -359,45 +382,56 @@
         }
 
         function createPlayerBody() {
-            // Función auxiliar para crear segmentos de brazo (Huesos visuales)
+            const gloveGeo = new THREE.BoxGeometry(0.15, 0.15, 0.2);
+
             function createLimb(color) {
                 const geo = new THREE.CylinderGeometry(0.04, 0.03, 1, 8);
                 geo.translate(0, -0.5, 0); // Pivote en la parte superior
                 const mat = new THREE.MeshBasicMaterial({
-                    color: color, 
-                    transparent: true, 
+                    color: color,
+                    transparent: true,
                     opacity: 0.4,
                     wireframe: true
                 });
                 return new THREE.Mesh(geo, mat);
             }
 
-            // Brazo Izquierdo (Verde/Azul)
-            player.leftArm.upper = createLimb(0x00ffaa);
-            player.leftArm.lower = createLimb(0x00ffaa);
-            scene.add(player.leftArm.upper);
-            scene.add(player.leftArm.lower);
+            function createArmRig(color) {
+                const shoulder = new THREE.Bone();
+                const elbow = new THREE.Bone();
+                const wrist = new THREE.Bone();
+                shoulder.add(elbow);
+                elbow.add(wrist);
 
-            // Guante Izquierdo
-            const gloveGeo = new THREE.BoxGeometry(0.15, 0.15, 0.2);
+                headAnchor.add(shoulder);
+
+                const upper = createLimb(color);
+                const lower = createLimb(color);
+
+                // Los segmentos viven en el anchor de la cabeza para seguir la cámara
+                headAnchor.add(upper);
+                headAnchor.add(lower);
+
+                return { shoulder, elbow, wrist, upper, lower };
+            }
+
+            // Brazo Izquierdo (Verde/Azul)
+            const leftRig = createArmRig(0x00ffaa);
+            Object.assign(player.leftArm, leftRig);
             const gloveMatL = new THREE.MeshStandardMaterial({color: 0x00ffaa, roughness:0.2});
             player.leftArm.glove = new THREE.Mesh(gloveGeo, gloveMatL);
-            scene.add(player.leftArm.glove);
-            
+            headAnchor.add(player.leftArm.glove);
+
             // Luz Guante Izquierdo
             player.leftArm.light = new THREE.PointLight(0x00ffaa, 1, 3);
             player.leftArm.glove.add(player.leftArm.light);
 
             // Brazo Derecho (Rojo/Naranja)
-            player.rightArm.upper = createLimb(0xffaa00);
-            player.rightArm.lower = createLimb(0xffaa00);
-            scene.add(player.rightArm.upper);
-            scene.add(player.rightArm.lower);
-
-            // Guante Derecho
+            const rightRig = createArmRig(0xffaa00);
+            Object.assign(player.rightArm, rightRig);
             const gloveMatR = new THREE.MeshStandardMaterial({color: 0xffaa00, roughness:0.2});
             player.rightArm.glove = new THREE.Mesh(gloveGeo, gloveMatR);
-            scene.add(player.rightArm.glove);
+            headAnchor.add(player.rightArm.glove);
 
             // Luz Guante Derecho
             player.rightArm.light = new THREE.PointLight(0xffaa00, 1, 3);
@@ -422,6 +456,38 @@
             ctxFeed.restore();
         }
 
+        function orientLimbLocal(segment, parent, startWorld, endWorld) {
+            parent.updateMatrixWorld(true);
+            const startLocal = parent.worldToLocal(startWorld.clone());
+            const endLocal = parent.worldToLocal(endWorld.clone());
+
+            const direction = new THREE.Vector3().subVectors(endLocal, startLocal);
+            const length = Math.max(direction.length(), 0.001);
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, -1, 0),
+                direction.clone().normalize()
+            );
+
+            segment.position.copy(startLocal);
+            segment.setRotationFromQuaternion(quaternion);
+            segment.scale.set(1, length, 1);
+        }
+
+        function mapToPlayerSpace(landmark, rootLandmark) {
+            // Coordenadas relativas al centro de la cadera para evitar deriva
+            const relative = new THREE.Vector3(
+                landmark.x - rootLandmark.x,
+                landmark.y - rootLandmark.y,
+                landmark.z - rootLandmark.z
+            );
+
+            // Invertimos X para efecto espejo y escalamos suavemente
+            const x = -relative.x * 2.5;
+            const y = -relative.y * 2.5 + 1.4;
+            const z = -relative.z * 3.0 - 0.4;
+            return new THREE.Vector3(x, y, z);
+        }
+
         function updatePlayerPose(landmarks) {
             // Landmarks importantes (MediaPipe Pose):
             // 0: Nariz
@@ -429,38 +495,34 @@
             // 13: Codo Izquierdo, 14: Codo Derecho
             // 15: Muñeca Izquierda, 16: Muñeca Derecha
             
-            // --- 1. HEAD TRACKING (Mover Cámara) ---
-            const nose = landmarks[0];
-            const hipLeft = landmarks[23];
-            const hipRight = landmarks[24];
+            const nose = landmarkSmoother.get(0, landmarks[0]);
+            const hipLeft = landmarkSmoother.get(23, landmarks[23]);
+            const hipRight = landmarkSmoother.get(24, landmarks[24]);
+            const rootLandmark = new THREE.Vector3(
+                (hipLeft.x + hipRight.x) / 2,
+                (hipLeft.y + hipRight.y) / 2,
+                (hipLeft.z + hipRight.z) / 2
+            );
 
-            // Mapear posición de la nariz al mundo 3D
-            // Invertimos X para efecto espejo
-            const headX = (0.5 - nose.x) * 6; 
-            // Altura Y: Calibrar según caderas para agacharse
-            // Si la nariz baja relativa a la altura normal, bajamos cámara.
-            const headY = (1.0 - nose.y) * 2 + 1.0; 
-            
-            // Suavizado de cámara (Lerp)
-            camera.position.x += (headX - camera.position.x) * 0.1;
-            camera.position.y += (headY - camera.position.y) * 0.1;
-            // Limitamos para no marear
-            camera.position.y = Math.max(0.5, Math.min(2.2, camera.position.y));
+            // --- 1. HEAD TRACKING (Mover Cámara en primera persona) ---
+            const headTarget = mapToPlayerSpace(nose, rootLandmark);
+            headTarget.y = Math.max(0.5, Math.min(2.2, headTarget.y));
+            headAnchor.position.lerp(headTarget, 0.25);
 
-            // --- 2. ARM TRACKING (Cinemática Inversa simplificada / Mapeo directo) ---
+            // Orientación: usa la línea de hombros para definir forward
+            const shoulderL = mapToPlayerSpace(landmarkSmoother.get(11, landmarks[11]), rootLandmark);
+            const shoulderR = mapToPlayerSpace(landmarkSmoother.get(12, landmarks[12]), rootLandmark);
+            const shoulderDir = new THREE.Vector3().subVectors(shoulderR, shoulderL).normalize();
+            const up = new THREE.Vector3(0, 1, 0);
+            const forward = new THREE.Vector3().crossVectors(up, shoulderDir).normalize();
+            const lookTarget = new THREE.Vector3().addVectors(headAnchor.position, forward);
 
-            function orientLimb(segment, start, end) {
-                const direction = new THREE.Vector3().subVectors(end, start);
-                const length = Math.max(direction.length(), 0.001);
-                const quaternion = new THREE.Quaternion().setFromUnitVectors(
-                    new THREE.Vector3(0, -1, 0),
-                    direction.clone().normalize()
-                );
+            const quatTarget = new THREE.Quaternion().setFromRotationMatrix(
+                new THREE.Matrix4().lookAt(headAnchor.position, lookTarget, up)
+            );
+            headAnchor.quaternion.slerp(quatTarget, 0.3);
 
-                segment.position.copy(start);
-                segment.setRotationFromQuaternion(quaternion);
-                segment.scale.set(1, length, 1);
-            }
+            // --- 2. ARM TRACKING (Rig de huesos virtuales) ---
 
             function pulseGlove(armObj, isCrit) {
                 const emissiveColor = isCrit ? 0xffff66 : 0x66ffff;
@@ -481,51 +543,30 @@
 
             // Función para actualizar un brazo
             function updateArm(armObj, idxShoulder, idxElbow, idxWrist, isRight) {
-                const shoulderLM = landmarks[idxShoulder];
-                const elbowLM = landmarks[idxElbow];
-                const wristLM = landmarks[idxWrist];
+                const shoulderLM = mapToPlayerSpace(landmarkSmoother.get(idxShoulder, landmarks[idxShoulder]), rootLandmark);
+                const elbowLM = mapToPlayerSpace(landmarkSmoother.get(idxElbow, landmarks[idxElbow]), rootLandmark);
+                const wristLM = mapToPlayerSpace(landmarkSmoother.get(idxWrist, landmarks[idxWrist]), rootLandmark);
 
-                // Convertir landmarks a Vector3 (Mismo espacio que la cabeza)
-                // Offset base del cuerpo (El cuerpo se mueve con la cámara en X/Z aprox)
-                const bodyOffsetX = camera.position.x;
-                const bodyOffsetY = camera.position.y - 0.2; // Hombros bajo ojos
-                const bodyOffsetZ = camera.position.z; // Jugador en Z=4
+                const shoulderWorld = shoulderLM.clone();
+                const elbowWorld = elbowLM.clone();
+                const wristWorld = wristLM.clone();
 
-                // Posición Hombro (Estimada relativa a la cabeza para estabilidad)
-                // O usar landmarks puros. Usaremos landmarks puros escalados.
-                const sX = (0.5 - shoulderLM.x) * 6;
-                const sY = (1.0 - shoulderLM.y) * 2.5;
-                const sZ = bodyOffsetZ + (shoulderLM.z * 2); // Z relativo
+                // Actualizar jerarquía de huesos
+                headAnchor.updateMatrixWorld(true);
+                armObj.shoulder.position.copy(headAnchor.worldToLocal(shoulderWorld.clone()));
+                armObj.shoulder.updateMatrixWorld(true);
+                armObj.elbow.position.copy(armObj.shoulder.worldToLocal(elbowWorld.clone()));
+                armObj.elbow.updateMatrixWorld(true);
+                armObj.wrist.position.copy(armObj.elbow.worldToLocal(wristWorld.clone()));
+                armObj.wrist.updateMatrixWorld(true);
 
-                const eX = (0.5 - elbowLM.x) * 6;
-                const eY = (1.0 - elbowLM.y) * 2.5;
-                const eZ = bodyOffsetZ + (elbowLM.z * 2) - 1.0; // Ajuste profundidad
+                // Orientar segmentos visuales usando espacio local del anchor
+                orientLimbLocal(armObj.upper, headAnchor, shoulderWorld, elbowWorld);
+                orientLimbLocal(armObj.lower, headAnchor, elbowWorld, wristWorld);
 
-                const wX = (0.5 - wristLM.x) * 6;
-                const wY = (1.0 - wristLM.y) * 2.5;
-                // Multiplicador Z agresivo para puñetazos
-                const punchFactor = 4.0;
-                let wZ = bodyOffsetZ + (wristLM.z * 6); 
-
-                // Vectores
-                const vShoulder = new THREE.Vector3(sX, sY, sZ);
-                const vElbow = new THREE.Vector3(eX, eY, eZ);
-                const vWrist = new THREE.Vector3(wX, wY, wZ);
-
-                // --- Actualizar Mallas ---
-
-                // 1. Upper Arm (Hombro -> Codo)
-                orientLimb(armObj.upper, vShoulder, vElbow);
-
-                // 2. Lower Arm (Codo -> Muñeca)
-                orientLimb(armObj.lower, vElbow, vWrist);
-
-                // 3. Guante
-                // Suavizado
-                armObj.glove.position.lerp(vWrist, 0.5);
-                
-                // Rotación Guante (apuntar al saco si está cerca, o seguir brazo)
-                armObj.glove.lookAt(new THREE.Vector3(vWrist.x, vWrist.y, vWrist.z - 1));
+                const wristLocal = headAnchor.worldToLocal(wristWorld.clone());
+                armObj.glove.position.lerp(wristLocal, 0.4);
+                armObj.glove.lookAt(new THREE.Vector3(wristLocal.x, wristLocal.y, wristLocal.z - 0.6));
 
                 // --- Detección Golpes ---
                 checkHit(armObj, isRight);
@@ -541,19 +582,22 @@
             const bagPos = new THREE.Vector3();
             bag.getWorldPosition(bagPos);
 
-            const dist = armObj.glove.position.distanceTo(bagPos);
+            const gloveWorld = new THREE.Vector3();
+            armObj.glove.getWorldPosition(gloveWorld);
+
+            const dist = gloveWorld.distanceTo(bagPos);
             const now = Date.now();
 
             // Lógica de impacto mejorada
             if (dist < 0.6 && (now - gameState.lastHit > 200)) {
                 // Verificar que el golpe va hacia adelante (velocidad o posición Z)
-                if (armObj.glove.position.z < -0.5) { // Cerca del saco en profundidad
+                if (gloveWorld.z < -0.5) { // Cerca del saco en profundidad
 
                     // Fuerza del golpe (simulada random + velocidad teórica)
                     const power = 1;
 
                     // Vector de impacto (desde guante hacia saco)
-                    const impactVec = new THREE.Vector3().subVectors(bagPos, armObj.glove.position).normalize();
+                    const impactVec = new THREE.Vector3().subVectors(bagPos, gloveWorld).normalize();
 
                     // Aplicar físicas al saco
                     bagPhysics.angularVelX += impactVec.z * 0.15; // Golpear hacia fondo rota en X
@@ -562,7 +606,7 @@
                     // Critico?
                     const targetPos = new THREE.Vector3();
                     targetSpot.getWorldPosition(targetPos);
-                    const distTarget = armObj.glove.position.distanceTo(targetPos);
+                    const distTarget = gloveWorld.distanceTo(targetPos);
                     const isCrit = distTarget < 0.3;
 
                     registerHit(isCrit, armObj);
