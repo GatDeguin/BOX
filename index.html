@@ -225,6 +225,41 @@
         };
 
         let audioCtx;
+        let audioResumeHandlersAttached = false;
+
+        async function ensureAudioContextRunning() {
+            if (!audioCtx) return false;
+
+            if (audioCtx.state === 'suspended') {
+                try {
+                    await audioCtx.resume();
+                } catch (err) {
+                    console.warn('No se pudo reanudar el contexto de audio', err);
+                }
+            }
+
+            return audioCtx.state === 'running';
+        }
+
+        function attachAudioContextResumers() {
+            if (audioResumeHandlersAttached) return;
+
+            const tryResumeAudio = () => {
+                ensureAudioContextRunning();
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    tryResumeAudio();
+                }
+            });
+
+            ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(evt => {
+                document.addEventListener(evt, tryResumeAudio, { passive: true });
+            });
+
+            audioResumeHandlersAttached = true;
+        }
         
         const gameState = {
             score: 0,
@@ -869,8 +904,11 @@
             }
         }
 
-        function playSound(isCrit) {
+        async function playSound(isCrit) {
             if(!audioCtx) return;
+            const audioReady = await ensureAudioContextRunning();
+            if (!audioReady) return;
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
@@ -879,10 +917,10 @@
             osc.type = isCrit ? 'square' : 'triangle';
             osc.frequency.setValueAtTime(isCrit ? 100 : 200, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
-            
+
             gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-            
+
             osc.start();
             osc.stop(audioCtx.currentTime + 0.1);
         }
@@ -939,6 +977,8 @@
 
         async function startGame() {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            attachAudioContextResumers();
+            await ensureAudioContextRunning();
             initThree();
 
             // Configurar MediaPipe Pose
