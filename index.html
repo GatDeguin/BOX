@@ -899,6 +899,8 @@
                 gameState.bagHealth = 100;
                 bag.material.color.setHex(Math.random() * 0xffffff);
                 gameState.score += 500;
+                scoreEl.innerText = gameState.score;
+                healthEl.style.width = gameState.bagHealth + '%';
             }
         }
 
