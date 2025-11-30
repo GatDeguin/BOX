@@ -197,6 +197,12 @@
         let bag, bagChain, targetSpot;
         let latestPoseLandmarks = null;
         let latestHandsResults = null;
+
+        // MediaPipe Hands con `selfieMode: true` devuelve las manos espejadas
+        // respecto al usuario cuando la cámara está configurada como espejo; mantener
+        // esta bandera sincronizada con la configuración de cámara para evitar
+        // invertir la lateralidad por accidente en futuros cambios.
+        const handsAreMirrored = true;
         
         // Player Body Parts
         const player = {
@@ -613,9 +619,10 @@
         function getHandLandmarksForSide(handsResults, isRight) {
             if (!handsResults || !handsResults.multiHandLandmarks || !handsResults.multiHandedness) return null;
 
+            const expectedLabel = (handsAreMirrored ? !isRight : isRight) ? 'right' : 'left';
             for (let i = 0; i < handsResults.multiHandLandmarks.length; i++) {
                 const handedness = handsResults.multiHandedness[i]?.label?.toLowerCase();
-                if ((isRight && handedness === 'right') || (!isRight && handedness === 'left')) {
+                if (handedness === expectedLabel) {
                     return handsResults.multiHandLandmarks[i];
                 }
             }
@@ -755,10 +762,8 @@
                 armObj.glove.position.lerp(wristLocal, 0.4);
                 armObj.glove.lookAt(new THREE.Vector3(wristLocal.x, wristLocal.y, wristLocal.z - 0.6));
 
-                // Intercambiamos la lateralidad para que cada brazo use la mano correcta
-                // (MediaPipe entrega las manos invertidas en esta escena espejada).
-                const handLandmarks = getHandLandmarksForSide(handsResults, !isRight);
-                updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, !isRight);
+                const handLandmarks = getHandLandmarksForSide(handsResults, isRight);
+                updateHandRig(armObj, handLandmarks, rootLandmark, wristWorld, isRight);
 
                 const gloveStart = wristWorld.clone();
                 const gloveEnd = (armObj.hitPoints.knuckle || gloveStart).clone();
