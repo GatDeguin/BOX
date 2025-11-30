@@ -934,8 +934,10 @@
 
             const cam = new Camera(videoElement, {
                 onFrame: async () => {
-                    await pose.send({image: videoElement});
-                    await hands.send({image: videoElement});
+                    await Promise.all([
+                        pose.send({image: videoElement}),
+                        hands.send({image: videoElement})
+                    ]);
                 },
                 width: 640,
                 height: 480
