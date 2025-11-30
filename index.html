@@ -391,10 +391,12 @@
 
             const handBoneGeo = new THREE.CylinderGeometry(0.01, 0.01, 1, 6);
             const handConnections = {
-                palm: [[0, 1], [1, 2], [2, 5], [5, 9], [9, 0]],
+                palm: [[0, 1], [1, 2], [2, 5], [5, 9], [9, 13], [13, 17], [17, 0]],
                 thumb: [[1, 2], [2, 3], [3, 4]],
                 index: [[5, 6], [6, 7], [7, 8]],
-                middle: [[9, 10], [10, 11], [11, 12]]
+                middle: [[9, 10], [10, 11], [11, 12]],
+                ring: [[13, 14], [14, 15], [15, 16]],
+                pinky: [[17, 18], [18, 19], [19, 20]]
             };
 
             function createHandRig(color) {
@@ -600,10 +602,10 @@
                 landmark.z - rootLandmark.z
             );
 
-            // Invertimos X para efecto espejo y escalamos suavemente
-            const x = -relative.x * 2.5;
+            // Conservamos la lateralidad del usuario y escalamos suavemente
+            const x = relative.x * 2.5;
             const y = -relative.y * 2.5 + 1.4;
-            const z = -relative.z * 3.0 - 0.4;
+            const z = relative.z * 3.0 - 0.4;
             return new THREE.Vector3(x, y, z);
         }
 
