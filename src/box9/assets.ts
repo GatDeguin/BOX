@@ -1,4 +1,4 @@
-import { Euler, Object3D, Quaternion } from 'three';
+import { AnimationClip, Euler, Object3D, Quaternion } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils';
@@ -12,6 +12,11 @@ export interface AssetHooks {
 export interface AssetOptions {
   unitScale?: number;
   rotation?: Euler | Quaternion;
+}
+
+export interface LoadedAsset {
+  scene: Object3D;
+  animations: AnimationClip[];
 }
 
 type LoaderType = 'gltf' | 'fbx';
@@ -68,17 +73,17 @@ function normalizeAsset(asset: Object3D, options: AssetOptions) {
 export class AssetManager {
   private gltfLoader = new GLTFLoader();
   private fbxLoader = new FBXLoader();
-  private cache: Map<string, Promise<Object3D>> = new Map();
+  private cache: Map<string, Promise<LoadedAsset>> = new Map();
 
   constructor(private hooks: AssetHooks = {}) {}
 
-  async loadRing(sceneId: RingId | string | number): Promise<Object3D> {
+  async loadRing(sceneId: RingId | string | number): Promise<LoadedAsset> {
     const key = String(sceneId) as RingId | 'default';
     const config = RING_ASSETS[key] ?? RING_ASSETS.default;
     return this.load(config.path, { unitScale: DEFAULT_GLTF_OPTIONS.unitScale, ...config });
   }
 
-  async loadFighter(fighterId: CharacterId | string | number): Promise<Object3D> {
+  async loadFighter(fighterId: CharacterId | string | number): Promise<LoadedAsset> {
     const key = String(fighterId) as CharacterId | 'tyson';
     const config = FIGHTER_ASSETS[key] ?? FIGHTER_ASSETS.tyson;
     const baseOptions = config.path.toLowerCase().endsWith('.fbx')
@@ -88,7 +93,7 @@ export class AssetManager {
     return this.load(config.path, { ...baseOptions, ...config });
   }
 
-  async load(url: string, options: AssetOptions = {}): Promise<Object3D> {
+  async load(url: string, options: AssetOptions = {}): Promise<LoadedAsset> {
     if (!this.cache.has(url)) {
       const loaderType = this.getLoaderType(url);
       const promise = this.loadWithLoader(url, loaderType).catch((error) => {
@@ -103,12 +108,12 @@ export class AssetManager {
     return this.cache.get(url)!.then((asset) => this.cloneAndNormalize(asset, url, options));
   }
 
-  private cloneAndNormalize(asset: Object3D, url: string, options: AssetOptions) {
-    const cloned = this.cloneAsset(asset);
+  private cloneAndNormalize(asset: LoadedAsset, url: string, options: AssetOptions): LoadedAsset {
+    const clonedScene = this.cloneAsset(asset.scene);
     const loaderType = this.getLoaderType(url);
     const defaults = loaderType === 'fbx' ? DEFAULT_FBX_OPTIONS : DEFAULT_GLTF_OPTIONS;
-    normalizeAsset(cloned, { ...defaults, ...options });
-    return cloned;
+    normalizeAsset(clonedScene, { ...defaults, ...options });
+    return { scene: clonedScene, animations: asset.animations };
   }
 
   private cloneAsset(asset: Object3D): Object3D {
@@ -116,7 +121,7 @@ export class AssetManager {
     return cloneSkinned(asset);
   }
 
-  private loadWithLoader(url: string, type: LoaderType): Promise<Object3D> {
+  private loadWithLoader(url: string, type: LoaderType): Promise<LoadedAsset> {
     const loader = type === 'gltf' ? this.gltfLoader : this.fbxLoader;
 
     return new Promise((resolve, reject) => {
@@ -124,7 +129,8 @@ export class AssetManager {
         url,
         (result) => {
           const scene = (result as any).scene ?? result;
-          resolve(scene);
+          const animations = (result as any).animations ?? [];
+          resolve({ scene, animations });
         },
         (event) => {
           if (event.total > 0) {
