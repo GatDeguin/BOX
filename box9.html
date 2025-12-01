@@ -530,8 +530,11 @@
         const ringGroup = new THREE.Group();
         scene.add(ringGroup);
 
+        const assetBaseUrl = new URL('./', import.meta.url);
+        const resolveAsset = (name) => new URL(name, assetBaseUrl).href;
+
         gltfLoader.load(
-            'Ring 3.glb',
+            resolveAsset('Ring 3.glb'),
             (gltf) => {
                 const ringScene = gltf.scene;
                 ringScene.traverse((child) => {
@@ -631,7 +634,7 @@
         }
 
         function loadAnimation(slot, path, key){
-            characterLoader.load(path, (animAsset) => {
+            characterLoader.load(resolveAsset(path), (animAsset) => {
                 if (!animAsset.animations.length) return;
                 const clip = animAsset.animations[0];
                 const action = slot.mixer.clipAction(clip);
@@ -645,7 +648,7 @@
         }
 
         function loadCharacter(config, index){
-            characterLoader.load(config.model, (model) => {
+            characterLoader.load(resolveAsset(config.model), (model) => {
                 model.scale.setScalar(0.007);
                 model.position.set(0, 0.28, 0);
                 model.traverse((child) => {
