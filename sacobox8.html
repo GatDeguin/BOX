@@ -644,6 +644,9 @@
                     bbox.setFromObject(tysonRoot);
                     bbox.getCenter(center);
 
+                    // Orientar al boxeador hacia el saco (que está en Z=0 mirando en -Z)
+                    tysonRoot.rotation.y = Math.PI;
+
                     tysonRoot.position.x += -center.x + BOXER_BASE_X;
                     tysonRoot.position.z += -center.z + BOXER_BASE_Z;
                     tysonRoot.position.y += -bbox.min.y;
