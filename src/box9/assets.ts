@@ -2,6 +2,7 @@ import { Euler, Object3D, Quaternion } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils';
+import { CharacterId, RingId } from './state';
 
 export interface AssetHooks {
   onProgress?: (url: string, ratio: number) => void;
@@ -24,13 +25,17 @@ const DEFAULT_FBX_OPTIONS: Required<Pick<AssetOptions, 'unitScale'>> = {
   unitScale: 0.01
 };
 
-const RING_ASSETS: Record<string, AssetOptions & { path: string }> = {
-  default: { path: 'modelos/Ring.glb' },
-  arena2: { path: 'modelos/Ring 2.glb' },
-  arena3: { path: 'modelos/Ring 3.glb' }
+const RING_ASSETS: Record<RingId | 'default', AssetOptions & { path: string }> = {
+  classic: { path: 'modelos/Ring.glb' },
+  neon: { path: 'modelos/Ring 2.glb' },
+  rooftop: { path: 'modelos/Ring 3.glb' },
+  default: { path: 'modelos/Ring.glb' }
 };
 
-const FIGHTER_ASSETS: Record<string, AssetOptions & { path: string }> = {
+const FIGHTER_ASSETS: Record<CharacterId | 'tyson' | 'dummy' | 'bag', AssetOptions & { path: string }> = {
+  striker: { path: 'modelos/Tyson.fbx', rotation: new Euler(0, Math.PI, 0) },
+  brawler: { path: 'modelos/Dummy.glb' },
+  counter: { path: 'modelos/Punching Bag.fbx', rotation: new Euler(-Math.PI / 2, 0, 0) },
   tyson: { path: 'modelos/Tyson.fbx', rotation: new Euler(0, Math.PI, 0) },
   dummy: { path: 'modelos/Dummy.glb' },
   bag: { path: 'modelos/Punching Bag.fbx', rotation: new Euler(-Math.PI / 2, 0, 0) }
@@ -67,14 +72,14 @@ export class AssetManager {
 
   constructor(private hooks: AssetHooks = {}) {}
 
-  async loadRing(sceneId: string | number): Promise<Object3D> {
-    const key = String(sceneId);
+  async loadRing(sceneId: RingId | string | number): Promise<Object3D> {
+    const key = String(sceneId) as RingId | 'default';
     const config = RING_ASSETS[key] ?? RING_ASSETS.default;
     return this.load(config.path, { unitScale: DEFAULT_GLTF_OPTIONS.unitScale, ...config });
   }
 
-  async loadFighter(fighterId: string | number): Promise<Object3D> {
-    const key = String(fighterId);
+  async loadFighter(fighterId: CharacterId | string | number): Promise<Object3D> {
+    const key = String(fighterId) as CharacterId | 'tyson';
     const config = FIGHTER_ASSETS[key] ?? FIGHTER_ASSETS.tyson;
     const baseOptions = config.path.toLowerCase().endsWith('.fbx')
       ? DEFAULT_FBX_OPTIONS

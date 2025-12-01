@@ -1,5 +1,5 @@
 import { box9Store, Box9Store, CharacterId } from './state';
-import { enterSelection, focusOnFighter, playPoseAnimation, playIdleAnimation } from './scene';
+import { activateSelection, confirmCharacterSelection, playIdleAnimation } from './scene';
 
 export interface FighterDetails {
   id: CharacterId;
@@ -36,9 +36,8 @@ export function initSelectionControls(store: Box9Store = box9Store) {
   const applySelection = (id: CharacterId, animation: 'idle' | 'pose' = 'idle') => {
     currentIndex = fighters.findIndex((fighter) => fighter.id === id);
     store.setState({ character: id });
-    focusOnFighter(id);
     if (animation === 'pose') {
-      playPoseAnimation(id);
+      confirmCharacterSelection(id);
     } else {
       playIdleAnimation(id);
     }
@@ -100,7 +99,7 @@ export function initSelectionControls(store: Box9Store = box9Store) {
   };
 
   const handleStartSelection = () => {
-    enterSelection();
+    activateSelection();
     applySelection(fighters[currentIndex].id, 'idle');
     if (gamepadLoop === null) {
       gamepadLoop = requestAnimationFrame(pollGamepad);
