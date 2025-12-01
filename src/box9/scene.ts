@@ -238,8 +238,24 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   applyPhaseEffects('intro');
 
   const state = box9Store.getState();
-  loadRing(state.ring).then((ring) => attachRingModel(ring));
-  loadFighter(state.character).then((fighter) => attachFighterModel(fighter, state.character));
+
+  const ringRequest = ++activeRingRequest;
+  assetManager
+    .loadRing(state.ring)
+    .then((ring) => {
+      if (ringRequest !== activeRingRequest) return;
+      attachRingModel(ring);
+    })
+    .catch(() => {});
+
+  const fighterRequest = ++activeFighterRequest;
+  assetManager
+    .loadFighter(state.character)
+    .then((fighter) => {
+      if (fighterRequest !== activeFighterRequest) return;
+      attachFighterModel(fighter, state.character);
+    })
+    .catch(() => {});
 
   return context;
 }
