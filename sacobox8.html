@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gym Box 8 - Boxer POV (Tyson + Animaciones)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- MediaPipe Pose (globals) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -152,6 +151,47 @@
             color: #e2e8f0;
             text-align: right;
         }
+
+        /* Tipografía del encabezado */
+        .info-title {
+            font-size: 1.5rem;
+            font-weight: 900;
+            margin-bottom: 0.25rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #ffe7d6;
+        }
+
+        .info-subtitle {
+            font-size: 10px;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #9ca3af;
+        }
+
+        /* Botones estilo píldora */
+        .pill-button {
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+        }
+
+        .pill-button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 153, 102, 0.55);
+        }
+
+        .pill-button:active {
+            transform: translateY(0);
+            background: rgba(0, 0, 0, 0.82);
+        }
     </style>
 
     <script type="importmap">
@@ -168,27 +208,27 @@
 
     <div id="info">
         <div class="instruction">
-            <h1 class="text-2xl font-black mb-1 tracking-widest text-orange-100 uppercase">
+            <h1 class="info-title">
                 Box 8 • Tyson POV
             </h1>
-            <p class="text-[10px] text-gray-400 uppercase tracking-[0.3em] font-bold">
+            <p class="info-subtitle">
                 Animaciones FBX + Webcam opcional • Golpes encadenados al saco
             </p>
         </div>
     </div>
 
     <!-- Botón de preset día/noche -->
-    <button id="presetBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
+    <button id="presetBtn" class="pill-button">
         🌙 Noche
     </button>
 
     <!-- Botón de mute -->
-    <button id="muteBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
+    <button id="muteBtn" class="pill-button">
         🔊 ON
     </button>
 
     <!-- Botón de vista en 3ra persona -->
-    <button id="viewBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
+    <button id="viewBtn" class="pill-button">
         🎯 POV
     </button>
 
@@ -410,7 +450,7 @@
                 'sonidos/golpe_9.mp3',
                 'sonidos/golpe_10.mp3'
             ],
-            heavyImpact: 'sonidos/impacto_grave.mp3',
+            heavyImpact: 'sonidos/impacto_grave.wav',
             bell: 'sonidos/campana.mp3',
             countdown: 'sonidos/cuenta_atras.wav',
             breath: 'sonidos/respira.wav',
@@ -1014,6 +1054,22 @@
             }
         };
 
+        function sanitizeClipRootMotion(clip) {
+            if (!clip || !Array.isArray(clip.tracks)) return clip;
+
+            const filteredTracks = clip.tracks.filter((track) => {
+                const name = track.name?.toLowerCase?.() || '';
+                return !name.includes('hips.position');
+            });
+
+            if (filteredTracks.length === clip.tracks.length) return clip;
+
+            const sanitized = clip.clone();
+            sanitized.tracks = filteredTracks;
+            sanitized.resetDuration();
+            return sanitized;
+        }
+
         function isAnimationAllowed(file = '') {
             return !BLOCKED_ANIMATION_SUBSTRINGS.some((pattern) => file.includes(pattern));
         }
@@ -1085,7 +1141,7 @@
                         definition.file,
                         (anim) => {
                             if (anim.animations && anim.animations.length > 0 && this.mixer) {
-                                const clip = anim.animations[0];
+                                const clip = sanitizeClipRootMotion(anim.animations[0]);
                                 const clipId = (definition.file || clip.name || '').toLowerCase();
                                 const isNameBlocked = BLOCKED_ANIMATION_NAMES.some((pattern) =>
                                     clipId.includes(pattern)
@@ -1292,8 +1348,12 @@
 
             if (Math.abs(correction) > 1e-4) {
                 tysonRoot.position.y += correction;
-                tysonRoot.updateMatrixWorld(true);
             }
+
+            // Evitar que el root se desplace hacia adelante entre animaciones
+            tysonRoot.position.x = lerp(tysonRoot.position.x, BOXER_BASE_X, 0.35);
+            tysonRoot.position.z = lerp(tysonRoot.position.z, BOXER_BASE_Z, 0.35);
+            tysonRoot.updateMatrixWorld(true);
         }
 
         // --- MediaPipe Pose ---
