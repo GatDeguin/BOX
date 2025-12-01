@@ -3,10 +3,12 @@ import {
   Clock,
   PerspectiveCamera,
   Scene,
+  SpotLight,
   Vector2,
   Vector3,
   WebGLRenderer
 } from 'three';
+import { CharacterId } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
@@ -35,10 +37,36 @@ interface SceneFlowContext {
   freeCamera: PerspectiveCamera;
   activeCamera: PerspectiveCamera;
   phase: ScenePhase;
+  selectionTarget: SelectionTarget | null;
   animationFrame: number | null;
   resizeHandler: (() => void) | null;
   clock: Clock;
+  selectionLight: SpotLight | null;
 }
+
+interface SelectionTarget {
+  camera: Vector3;
+  lookAt: Vector3;
+  highlight: Vector3;
+}
+
+const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
+  striker: {
+    camera: new Vector3(-3.5, 2.8, 8),
+    lookAt: new Vector3(-1.5, 1.8, 0),
+    highlight: new Vector3(-1.5, 2.5, 0)
+  },
+  brawler: {
+    camera: new Vector3(0, 3.1, 8.5),
+    lookAt: new Vector3(0, 1.8, 0),
+    highlight: new Vector3(0, 2.5, 0)
+  },
+  counter: {
+    camera: new Vector3(3.5, 2.8, 8),
+    lookAt: new Vector3(1.5, 1.8, 0),
+    highlight: new Vector3(1.5, 2.5, 0)
+  }
+};
 
 const DEFAULT_OPTIONS: Required<Pick<SceneFlowOptions, 'backgroundColor' | 'focus' | 'aperture' | 'maxBlur'>> = {
   backgroundColor: '#05070c',
@@ -128,6 +156,12 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   const resizeHandler = () => handleResize();
   window.addEventListener('resize', resizeHandler);
 
+  const selectionLight = new SpotLight('#7a9bff', 1.4, 18, Math.PI / 6, 0.4, 1.2);
+  selectionLight.position.set(0, 4, 4);
+  selectionLight.target.position.set(0, 1.5, 0);
+  scene.add(selectionLight);
+  scene.add(selectionLight.target);
+
   context = {
     container,
     renderer,
@@ -140,9 +174,11 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     freeCamera,
     activeCamera: travelingCamera,
     phase: 'intro',
+    selectionTarget: null,
     animationFrame: null,
     resizeHandler,
-    clock: new Clock()
+    clock: new Clock(),
+    selectionLight
   };
 
   return context;
@@ -181,8 +217,19 @@ function animate(_timestamp?: number) {
     travelingCamera.position.z = 8 * Math.sin(elapsed * 0.25);
     travelingCamera.lookAt(0, 1.5, 0);
   } else if (phase === 'selection') {
-    travelingCamera.position.lerp(new Vector3(0, 3.5, 8), 0.02);
-    travelingCamera.lookAt(0, 1.75, 0);
+    if (context.selectionTarget) {
+      travelingCamera.position.lerp(context.selectionTarget.camera, 0.08);
+      travelingCamera.lookAt(context.selectionTarget.lookAt);
+
+      if (context.selectionLight) {
+        context.selectionLight.position.lerp(context.selectionTarget.highlight, 0.12);
+        context.selectionLight.target.position.lerp(context.selectionTarget.lookAt, 0.18);
+        context.selectionLight.target.updateMatrixWorld();
+      }
+    } else {
+      travelingCamera.position.lerp(new Vector3(0, 3.5, 8), 0.02);
+      travelingCamera.lookAt(0, 1.75, 0);
+    }
   } else if (phase === 'free') {
     freeCamera.lookAt(0, 1.5, 0);
   }
@@ -206,12 +253,41 @@ export function enterSelection(): void {
   if (!context) return;
   context.phase = 'selection';
   setActiveCamera(context.travelingCamera);
+  if (!context.selectionTarget) {
+    context.selectionTarget = {
+      camera: SELECTION_FOCUS.striker.camera.clone(),
+      lookAt: SELECTION_FOCUS.striker.lookAt.clone(),
+      highlight: SELECTION_FOCUS.striker.highlight.clone()
+    };
+  }
 }
 
 export function enableFreeCam(): void {
   if (!context) return;
   context.phase = 'free';
   setActiveCamera(context.freeCamera);
+}
+
+export function focusOnFighter(character: CharacterId): void {
+  if (!context) return;
+  const target = SELECTION_FOCUS[character];
+  context.selectionTarget = {
+    camera: target.camera.clone(),
+    lookAt: target.lookAt.clone(),
+    highlight: target.highlight.clone()
+  };
+}
+
+export function playIdleAnimation(character: CharacterId): void {
+  focusOnFighter(character);
+  if (!context?.selectionLight) return;
+  context.selectionLight.intensity = 1.35;
+}
+
+export function playPoseAnimation(character: CharacterId): void {
+  focusOnFighter(character);
+  if (!context?.selectionLight) return;
+  context.selectionLight.intensity = 1.75;
 }
 
 export function destroy(): void {
@@ -227,6 +303,11 @@ export function destroy(): void {
 
   context.composer.dispose();
   context.renderer.dispose();
+
+  if (context.selectionLight) {
+    context.scene.remove(context.selectionLight);
+    context.scene.remove(context.selectionLight.target);
+  }
 
   if (context.renderer.domElement.parentElement === context.container) {
     context.container.removeChild(context.renderer.domElement);
