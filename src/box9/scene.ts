@@ -118,18 +118,18 @@ const DEFAULT_OPTIONS: Required<Pick<SceneFlowOptions, 'backgroundColor' | 'focu
 };
 
 const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
-  intro: 'neon',
-  selection: 'gimnasio',
-  free: 'neon'
+  intro: 'championNight',
+  selection: 'mmaGym',
+  free: 'ironShow'
 };
 
-const ALL_RINGS: RingId[] = ['classic', 'neon', 'rooftop'];
+const ALL_RINGS: RingId[] = ['mmaGym', 'bodybuilderArena', 'tysonRing'];
 const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson'];
 
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
-  classic: { effectProfile: 'gimnasio', selectionLight: { color: '#7a9bff', intensity: 1.4 } },
-  neon: { effectProfile: 'neon', selectionLight: { color: '#8bb1ff', intensity: 1.55 } },
-  rooftop: { effectProfile: 'gimnasio', selectionLight: { color: '#f3d08b', intensity: 1.3 } }
+  mmaGym: { effectProfile: 'mmaGym', selectionLight: { color: '#7ad8ff', intensity: 1.45 } },
+  bodybuilderArena: { effectProfile: 'ironShow', selectionLight: { color: '#ffb55c', intensity: 1.5 } },
+  tysonRing: { effectProfile: 'championNight', selectionLight: { color: '#ff6b81', intensity: 1.6 } }
 };
 
 let context: SceneFlowContext | null = null;
