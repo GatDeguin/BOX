@@ -919,6 +919,10 @@
         let lastPoseLandmarks = null;
         let smoothedLandmarks = null;
         let mocapStarted = false;
+        let mocapInitialRootPosition = null;
+        let mocapInitialRootQuaternion = null;
+        let mocapInitialHipsPosition = null;
+        let mocapInitialHipsQuaternion = null;
 
         function updateWebcamUiState(active) {
             if (videoElement) videoElement.style.display = active ? 'block' : 'none';
@@ -1128,6 +1132,26 @@
             bone.quaternion.slerp(targetLocal, slerp);
         }
 
+        function captureMocapInitialPose() {
+            mocapInitialRootPosition = null;
+            mocapInitialRootQuaternion = null;
+            mocapInitialHipsPosition = null;
+            mocapInitialHipsQuaternion = null;
+
+            if (!tysonRoot) return;
+
+            tysonRoot.updateMatrixWorld(true);
+            mocapInitialRootPosition = tysonRoot.position.clone();
+            mocapInitialRootQuaternion = tysonRoot.quaternion.clone();
+
+            const hips = getBone('Hips') || getBone('hips');
+            if (hips) {
+                hips.updateMatrixWorld(true);
+                mocapInitialHipsPosition = hips.position.clone();
+                mocapInitialHipsQuaternion = hips.getWorldQuaternion(new THREE.Quaternion());
+            }
+        }
+
         function updateModelFromPose(landmarks) {
             if (!ENABLE_MOCAP_BLEND) return;
             if (!landmarks || !skeleton) return;
@@ -1154,16 +1178,21 @@
                 const infoHips = BIND['Hips'];
                 if (infoHips) {
                     const qDelta = new THREE.Quaternion().setFromUnitVectors(infoHips.dir, torsoDir);
-                    const targetWorld = infoHips.wq.clone().premultiply(qDelta);
+                    const hipsWorldReference = (mocapInitialHipsQuaternion || infoHips.wq).clone();
+                    const targetWorld = hipsWorldReference.premultiply(qDelta);
                     const targetLocal = worldQuatToLocal(hips, targetWorld);
                     hips.quaternion.slerp(targetLocal, 0.25);
                 }
 
+                const hipsReferencePosition = mocapInitialHipsPosition
+                    ? mocapInitialHipsPosition
+                    : (mocapInitialRootPosition || tysonRoot?.position || tysonBasePosition);
+
                 hips.position.lerp(
                     new THREE.Vector3(
-                        BOXER_BASE_X,
+                        hipsReferencePosition.x,
                         vHipMid.y * 0.4 + 1.0,
-                        BOXER_BASE_Z
+                        hipsReferencePosition.z
                     ),
                     0.15
                 );
@@ -1946,6 +1975,7 @@
                 await videoElement.play();
 
                 capturing = true;
+                captureMocapInitialPose();
                 mocapStarted = true;
                 updateWebcamUiState(true);
                 resizeCanvasToVideo();
@@ -1983,6 +2013,10 @@
         function stopCapture() {
             capturing = false;
             mocapStarted = false;
+            mocapInitialRootPosition = null;
+            mocapInitialRootQuaternion = null;
+            mocapInitialHipsPosition = null;
+            mocapInitialHipsQuaternion = null;
 
             if (cameraMP) {
                 cameraMP.stop();
