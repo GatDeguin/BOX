@@ -859,6 +859,7 @@
             if (!tysonRoot) return;
             const loader = new FBXLoader();
             const files = [
+                // Ataque
                 { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
                 { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Hook.fbx', loop: 'once' },
@@ -866,28 +867,12 @@
                 { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Pointing Forward.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' },
+                // Descanso
                 { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
                 { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
                 { file: 'animaciones/descanso/Situp To Idle.fbx', loop: 'once' },
                 { file: 'animaciones/descanso/Getting Up.fbx', loop: 'once' },
-                { file: 'animaciones/descanso/Reaction.fbx', loop: 'once' },
-                { file: 'animaciones/movimiento/Walking.fbx', loop: 'repeat' },
-                { file: 'animaciones/movimiento/Walk back.fbx', loop: 'repeat' },
-                { file: 'animaciones/daño/Head Hit.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Big Kidney Hit.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Convulsing.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Medium Hit To Head.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Receive Uppercut To The Face.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Taking Punch.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Light Hit To Head.fbx', loop: 'once' },
-                { file: 'animaciones/daño/Dying.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Fall Flat.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Fall Over.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Knocked Down.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Laying.fbx', loop: 'repeat' },
-                { file: 'animaciones/daño/caida/Livershot Knockdown.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Shoulder Hit And Fall.fbx', loop: 'once' }
+                { file: 'animaciones/descanso/Reaction.fbx', loop: 'once' }
             ];
 
             let loaded = 0;
