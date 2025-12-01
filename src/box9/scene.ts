@@ -13,6 +13,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
+import { applyEffects, registerEffectsContext } from './effects';
 
 export interface SceneFlowOptions {
   backgroundColor?: string | number;
@@ -180,6 +181,9 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     clock: new Clock(),
     selectionLight
   };
+
+  registerEffectsContext({ renderer, composer, bokehPass, outputPass });
+  applyEffects('neon');
 
   return context;
 }
