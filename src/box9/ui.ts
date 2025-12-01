@@ -1,6 +1,7 @@
 import { box9Store, Box9Store, RingId, CharacterId } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
+import { getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 
 const ringOptions: Record<RingId, string> = {
   mmaGym: 'Gimnasio MMA',
@@ -32,10 +33,13 @@ function createStyles() {
     .box9-topbar { display: flex; justify-content: space-between; align-items: center; pointer-events: auto; }
     .box9-chip { border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); border-radius: 999px; padding: 8px 12px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
     .box9-chip.active { background: rgba(63, 92, 255, 0.18); border-color: #7a9bff; color: #fff; }
+    .box9-chip.disabled { opacity: 0.55; cursor: not-allowed; border-style: dashed; }
     .box9-chip-label { font-weight: 700; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
     .box9-status { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; min-width: 220px; }
     .box9-status small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .box9-status strong { color: #f6f7fb; }
+    .box9-progress-note { color: #b4bed4; font-size: 13px; line-height: 1.4; }
+    .box9-warning { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(255, 107, 129, 0.16); border: 1px solid rgba(255, 107, 129, 0.45); color: #ffd4dc; padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); pointer-events: none; opacity: 0; transition: opacity 160ms ease; max-width: 520px; text-align: center; }
     .box9-fighter-card { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; max-width: 320px; pointer-events: auto; box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
     .box9-fighter-name { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; color: #e9ecf4; }
     .box9-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -180,13 +184,19 @@ function createHud(
   const ringValue = document.createElement('strong');
   ringLine.append(ringLabel, ringValue);
 
+  const gloveLine = document.createElement('div');
+  const gloveLabel = document.createElement('small');
+  gloveLabel.textContent = 'Guantes';
+  const gloveValue = document.createElement('strong');
+  gloveLine.append(gloveLabel, gloveValue);
+
   const cameraLine = document.createElement('div');
   const cameraLabel = document.createElement('small');
   cameraLabel.textContent = 'Cámara';
   const cameraValue = document.createElement('strong');
   cameraLine.append(cameraLabel, cameraValue);
 
-  status.append(ringLine, cameraLine);
+  status.append(ringLine, gloveLine, cameraLine);
 
   const actions = document.createElement('div');
   actions.className = 'box9-row';
@@ -279,12 +289,34 @@ function createHud(
   fighterPersonality.className = 'box9-fighter-personality';
   fighterPersonality.textContent = 'Competidor táctico, mezcla derribos con boxeo limpio y lee cada distancia.';
   fighterCard.appendChild(fighterPersonality);
+
+  const progressNote = document.createElement('div');
+  progressNote.className = 'box9-progress-note';
+  progressNote.textContent = 'Completa las peleas base para desbloquear a Tyson y los guantes secretos.';
+
+  const winsRow = document.createElement('div');
+  winsRow.className = 'box9-row';
+  winsRow.style.justifyContent = 'space-between';
+
+  const winsMMA = document.createElement('small');
+  const winsBodybuilder = document.createElement('small');
+  const winsTyson = document.createElement('small');
+  [winsMMA, winsBodybuilder, winsTyson].forEach((el) => {
+    el.style.color = '#b4bed4';
+    el.style.fontWeight = '700';
+    el.style.letterSpacing = '0.06em';
+  });
+
+  winsRow.append(winsMMA, winsBodybuilder, winsTyson);
+  fighterCard.append(progressNote, winsRow);
   hud.append(topBar, chipsRow, fighterCard);
 
   const update = () => {
     const state = store.getState();
+    const progress = normalizeProgress(state.progress);
     ringValue.textContent = ringOptions[state.ring];
     cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
+    gloveValue.textContent = getGloveLabel(progress.gloveLevel);
 
     const fighter = getFighterDetails(state.character);
     fighterName.textContent = fighter.name;
@@ -294,6 +326,18 @@ function createHud(
     fighterPersonality.textContent = fighter.personality;
 
     setActiveChip(state.character);
+
+    winsMMA.textContent = `MMA: ${progress.wins.mma} vict.`;
+    winsBodybuilder.textContent = `Bodybuilder: ${progress.wins.bodybuilder} vict.`;
+    winsTyson.textContent = `Tyson: ${progress.wins.tyson} vict.`;
+    progressNote.textContent = nextMilestone(progress);
+
+    chipList.querySelectorAll<HTMLElement>('.box9-chip').forEach((chip) => {
+      const id = chip.dataset.character as CharacterId;
+      const locked = id === 'tyson' && !progress.tysonUnlocked;
+      chip.classList.toggle('disabled', locked);
+      chip.title = locked ? 'Desbloquéalo ganando las peleas base.' : '';
+    });
   };
 
   return { hud, update, ringValue, cameraValue, freeCamButton };
@@ -390,6 +434,29 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       emitSceneEvent('character-selected', { character });
     }
   );
+
+  const lockWarning = document.createElement('div');
+  lockWarning.className = 'box9-warning';
+  container.appendChild(lockWarning);
+
+  let lockWarningTimeout: number | null = null;
+  const showLockWarning = (message: string) => {
+    lockWarning.textContent = message;
+    lockWarning.style.opacity = '1';
+    if (lockWarningTimeout !== null) {
+      window.clearTimeout(lockWarningTimeout);
+    }
+    lockWarningTimeout = window.setTimeout(() => {
+      lockWarning.style.opacity = '0';
+      lockWarningTimeout = null;
+    }, 2200);
+  };
+
+  window.addEventListener('box9:character-locked', (event) => {
+    const detail = (event as CustomEvent<{ character?: CharacterId; reason?: string }>).detail;
+    if (!detail?.character) return;
+    showLockWarning(detail.reason ?? 'Necesitas más victorias para desbloquear este combate.');
+  });
 
   let lastSelectionStarted = store.getState().selectionStarted;
 
