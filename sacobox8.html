@@ -282,6 +282,73 @@
             <span class="label">Sonido</span>
             <span class="value" id="debugSound">—</span>
         </div>
+        <div class="debug-title" style="margin-top:8px;">Luces</div>
+        <div class="control-row">
+            <span class="label">Key</span>
+            <input id="keyLightIntensity" type="range" min="0" max="20" step="0.1" value="8.8" />
+            <span class="value" id="keyLightIntensityVal">8.80</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Fill</span>
+            <input id="fillLightIntensity" type="range" min="0" max="10" step="0.05" value="0.8" />
+            <span class="value" id="fillLightIntensityVal">0.80</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Rim</span>
+            <input id="rimLightIntensity" type="range" min="0" max="10" step="0.05" value="1.1" />
+            <span class="value" id="rimLightIntensityVal">1.10</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Ring</span>
+            <input id="ringLightIntensity" type="range" min="0" max="10" step="0.05" value="1.5" />
+            <span class="value" id="ringLightIntensityVal">1.50</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Cinema</span>
+            <input id="cinemaLightIntensity" type="range" min="0" max="5" step="0.05" value="0.22" />
+            <span class="value" id="cinemaLightIntensityVal">0.22</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Puerta</span>
+            <input id="doorLightIntensity" type="range" min="0" max="40" step="0.1" value="18.5" />
+            <span class="value" id="doorLightIntensityVal">18.50</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Fluoresc.</span>
+            <input id="fluorescentLightIntensity" type="range" min="0" max="15" step="0.1" value="7.5" />
+            <span class="value" id="fluorescentLightIntensityVal">7.50</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Ambiente</span>
+            <input id="ambientLightIntensity" type="range" min="0" max="2" step="0.01" value="0.62" />
+            <span class="value" id="ambientLightIntensityVal">0.62</span>
+        </div>
+        <div class="debug-title" style="margin-top:8px;">Ring</div>
+        <div class="control-row">
+            <span class="label">Posición X</span>
+            <input id="ringPosX" type="range" min="-10" max="25" step="0.1" value="20.1" />
+            <span class="value" id="ringPosXVal">20.10</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Posición Y</span>
+            <input id="ringPosY" type="range" min="-1" max="2" step="0.05" value="0" />
+            <span class="value" id="ringPosYVal">0.00</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Posición Z</span>
+            <input id="ringPosZ" type="range" min="-10" max="10" step="0.1" value="2" />
+            <span class="value" id="ringPosZVal">2.00</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Escala</span>
+            <input id="ringScale" type="range" min="0.05" max="0.6" step="0.01" value="0.2" />
+            <span class="value" id="ringScaleVal">0.20x</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Rotación</span>
+            <input id="ringRotation" type="range" min="0" max="360" step="1" value="90" />
+            <span class="value" id="ringRotationVal">90°</span>
+        </div>
         <div class="control-row">
             <span class="label">Masa</span>
             <input id="bagMass" type="range" min="20" max="120" step="1" value="60" />
@@ -413,6 +480,12 @@
             }
         };
 
+        const ringConfig = {
+            position: { x: 20.1, y: 0, z: 2 },
+            rotationY: Math.PI / 2,
+            scale: 0.2
+        };
+
         // Posición base del boxeador respecto al saco (ajústalo si querés)
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
         const BOXER_BASE_Z = 2.0;   // delante/detrás   (0 = mismo plano del saco)
@@ -456,6 +529,7 @@
         let noiseGen;
 
         let volumetricMesh;
+        let ringModel = null;
         let doorGodrayMesh;
         let keyLight, fillLight, ringLight, rimLight, ambientLight;
         let cinemaBackLight;
@@ -634,6 +708,138 @@
         }
 
         refreshDebugPanel();
+
+        const lightControlElements = {
+            key: { slider: document.getElementById('keyLightIntensity'), value: document.getElementById('keyLightIntensityVal') },
+            fill: { slider: document.getElementById('fillLightIntensity'), value: document.getElementById('fillLightIntensityVal') },
+            rim: { slider: document.getElementById('rimLightIntensity'), value: document.getElementById('rimLightIntensityVal') },
+            ring: { slider: document.getElementById('ringLightIntensity'), value: document.getElementById('ringLightIntensityVal') },
+            cinema: { slider: document.getElementById('cinemaLightIntensity'), value: document.getElementById('cinemaLightIntensityVal') },
+            door: { slider: document.getElementById('doorLightIntensity'), value: document.getElementById('doorLightIntensityVal') },
+            fluorescent: { slider: document.getElementById('fluorescentLightIntensity'), value: document.getElementById('fluorescentLightIntensityVal') },
+            ambient: { slider: document.getElementById('ambientLightIntensity'), value: document.getElementById('ambientLightIntensityVal') }
+        };
+
+        const ringControlElements = {
+            posX: { slider: document.getElementById('ringPosX'), value: document.getElementById('ringPosXVal') },
+            posY: { slider: document.getElementById('ringPosY'), value: document.getElementById('ringPosYVal') },
+            posZ: { slider: document.getElementById('ringPosZ'), value: document.getElementById('ringPosZVal') },
+            scale: { slider: document.getElementById('ringScale'), value: document.getElementById('ringScaleVal') },
+            rotation: { slider: document.getElementById('ringRotation'), value: document.getElementById('ringRotationVal') }
+        };
+
+        function formatLightValue(value) {
+            return parseFloat(value).toFixed(2);
+        }
+
+        function syncLightControlsFromBase() {
+            const setValue = (key, value) => {
+                const ctrl = lightControlElements[key];
+                if (!ctrl || !ctrl.slider) return;
+                ctrl.slider.value = value;
+                if (ctrl.value) ctrl.value.textContent = formatLightValue(value);
+            };
+
+            setValue('key', lightBases.key);
+            setValue('fill', lightBases.fill);
+            setValue('rim', lightBases.rim);
+            setValue('ring', lightBases.ring);
+            setValue('cinema', lightBases.cinemaBack);
+            setValue('door', lightBases.door);
+            setValue('fluorescent', lightBases.fluorescent);
+            setValue('ambient', ambientBaseIntensity);
+        }
+
+        function applyLightBasesToScene() {
+            if (keyLight) keyLight.intensity = lightBases.key;
+            if (fillLight) fillLight.intensity = lightBases.fill;
+            if (rimLight) rimLight.intensity = lightBases.rim;
+            if (ringLight) ringLight.intensity = lightBases.ring;
+            if (cinemaBackLight) cinemaBackLight.intensity = lightBases.cinemaBack;
+            if (doorLight) doorLight.intensity = lightBases.door;
+            if (fluorescentLights.length) {
+                fluorescentLights.forEach((l) => { l.intensity = lightBases.fluorescent; });
+            }
+            if (ambientLight) ambientLight.intensity = ambientBaseIntensity;
+        }
+
+        function applyLightControlsToConfig() {
+            const getVal = (key) => {
+                const ctrl = lightControlElements[key];
+                return ctrl?.slider ? parseFloat(ctrl.slider.value) : null;
+            };
+
+            lightBases.key = getVal('key') ?? lightBases.key;
+            lightBases.fill = getVal('fill') ?? lightBases.fill;
+            lightBases.rim = getVal('rim') ?? lightBases.rim;
+            lightBases.ring = getVal('ring') ?? lightBases.ring;
+            lightBases.cinemaBack = getVal('cinema') ?? lightBases.cinemaBack;
+            lightBases.door = getVal('door') ?? lightBases.door;
+            lightBases.fluorescent = getVal('fluorescent') ?? lightBases.fluorescent;
+            ambientBaseIntensity = getVal('ambient') ?? ambientBaseIntensity;
+
+            syncLightControlsFromBase();
+            applyLightBasesToScene();
+        }
+
+        function setupLightControls() {
+            const controls = Object.values(lightControlElements)
+                .map((c) => c.slider)
+                .filter(Boolean);
+            if (!controls.length) return;
+
+            syncLightControlsFromBase();
+            controls.forEach((slider) => slider.addEventListener('input', applyLightControlsToConfig));
+        }
+
+        function syncRingControlsFromConfig() {
+            const setValue = (key, value, formatter = (v) => v.toFixed(2)) => {
+                const ctrl = ringControlElements[key];
+                if (!ctrl || !ctrl.slider) return;
+                ctrl.slider.value = value;
+                if (ctrl.value) ctrl.value.textContent = formatter(value);
+            };
+
+            setValue('posX', ringConfig.position.x);
+            setValue('posY', ringConfig.position.y);
+            setValue('posZ', ringConfig.position.z);
+            setValue('scale', ringConfig.scale, (v) => `${v.toFixed(2)}x`);
+            setValue('rotation', THREE.MathUtils.radToDeg(ringConfig.rotationY), (v) => `${v.toFixed(0)}°`);
+        }
+
+        function applyRingConfigToScene() {
+            if (!ringModel) return;
+            ringModel.position.set(ringConfig.position.x, ringConfig.position.y, ringConfig.position.z);
+            ringModel.rotation.y = ringConfig.rotationY;
+            ringModel.scale.setScalar(ringConfig.scale);
+        }
+
+        function applyRingControlsToConfig() {
+            const getVal = (key) => {
+                const ctrl = ringControlElements[key];
+                return ctrl?.slider ? parseFloat(ctrl.slider.value) : null;
+            };
+
+            ringConfig.position.x = getVal('posX') ?? ringConfig.position.x;
+            ringConfig.position.y = getVal('posY') ?? ringConfig.position.y;
+            ringConfig.position.z = getVal('posZ') ?? ringConfig.position.z;
+            ringConfig.scale = getVal('scale') ?? ringConfig.scale;
+            const rotDeg = getVal('rotation');
+            ringConfig.rotationY = rotDeg !== null && rotDeg !== undefined ? THREE.MathUtils.degToRad(rotDeg) : ringConfig.rotationY;
+
+            syncRingControlsFromConfig();
+            applyRingConfigToScene();
+        }
+
+        function setupRingControls() {
+            const controls = Object.values(ringControlElements)
+                .map((c) => c.slider)
+                .filter(Boolean);
+            if (!controls.length) return;
+
+            syncRingControlsFromConfig();
+            controls.forEach((slider) => slider.addEventListener('input', applyRingControlsToConfig));
+        }
 
         const bagControlElements = {
             mass: document.getElementById('bagMass'),
@@ -2149,6 +2355,8 @@
             applyPresetBagSettings(currentPreset);
             setupBagControls();
             setupPunchControls();
+            setupLightControls();
+            setupRingControls();
 
             initScene();
             initRenderer(container);
@@ -2550,15 +2758,15 @@
                 RING_MODEL_URL,
                 (gltf) => {
                     const ring = gltf.scene || gltf;
-                    ring.position.set(20.10, 0, 2.00);
-                    ring.rotation.y = Math.PI / 2;
-                    ring.scale.setScalar(0.2);
+                    ringModel = ring;
                     ring.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
                         }
                     });
+                    applyRingConfigToScene();
+                    syncRingControlsFromConfig();
                     scene.add(ring);
                 },
                 undefined,
@@ -2761,6 +2969,9 @@
             if (scene && scene.background) {
                 scene.background.setHex(preset.background);
             }
+
+            syncLightControlsFromBase();
+            applyLightBasesToScene();
 
             if (cinemaBackLight) cinemaBackLight.intensity = preset.cinemaBackBase;
         }
