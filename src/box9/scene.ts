@@ -5,13 +5,16 @@ import {
   Object3D,
   PerspectiveCamera,
   Scene,
+  AnimationMixer,
+  AnimationClip,
+  AnimationAction,
   SpotLight,
   Vector2,
   Vector3,
   WebGLRenderer
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { AssetHooks, AssetManager } from './assets';
+import { AssetHooks, AssetManager, LoadedAsset } from './assets';
 import { box9Store, CharacterId, RingId } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
@@ -51,6 +54,9 @@ interface SceneFlowContext {
   eventHandlers: Record<string, EventListener>;
   ringModel: Object3D | null;
   fighterModel: Object3D | null;
+  fighterMixer: AnimationMixer | null;
+  fighterActions: Partial<Record<'idle' | 'pose', AnimationAction>>;
+  activeFighterAction: AnimationAction | null;
 }
 
 interface SelectionTarget {
@@ -258,7 +264,10 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     selectionLight,
     eventHandlers,
     ringModel: null,
-    fighterModel: null
+    fighterModel: null,
+    fighterMixer: null,
+    fighterActions: {},
+    activeFighterAction: null
   };
 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
@@ -272,7 +281,7 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     .loadRing(state.ring)
     .then((ring) => {
       if (ringRequest !== activeRingRequest) return;
-      attachRingModel(ring);
+      attachRingModel(ring.scene);
     })
     .catch(() => {});
 
@@ -381,6 +390,8 @@ function animate(_timestamp?: number) {
     freeCamControls?.update(delta);
   }
 
+  context.fighterMixer?.update(delta);
+
   composer.render();
   context.animationFrame = requestAnimationFrame(animate);
 }
@@ -460,22 +471,27 @@ export function focusOnFighter(character: CharacterId): void {
 
 export function playIdleAnimation(character: CharacterId): void {
   focusOnFighter(character);
+  playFighterAction('idle');
   if (!context?.selectionLight) return;
   context.selectionLight.intensity = 1.35;
 }
 
 export function playPoseAnimation(character: CharacterId): void {
   focusOnFighter(character);
+  playFighterAction('pose');
   if (!context?.selectionLight) return;
   context.selectionLight.intensity = 1.75;
 }
 
 export function loadRing(ring: RingId, hooks?: AssetHooks): Promise<Object3D> {
   const unregister = hooks ? registerAssetHooks(hooks) : null;
-  return assetManager.loadRing(ring).finally(() => unregister?.());
+  return assetManager
+    .loadRing(ring)
+    .then((asset) => asset.scene)
+    .finally(() => unregister?.());
 }
 
-export function loadFighter(character: CharacterId, hooks?: AssetHooks): Promise<Object3D> {
+export function loadFighter(character: CharacterId, hooks?: AssetHooks): Promise<LoadedAsset> {
   const unregister = hooks ? registerAssetHooks(hooks) : null;
   return assetManager.loadFighter(character).finally(() => unregister?.());
 }
@@ -497,6 +513,7 @@ function replaceRing(ring: RingId) {
 
 function replaceFighter(character: CharacterId) {
   const requestId = ++activeFighterRequest;
+  resetFighterAnimation();
   loadFighter(character)
     .then((model) => {
       if (requestId !== activeFighterRequest) return;
@@ -513,12 +530,16 @@ function attachRingModel(model: Object3D) {
   context.ringModel = model;
 }
 
-function attachFighterModel(model: Object3D, character: CharacterId) {
+function attachFighterModel(asset: LoadedAsset, character: CharacterId) {
   if (!context) return;
+  resetFighterAnimation();
   disposeAndRemove(context.fighterModel);
-  positionFighter(model, character);
-  context.scene.add(model);
-  context.fighterModel = model;
+  const { scene, animations } = asset;
+  positionFighter(scene, character);
+  context.scene.add(scene);
+  context.fighterModel = scene;
+  setupFighterAnimation(scene, animations);
+  playFighterAction('idle');
 }
 
 function positionRing(model: Object3D) {
@@ -550,6 +571,58 @@ function disposeObject(object: Object3D) {
   });
 }
 
+function resetFighterAnimation() {
+  if (!context) return;
+  context.fighterMixer?.stopAllAction();
+  context.fighterMixer = null;
+  context.fighterActions = {};
+  context.activeFighterAction = null;
+}
+
+function findClip(animations: AnimationClip[], keywords: string[]): AnimationClip | null {
+  const lowerKeywords = keywords.map((word) => word.toLowerCase());
+  return (
+    animations.find((clip) => lowerKeywords.some((keyword) => clip.name.toLowerCase().includes(keyword))) ??
+    null
+  );
+}
+
+function setupFighterAnimation(model: Object3D, animations: AnimationClip[]) {
+  if (!context) return;
+
+  const mixer = new AnimationMixer(model);
+  const idleClip = findClip(animations, ['idle', 'rest', 'breath']);
+  const poseClip = findClip(animations, ['pose', 'victory', 'taunt', 'intro']);
+
+  context.fighterMixer = mixer;
+  context.fighterActions = {};
+  context.activeFighterAction = null;
+
+  if (idleClip) {
+    context.fighterActions.idle = mixer.clipAction(idleClip);
+  }
+
+  if (poseClip) {
+    context.fighterActions.pose = mixer.clipAction(poseClip);
+  }
+}
+
+function playFighterAction(type: 'idle' | 'pose') {
+  if (!context?.fighterMixer) return;
+
+  const action = context.fighterActions[type];
+  if (!action) return;
+
+  Object.values(context.fighterActions).forEach((otherAction) => {
+    if (otherAction && otherAction !== action) {
+      otherAction.stop();
+    }
+  });
+
+  action.reset().play();
+  context.activeFighterAction = action;
+}
+
 function ensureFreeCamControls() {
   if (!context || context.freeCamControls) return;
 
@@ -576,6 +649,7 @@ export function destroy(): void {
   });
 
   disposeAndRemove(context.ringModel);
+  resetFighterAnimation();
   disposeAndRemove(context.fighterModel);
 
   context.composer.dispose();
