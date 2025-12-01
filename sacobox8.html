@@ -350,6 +350,9 @@
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
         const BOXER_BASE_Z = 2.0;   // delante/detrás   (0 = mismo plano del saco)
 
+        const tysonBasePosition = new THREE.Vector3(BOXER_BASE_X, 0, BOXER_BASE_Z);
+        const tysonTargetPosition = tysonBasePosition.clone();
+
         // Si lo pones en true, vuelven los golpes con el mouse (modo debug)
         const DEBUG_MOUSE_PUNCH = false;
 
@@ -482,6 +485,8 @@
         };
 
         let animationDirector = null;
+        let currentAnimationEntry = null;
+        let currentAnimationCategory = null;
 
         // Debug state
         const debugState = {
@@ -984,7 +989,35 @@
             if (force) {
                 tysonRoot.quaternion.copy(targetQuat);
             } else {
-                tysonRoot.quaternion.slerp(targetQuat, 0.15);
+                const blend = currentAnimationCategory === 'attack' ? 0.35 : 0.15;
+                tysonRoot.quaternion.slerp(targetQuat, blend);
+            }
+        }
+
+        function resetTysonTargetToBase() {
+            tysonTargetPosition.copy(tysonBasePosition);
+        }
+
+        function setTysonWalkTargetAroundBag() {
+            const pivot = bagMesh ? bagMesh.position : tysonBasePosition;
+            const radius = 1.3 + Math.random() * 0.9;
+            const angle = Math.random() * Math.PI * 2;
+            const target = new THREE.Vector3(
+                pivot.x + Math.cos(angle) * radius,
+                0,
+                pivot.z + Math.sin(angle) * radius
+            );
+
+            tysonTargetPosition.lerp(target, 0.7);
+        }
+
+        function handleCategoryTransitions(category) {
+            if (category === 'walk') {
+                setTysonWalkTargetAroundBag();
+            } else if (category === 'rest') {
+                resetTysonTargetToBase();
+            } else if (category === 'attack') {
+                orientTysonTowardBag(true);
             }
         }
 
@@ -1073,8 +1106,8 @@
             { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once', category: 'attack' },
             { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once', category: 'attack' },
             { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat', category: 'attack' },
-            { file: 'animaciones/defensa/Dodging.fbx', loop: 'once', category: 'defense' },
-            { file: 'animaciones/defensa/Left Block.fbx', loop: 'once', category: 'defense' },
+            { file: 'animaciones/movimiento/Walking.fbx', loop: 'repeat', category: 'walk' },
+            { file: 'animaciones/movimiento/Walk back.fbx', loop: 'repeat', category: 'walk' },
             { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat', category: 'rest' },
             { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once', category: 'rest' },
             { file: 'animaciones/descanso/Pointing Forward.fbx', loop: 'once', category: 'rest' }
@@ -1152,6 +1185,7 @@
                 this.actions = [];
                 this.queue = [];
                 this.activeAction = null;
+                this.activeEntry = null;
                 this.autoComboTimer = null;
                 this.audioTimers = [];
                 this.restBreathing = false;
@@ -1213,17 +1247,7 @@
             }
 
             prepareQueue() {
-                const pool = this.actions.filter(({ action }) => action !== this.activeAction);
-                const source = pool.length > 0 ? pool : this.actions.slice();
-                this.queue = shuffleArray(source.slice());
-
-                if (this.queue.length > 1 && this.queue[0].action === this.activeAction) {
-                    const swapIndex = this.queue.findIndex(({ action }) => action !== this.activeAction);
-                    if (swapIndex > 0) {
-                        const [next] = this.queue.splice(swapIndex, 1);
-                        this.queue.unshift(next);
-                    }
-                }
+                this.queue = this.generateAttackCombo();
             }
 
             playNext() {
@@ -1244,10 +1268,50 @@
                 next.action.fadeIn(ANIMATION_RULES.crossFade.in);
                 next.action.play();
                 this.activeAction = next.action;
+                this.activeEntry = next;
+                currentAnimationEntry = next;
+                currentAnimationCategory = next.category || getClipCategory(next.name);
 
                 updateDebugAnimation(next);
+                handleCategoryTransitions(currentAnimationCategory);
                 this.handleAudioFor(next);
                 this.scheduleAutoAdvance(next);
+            }
+
+            generateAttackCombo() {
+                const attacks = this.actions.filter(({ category }) => category === 'attack');
+                const restPool = this.actions.filter(({ category }) => category === 'rest');
+                const walks = this.actions.filter(({ category }) => category === 'walk');
+
+                if (!attacks.length) return [];
+
+                const desiredHits = [3, 4, 5, 6][Math.floor(Math.random() * 4)];
+                const sequence = [];
+                let lastAttack = null;
+
+                for (let i = 0; i < desiredHits; i++) {
+                    const attackPool = attacks.filter((entry) => entry !== lastAttack);
+                    const attack = attackPool[Math.floor(Math.random() * attackPool.length)] || attacks[0];
+                    sequence.push(attack);
+                    lastAttack = attack;
+
+                    const shouldWalk = i < desiredHits - 1 && walks.length > 0 && Math.random() > 0.4;
+                    if (shouldWalk) {
+                        const walk = walks[Math.floor(Math.random() * walks.length)];
+                        sequence.push(walk);
+                    }
+                }
+
+                if (walks.length && Math.random() > 0.65) {
+                    sequence.push(walks[Math.floor(Math.random() * walks.length)]);
+                }
+
+                if (restPool.length) {
+                    const rest = restPool[Math.floor(Math.random() * restPool.length)];
+                    sequence.push(rest);
+                }
+
+                return sequence;
             }
 
             handleAudioFor(entry) {
@@ -1386,8 +1450,8 @@
             }
 
             // Evitar que el root se desplace hacia adelante entre animaciones
-            tysonRoot.position.x = lerp(tysonRoot.position.x, BOXER_BASE_X, 0.35);
-            tysonRoot.position.z = lerp(tysonRoot.position.z, BOXER_BASE_Z, 0.35);
+            tysonRoot.position.x = lerp(tysonRoot.position.x, tysonTargetPosition.x, 0.25);
+            tysonRoot.position.z = lerp(tysonRoot.position.z, tysonTargetPosition.z, 0.25);
             tysonRoot.updateMatrixWorld(true);
         }
 
