@@ -2938,7 +2938,7 @@
         function initPhysics(tex, staticMat) {
             const bagMat = new CANNON.Material();
             world.addContactMaterial(new CANNON.ContactMaterial(staticMat, bagMat, { friction: 0.5, restitution: 0.2 }));
-            createPunchingBag(tex.bag, bagMat);
+            createPunchingBag(tex.bag, bagMat, staticMat);
         }
 
         function applyBagPhysicsToBody() {
@@ -2949,7 +2949,7 @@
             bagBody.angularDamping = visualConfig.bag.angularDamping;
         }
 
-        function createPunchingBag(tex, physMat) {
+        function createPunchingBag(tex, physMat, staticMat) {
             const h = 1.5, r = 0.35;
             let geo = new THREE.CylinderGeometry(r, r, h, 64, 32);
             geo = geo.toNonIndexed();
@@ -2987,35 +2987,49 @@
             bagMesh.receiveShadow = true;
             scene.add(bagMesh);
 
+            const collisionGroups = {
+                static: 1,
+                chain: 1 << 1,
+                bag: 1 << 2
+            };
+
+            const chainMaterial = new CANNON.Material('chain');
+            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, chainMaterial, { friction: 0.4, restitution: 0.05 }));
+            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, physMat, { friction: 0.45, restitution: 0.05 }));
+            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, staticMat, { friction: 0.5, restitution: 0.05 }));
+
             const ancBody = new CANNON.Body({
                 mass: 0,
-                position: new CANNON.Vec3(0, 4.2, 0)
+                position: new CANNON.Vec3(0, 4.25, 0)
             });
             world.addBody(ancBody);
-            
+
             const chainGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.25);
             const chainMat = new THREE.MeshStandardMaterial({color:0x888888, metalness:1.0, roughness:0.2});
             let last = ancBody;
             const links = 3;
+            const linkLength = 0.25;
             for(let i=0; i<links; i++){
                 const b = new CANNON.Body({
                     mass: 2,
-                    position: new CANNON.Vec3(0, 4.0 - i*0.25, 0),
+                    position: new CANNON.Vec3(0, 4.25 - (i + 1) * linkLength, 0),
                     shape: new CANNON.Sphere(0.05),
-                    linearDamping: 0.1,
-                    angularDamping: 0.5,
+                    material: chainMaterial,
+                    collisionFilterGroup: collisionGroups.chain,
+                    collisionFilterMask: collisionGroups.static | collisionGroups.chain | collisionGroups.bag,
+                    linearDamping: 0.35,
+                    angularDamping: 0.85,
                     allowSleep: true
                 });
                 b.sleepSpeedLimit = 0.25;
                 b.sleepTimeLimit = 0.5;
                 world.addBody(b);
-                world.addConstraint(new CANNON.PointToPointConstraint(
-                    last, new CANNON.Vec3(0, i===0?0:-0.125, 0),
-                    b,    new CANNON.Vec3(0, 0.125, 0)
-                ));
-                const m = new THREE.Mesh(chainGeo, chainMat); 
+                const constraint = new CANNON.DistanceConstraint(last, b, linkLength, 1e5);
+                constraint.collideConnected = true;
+                world.addConstraint(constraint);
+                const m = new THREE.Mesh(chainGeo, chainMat);
                 m.castShadow = true;
-                scene.add(m); 
+                scene.add(m);
                 chains.push({m, b});
                 last = b;
             }
@@ -3031,6 +3045,8 @@
                 mass: visualConfig.bag.mass,
                 material: physMat,
                 position: new CANNON.Vec3(0, 2, 0),
+                collisionFilterGroup: collisionGroups.bag,
+                collisionFilterMask: collisionGroups.static | collisionGroups.chain,
                 linearDamping: visualConfig.bag.linearDamping,
                 angularDamping: visualConfig.bag.angularDamping,
                 allowSleep: true
