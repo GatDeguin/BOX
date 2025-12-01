@@ -1,5 +1,15 @@
-export type RingId = 'classic' | 'neon' | 'rooftop';
+export type RingId = 'mmaGym' | 'bodybuilderArena' | 'tysonRing';
 export type CharacterId = 'mma' | 'bodybuilder' | 'tyson';
+
+export const CHARACTER_DEFAULT_RING: Record<CharacterId, RingId> = {
+  mma: 'mmaGym',
+  bodybuilder: 'bodybuilderArena',
+  tyson: 'tysonRing'
+};
+
+export function getDefaultRingForCharacter(character: CharacterId): RingId {
+  return CHARACTER_DEFAULT_RING[character];
+}
 
 export interface Box9State {
   ring: RingId;
@@ -17,7 +27,7 @@ export interface Box9Store {
 }
 
 const defaultState: Box9State = {
-  ring: 'classic',
+  ring: CHARACTER_DEFAULT_RING.mma,
   freeCamera: false,
   character: 'mma',
   selectionStarted: false

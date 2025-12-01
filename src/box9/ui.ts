@@ -3,9 +3,9 @@ import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
 
 const ringOptions: Record<RingId, string> = {
-  classic: 'Ring clásico',
-  neon: 'Dojo neón',
-  rooftop: 'Azotea nocturna'
+  mmaGym: 'Gimnasio MMA',
+  bodybuilderArena: 'Arena Bodybuilder',
+  tysonRing: 'Ring Tyson'
 };
 
 const characterOptions: Record<CharacterId, string> = {

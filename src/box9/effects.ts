@@ -25,7 +25,7 @@ interface EffectProfile {
   bloom?: BloomSettings;
 }
 
-export type EffectProfileName = 'neon' | 'gimnasio';
+export type EffectProfileName = 'neon' | 'gimnasio' | 'mmaGym' | 'ironShow' | 'championNight';
 
 const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
   neon: {
@@ -48,6 +48,39 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
       strength: 0.4,
       threshold: 0.3,
       radius: 0.15
+    }
+  },
+  mmaGym: {
+    focus: 9.5,
+    aperture: 0.024,
+    maxBlur: 0.01,
+    rendererScale: 1,
+    bloom: {
+      strength: 0.55,
+      threshold: 0.28,
+      radius: 0.18
+    }
+  },
+  ironShow: {
+    focus: 10.5,
+    aperture: 0.018,
+    maxBlur: 0.009,
+    rendererScale: 1.05,
+    bloom: {
+      strength: 0.8,
+      threshold: 0.26,
+      radius: 0.2
+    }
+  },
+  championNight: {
+    focus: 8.8,
+    aperture: 0.032,
+    maxBlur: 0.016,
+    rendererScale: 1.08,
+    bloom: {
+      strength: 1.05,
+      threshold: 0.22,
+      radius: 0.24
     }
   }
 };

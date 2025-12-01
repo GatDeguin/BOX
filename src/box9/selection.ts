@@ -1,4 +1,4 @@
-import { box9Store, Box9Store, CharacterId } from './state';
+import { box9Store, Box9Store, CharacterId, getDefaultRingForCharacter } from './state';
 import { activateSelection, confirmCharacterSelection, playIdleAnimation } from './scene';
 
 export interface FighterDetails {
@@ -65,6 +65,14 @@ export function initSelectionControls(
   };
 
   const applySelection = (id: CharacterId, animation: 'idle' | 'pose' = 'idle') => {
+    const preferredRing = getDefaultRingForCharacter(id);
+    const state = store.getState();
+
+    if (state.ring !== preferredRing) {
+      store.setState({ ring: preferredRing });
+      window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: preferredRing } }));
+    }
+
     currentIndex = fighters.findIndex((fighter) => fighter.id === id);
     store.setState({ character: id });
     if (animation === 'pose') {

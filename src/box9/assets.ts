@@ -31,9 +31,9 @@ const DEFAULT_FBX_OPTIONS: Required<Pick<AssetOptions, 'unitScale'>> = {
 };
 
 const RING_ASSETS: Record<RingId | 'default', AssetOptions & { path: string }> = {
-  classic: { path: 'modelos/Ring.glb' },
-  neon: { path: 'modelos/Ring 2.glb' },
-  rooftop: { path: 'modelos/Ring 3.glb' },
+  mmaGym: { path: 'modelos/Ring.glb' },
+  bodybuilderArena: { path: 'modelos/Ring 2.glb' },
+  tysonRing: { path: 'modelos/Ring 3.glb' },
   default: { path: 'modelos/Ring.glb' }
 };
 
