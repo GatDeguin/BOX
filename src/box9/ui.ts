@@ -1,4 +1,5 @@
 import { box9Store, Box9Store, RingId, CharacterId } from './state';
+import { getFighterDetails, initSelectionControls } from './selection';
 
 const ringOptions: Record<RingId, string> = {
   classic: 'Ring clásico',
@@ -34,6 +35,12 @@ function createStyles() {
     .box9-status { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; min-width: 220px; }
     .box9-status small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .box9-status strong { color: #f6f7fb; }
+    .box9-fighter-card { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; max-width: 320px; pointer-events: auto; box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
+    .box9-fighter-name { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; color: #e9ecf4; }
+    .box9-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .box9-stat { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+    .box9-stat small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+    .box9-stat strong { color: #f6f7fb; }
     .box9-modal-backdrop { position: absolute; inset: 0; background: rgba(3,5,8,0.65); display: none; align-items: center; justify-content: center; pointer-events: auto; }
     .box9-modal { background: #0c111d; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px; width: min(420px, 90vw); box-shadow: 0 18px 80px rgba(0,0,0,0.45); }
     .box9-modal h2 { margin: 0 0 12px; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -190,12 +197,51 @@ function createHud(
   });
 
   chipsRow.appendChild(chipList);
-  hud.append(topBar, chipsRow);
+  const fighterCard = document.createElement('div');
+  fighterCard.className = 'box9-fighter-card';
+
+  const fighterName = document.createElement('h3');
+  fighterName.className = 'box9-fighter-name';
+  fighterName.textContent = 'Striker';
+
+  const statGrid = document.createElement('div');
+  statGrid.className = 'box9-stat-grid';
+
+  const weightStat = document.createElement('div');
+  weightStat.className = 'box9-stat';
+  const weightLabel = document.createElement('small');
+  weightLabel.textContent = 'Peso';
+  const weightValue = document.createElement('strong');
+  weightStat.append(weightLabel, weightValue);
+
+  const reachStat = document.createElement('div');
+  reachStat.className = 'box9-stat';
+  const reachLabel = document.createElement('small');
+  reachLabel.textContent = 'Alcance';
+  const reachValue = document.createElement('strong');
+  reachStat.append(reachLabel, reachValue);
+
+  const speedStat = document.createElement('div');
+  speedStat.className = 'box9-stat';
+  const speedLabel = document.createElement('small');
+  speedLabel.textContent = 'Velocidad';
+  const speedValue = document.createElement('strong');
+  speedStat.append(speedLabel, speedValue);
+
+  statGrid.append(weightStat, reachStat, speedStat);
+  fighterCard.append(fighterName, statGrid);
+  hud.append(topBar, chipsRow, fighterCard);
 
   const update = () => {
     const state = store.getState();
     ringValue.textContent = ringOptions[state.ring];
     cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
+
+    const fighter = getFighterDetails(state.character);
+    fighterName.textContent = fighter.name;
+    weightValue.textContent = fighter.weight;
+    reachValue.textContent = fighter.reach;
+    speedValue.textContent = fighter.speed;
 
     const chips = chipList.querySelectorAll<HTMLElement>('.box9-chip');
     chips.forEach((chip) => {
@@ -259,4 +305,5 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
   container.append(overlay, hud, backdrop);
   root.appendChild(container);
+  initSelectionControls(store);
 }
