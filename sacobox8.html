@@ -297,6 +297,26 @@
             <input id="bagAngularDamping" type="range" min="0" max="1" step="0.01" value="0.8" />
             <span class="value" id="bagAngularDampingVal">0.80</span>
         </div>
+        <div class="control-row">
+            <span class="label">Masa mano izq.</span>
+            <input id="leftHandMass" type="range" min="1" max="10" step="0.1" value="4.5" />
+            <span class="value" id="leftHandMassVal">4.5 kg</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Área contacto izq.</span>
+            <input id="leftHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
+            <span class="value" id="leftHandAreaVal">1.00x</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Masa mano der.</span>
+            <input id="rightHandMass" type="range" min="1" max="10" step="0.1" value="5.5" />
+            <span class="value" id="rightHandMassVal">5.5 kg</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Área contacto der.</span>
+            <input id="rightHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
+            <span class="value" id="rightHandAreaVal">1.00x</span>
+        </div>
     </div>
 
     <script type="module">
@@ -369,6 +389,17 @@
                 mass: 60,
                 linearDamping: 0.6,
                 angularDamping: 0.8
+            }
+        };
+
+        const punchConfig = {
+            left: {
+                effectiveMass: 4.5,
+                contactArea: 1.0
+            },
+            right: {
+                effectiveMass: 5.5,
+                contactArea: 1.0
             }
         };
 
@@ -607,6 +638,17 @@
             angularDampingValue: document.getElementById('bagAngularDampingVal')
         };
 
+        const punchControlElements = {
+            leftMass: document.getElementById('leftHandMass'),
+            leftMassValue: document.getElementById('leftHandMassVal'),
+            rightMass: document.getElementById('rightHandMass'),
+            rightMassValue: document.getElementById('rightHandMassVal'),
+            leftArea: document.getElementById('leftHandArea'),
+            leftAreaValue: document.getElementById('leftHandAreaVal'),
+            rightArea: document.getElementById('rightHandArea'),
+            rightAreaValue: document.getElementById('rightHandAreaVal')
+        };
+
         function formatDampingValue(value) {
             return parseFloat(value).toFixed(2);
         }
@@ -621,6 +663,24 @@
             bagControlElements.angularDampingValue.textContent = formatDampingValue(visualConfig.bag.angularDamping);
         }
 
+        function formatAreaMultiplier(value) {
+            return `${parseFloat(value).toFixed(2)}x`;
+        }
+
+        function syncPunchControlsFromConfig() {
+            if (!punchControlElements.leftMass) return;
+
+            punchControlElements.leftMass.value = punchConfig.left.effectiveMass;
+            punchControlElements.leftMassValue.textContent = `${punchConfig.left.effectiveMass.toFixed(1)} kg`;
+            punchControlElements.rightMass.value = punchConfig.right.effectiveMass;
+            punchControlElements.rightMassValue.textContent = `${punchConfig.right.effectiveMass.toFixed(1)} kg`;
+
+            punchControlElements.leftArea.value = punchConfig.left.contactArea;
+            punchControlElements.leftAreaValue.textContent = formatAreaMultiplier(punchConfig.left.contactArea);
+            punchControlElements.rightArea.value = punchConfig.right.contactArea;
+            punchControlElements.rightAreaValue.textContent = formatAreaMultiplier(punchConfig.right.contactArea);
+        }
+
         function applyBagControlsToConfig() {
             if (!bagControlElements.mass) return;
             visualConfig.bag.mass = parseFloat(bagControlElements.mass.value);
@@ -630,12 +690,35 @@
             applyBagPhysicsToBody();
         }
 
+        function applyPunchControlsToConfig() {
+            if (!punchControlElements.leftMass) return;
+
+            punchConfig.left.effectiveMass = parseFloat(punchControlElements.leftMass.value);
+            punchConfig.right.effectiveMass = parseFloat(punchControlElements.rightMass.value);
+            punchConfig.left.contactArea = parseFloat(punchControlElements.leftArea.value);
+            punchConfig.right.contactArea = parseFloat(punchControlElements.rightArea.value);
+
+            syncPunchControlsFromConfig();
+        }
+
         function setupBagControls() {
             if (!bagControlElements.mass) return;
             syncBagControlsFromConfig();
             const handler = () => applyBagControlsToConfig();
             ['mass', 'linearDamping', 'angularDamping'].forEach(key => {
                 const el = bagControlElements[key];
+                if (el) {
+                    el.addEventListener('input', handler);
+                }
+            });
+        }
+
+        function setupPunchControls() {
+            if (!punchControlElements.leftMass) return;
+            syncPunchControlsFromConfig();
+            const handler = () => applyPunchControlsToConfig();
+            ['leftMass', 'rightMass', 'leftArea', 'rightArea'].forEach(key => {
+                const el = punchControlElements[key];
                 if (el) {
                     el.addEventListener('input', handler);
                 }
@@ -1927,6 +2010,51 @@
         let leftPunchCooldown = 0;
         let rightPunchCooldown = 0;
 
+        function getBagPointVelocity(contactPoint) {
+            const relativePoint = new CANNON.Vec3();
+            contactPoint.vsub(bagBody.position, relativePoint);
+
+            const angularComponent = new CANNON.Vec3();
+            bagBody.angularVelocity.cross(relativePoint, angularComponent);
+
+            const bagPointVelocity = new CANNON.Vec3();
+            bagBody.velocity.vadd(angularComponent, bagPointVelocity);
+            return bagPointVelocity;
+        }
+
+        function computeBagNormal(contactPoint) {
+            const normal = new CANNON.Vec3();
+            contactPoint.vsub(bagBody.position, normal);
+            const length = normal.length();
+            if (length > 1e-6) {
+                normal.scale(1 / length, normal);
+            } else {
+                normal.set(0, 1, 0);
+            }
+            return normal;
+        }
+
+        function computePunchImpulse(handVelocityVec3, contactPointVec3, isLeft) {
+            if (!bagBody) return null;
+
+            const handVelocity = new CANNON.Vec3(handVelocityVec3.x, handVelocityVec3.y, handVelocityVec3.z);
+            const contactPoint = new CANNON.Vec3(contactPointVec3.x, contactPointVec3.y, contactPointVec3.z);
+            const normal = computeBagNormal(contactPoint);
+            const bagPointVelocity = getBagPointVelocity(contactPoint);
+
+            const relativeVelocity = new CANNON.Vec3();
+            handVelocity.vsub(bagPointVelocity, relativeVelocity);
+
+            const normalSpeed = relativeVelocity.dot(normal);
+            if (normalSpeed <= 0) return null;
+
+            const handSettings = isLeft ? punchConfig.left : punchConfig.right;
+            const impulseMagnitude = normalSpeed * handSettings.effectiveMass * handSettings.contactArea;
+            const impulse = normal.scale(impulseMagnitude, new CANNON.Vec3());
+
+            return { impulse, contactPoint, normal, normalSpeed, impulseMagnitude };
+        }
+
         function updatePosePunch(dt) {
             if (!skeleton || !bagBody || !bagMesh) return;
 
@@ -1952,29 +2080,27 @@
                     const cooldown = isLeft ? leftPunchCooldown : rightPunchCooldown;
 
                     if (speed > 1.5 && forwardFactor > 0.4 && distance < 0.8 && cooldown <= 0) {
-                        const baseForce = visualConfig.bag.punchForce;
-                        const strength = THREE.MathUtils.clamp(speed / 4, 0.3, 1.0);
-                        const force = baseForce * strength;
+                        const punchData = computePunchImpulse(vel, worldPos, isLeft);
+                        if (punchData) {
+                            bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
+                            const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
+                            deform(worldPos, normalDir);
 
-                        const impulse = new CANNON.Vec3(
-                            dirToBag.x * force,
-                            dirToBag.y * force * 0.3,
-                            dirToBag.z * force
-                        );
+                            if (!audioInitialized) initAudioContext();
+                            const normalizedImpact = THREE.MathUtils.clamp(
+                                punchData.impulseMagnitude / visualConfig.bag.punchForce,
+                                0.15,
+                                1.5
+                            );
+                            const impactForce = visualConfig.bag.punchForce * normalizedImpact;
+                            playImpactSound(impactForce);
+                            playHeavyImpactSound(impactForce);
 
-                        const contactPoint = new CANNON.Vec3(worldPos.x, worldPos.y, worldPos.z);
+                            registerPunch(Math.min(1, punchData.normalSpeed / 6));
 
-                        bagBody.applyImpulse(impulse, contactPoint);
-                        deform(worldPos, dirToBag);
-
-                        if (!audioInitialized) initAudioContext();
-                        playImpactSound(force);
-                        playHeavyImpactSound(force);
-
-                        registerPunch(strength);
-
-                        if (isLeft) leftPunchCooldown = 0.25;
-                        else rightPunchCooldown = 0.25;
+                            if (isLeft) leftPunchCooldown = 0.25;
+                            else rightPunchCooldown = 0.25;
+                        }
                     }
                 }
 
@@ -1997,6 +2123,7 @@
 
             applyPresetBagSettings(currentPreset);
             setupBagControls();
+            setupPunchControls();
 
             initScene();
             initRenderer(container);
@@ -3146,16 +3273,24 @@
 
                 const hit = hits[0];
                 const dir = hit.point.clone().sub(camera.position).normalize();
-                const f = visualConfig.bag.punchForce;
-                const impulse = new CANNON.Vec3(dir.x*f, dir.y*f*0.2, dir.z*f);
-                bagBody.applyImpulse(impulse, new CANNON.Vec3(hit.point.x, hit.point.y, hit.point.z));
-                deform(hit.point, dir);
-                playImpactSound(f);
+                const rightSettings = punchConfig.right;
+                const targetImpulse = visualConfig.bag.punchForce;
+                const syntheticSpeed = targetImpulse / (rightSettings.effectiveMass * rightSettings.contactArea);
+                const handVelocity = dir.clone().multiplyScalar(syntheticSpeed);
 
-                registerPunch(1.0);
+                const punchData = computePunchImpulse(handVelocity, hit.point, false);
+                if (punchData) {
+                    bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
+                    const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
+                    deform(hit.point, normalDir);
+                    const impactForce = Math.max(targetImpulse, punchData.impulseMagnitude);
+                    playImpactSound(impactForce);
 
-                shakeTime = shakeDuration;
-                shakeStrength = 0.03 * (f / visualConfig.bag.punchForce);
+                    registerPunch(Math.min(1, punchData.normalSpeed / 6));
+
+                    shakeTime = shakeDuration;
+                    shakeStrength = 0.03 * (impactForce / visualConfig.bag.punchForce);
+                }
             }
         }
 
