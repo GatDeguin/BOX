@@ -2251,7 +2251,7 @@
             }
         }
 
-        function playBuffer(name, { volume = 1, playbackRate = 1 } = {}) {
+        function playBuffer(name, { volume = 1, playbackRate = 1, slices = 1 } = {}) {
             if (!audioConfig.enabled || !audioContext) return;
             const buffer = audioBuffers.get(name);
             if (!buffer) return;
@@ -2267,16 +2267,25 @@
 
             source.connect(gainNode);
             gainNode.connect(masterGain);
-            source.start();
+
+            const totalSlices = Math.max(1, Math.floor(slices));
+            const segmentDuration = buffer.duration / totalSlices;
+            const sliceIndex = Math.floor(Math.random() * totalSlices);
+            const offset = sliceIndex * segmentDuration;
+            const duration = Math.max(0.01, segmentDuration);
+
+            source.start(0, offset, duration);
         }
 
         function playImpactSound(strength = 1) {
             const vol = THREE.MathUtils.clamp(strength / 90, 0.2, 1.1);
             const rate = 0.9 + Math.random() * 0.2;
-            const impactFiles = audioFiles.impacts.map((file) => 'impact:' + file).filter((k) => audioBuffers.has(k));
+            const impactFiles = audioFiles.impacts
+                .map((file) => ({ key: 'impact:' + file, slices: 4 }))
+                .filter((entry) => audioBuffers.has(entry.key));
             if (impactFiles.length === 0) return;
             const pick = impactFiles[Math.floor(Math.random() * impactFiles.length)];
-            playBuffer(pick, { volume: vol, playbackRate: rate });
+            playBuffer(pick.key, { volume: vol, playbackRate: rate, slices: pick.slices });
         }
 
         function playHeavyImpactSound(strength = 1) {
