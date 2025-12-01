@@ -317,6 +317,12 @@
         let audioContext, masterGain, kickBuffer;
         let audioInitialized = false;
 
+        // Mezcla de animaciones automáticas vs. mocap (webcam):
+        // - Poné AUTO_ANIMATION_ENABLED en false para desactivar el combo automático y dejar solo mocap.
+        // - Poné ENABLE_MOCAP_BLEND en false para correr las animaciones sin capturar webcam/pose.
+        const AUTO_ANIMATION_ENABLED = true;
+        const ENABLE_MOCAP_BLEND = true;
+
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
         const targetBase = baseTarget.clone();
@@ -405,10 +411,17 @@
         let tysonRoot = null;
         let skeleton = null;
         const bonesByName = {};
+        let mixer = null;
+        const loadedAnimations = [];
+        let animationQueue = [];
+        let activeAction = null;
+        let autoComboTimer = null;
 
         const tmpVecA = new THREE.Vector3();
         const tmpVecB = new THREE.Vector3();
         const tmpDir  = new THREE.Vector3();
+
+        let mocapBlend = 0;
 
         function lmToVec3(lm) {
             if (!lm) return null;
@@ -424,6 +437,14 @@
                 bonesByName[name.toLowerCase()] ||
                 bonesByName['mixamorig' + name]
             );
+        }
+
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
         }
 
         const BIND = {};
@@ -480,6 +501,9 @@
             const bone = getBone(boneName);
             if (!skeleton || !bone || !dirWorld) return;
 
+            const blend = ENABLE_MOCAP_BLEND ? mocapBlend : 0;
+            if (blend <= 0) return;
+
             const info = BIND[boneName];
             if (!info) return;
 
@@ -490,12 +514,15 @@
             const targetWorld = info.wq.clone().premultiply(qDelta);
             const targetLocal = worldQuatToLocal(bone, targetWorld);
 
-            bone.quaternion.slerp(targetLocal, slerp);
+            bone.quaternion.slerp(targetLocal, slerp * blend);
         }
 
         function orientBoneFromLandmarks(boneName, lmStartIdx, lmEndIdx, slerp = 0.35) {
             const bone = getBone(boneName);
             if (!skeleton || !bone || !smoothedLandmarks) return;
+
+            const blend = ENABLE_MOCAP_BLEND ? mocapBlend : 0;
+            if (blend <= 0) return;
 
             const lmStart = smoothedLandmarks[lmStartIdx];
             const lmEnd   = smoothedLandmarks[lmEndIdx];
@@ -514,11 +541,15 @@
             const targetWorld = info.wq.clone().premultiply(qDelta);
             const targetLocal = worldQuatToLocal(bone, targetWorld);
 
-            bone.quaternion.slerp(targetLocal, slerp);
+            bone.quaternion.slerp(targetLocal, slerp * blend);
         }
 
         function updateModelFromPose(landmarks) {
+            if (!ENABLE_MOCAP_BLEND) return;
             if (!landmarks || !skeleton) return;
+
+            const blend = mocapBlend;
+            if (blend <= 0.001) return;
 
             const lmLS   = landmarks[POSE_LM.LEFT_SHOULDER];
             const lmRS   = landmarks[POSE_LM.RIGHT_SHOULDER];
@@ -544,7 +575,7 @@
                     const qDelta = new THREE.Quaternion().setFromUnitVectors(infoHips.dir, torsoDir);
                     const targetWorld = infoHips.wq.clone().premultiply(qDelta);
                     const targetLocal = worldQuatToLocal(hips, targetWorld);
-                    hips.quaternion.slerp(targetLocal, 0.25);
+                    hips.quaternion.slerp(targetLocal, 0.25 * blend);
                 }
 
                 hips.position.lerp(
@@ -553,7 +584,7 @@
                         vHipMid.y * 0.4 + 1.0,
                         BOXER_BASE_Z
                     ),
-                    0.15
+                    0.15 * blend
                 );
 
                 orientBoneFromDirection('Spine',  torsoDir, 0.35);
@@ -631,6 +662,9 @@
                     scene.updateMatrixWorld(true);
                     captureBindInfo();
 
+                    mixer = new THREE.AnimationMixer(tysonRoot);
+                    loadTysonAnimations();
+
                     console.log('Tyson cargado. Huesos:', Object.keys(bonesByName));
                 },
                 undefined,
@@ -638,6 +672,131 @@
                     console.error('Error cargando Tyson:', err);
                 }
             );
+        }
+
+        function loadTysonAnimations() {
+            if (!tysonRoot || !mixer) return;
+            const loader = new FBXLoader();
+            const files = [
+                { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
+                { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
+                { file: 'animaciones/ataque/Hook.fbx', loop: 'once' },
+                { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once' },
+                { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
+                { file: 'animaciones/ataque/Pointing Forward.fbx', loop: 'once' },
+                { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' },
+                { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
+                { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
+                { file: 'animaciones/descanso/Situp To Idle.fbx', loop: 'once' },
+                { file: 'animaciones/descanso/Getting Up.fbx', loop: 'once' },
+                { file: 'animaciones/descanso/Reaction.fbx', loop: 'once' },
+                { file: 'animaciones/movimiento/Walking.fbx', loop: 'repeat' },
+                { file: 'animaciones/movimiento/Walk back.fbx', loop: 'repeat' },
+                { file: 'animaciones/daño/Head Hit.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Big Kidney Hit.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Convulsing.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Medium Hit To Head.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Receive Uppercut To The Face.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Taking Punch.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Light Hit To Head.fbx', loop: 'once' },
+                { file: 'animaciones/daño/Dying.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Fall Flat.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Fall Over.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Knocked Down.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Laying.fbx', loop: 'repeat' },
+                { file: 'animaciones/daño/caida/Livershot Knockdown.fbx', loop: 'once' },
+                { file: 'animaciones/daño/caida/Shoulder Hit And Fall.fbx', loop: 'once' }
+            ];
+
+            let loaded = 0;
+            files.forEach(({ file, loop }) => {
+                loader.load(
+                    file,
+                    (anim) => {
+                        if (anim.animations && anim.animations.length > 0 && mixer) {
+                            const clip = anim.animations[0];
+                            const action = mixer.clipAction(clip);
+                            const isLoop = loop === 'repeat';
+                            action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+                            action.clampWhenFinished = !isLoop;
+                            action.enabled = true;
+                            loadedAnimations.push({ name: file, action });
+                        }
+                        loaded++;
+                        if (loaded === files.length) {
+                            refillAnimationQueue();
+                            startAnimationPlaylist();
+                        }
+                    },
+                    undefined,
+                    (err) => {
+                        console.error('No se pudo cargar animación', file, err);
+                        loaded++;
+                        if (loaded === files.length) {
+                            refillAnimationQueue();
+                            startAnimationPlaylist();
+                        }
+                    }
+                );
+            });
+        }
+
+        function refillAnimationQueue() {
+            const filtered = loadedAnimations.filter(({ action }) => action !== activeAction);
+            const pool = filtered.length > 0 ? filtered : loadedAnimations.slice();
+            animationQueue = shuffleArray(pool.slice());
+
+            if (animationQueue.length > 1 && animationQueue[0].action === activeAction) {
+                const swapIndex = animationQueue.findIndex(({ action }) => action !== activeAction);
+                if (swapIndex > 0) {
+                    const [next] = animationQueue.splice(swapIndex, 1);
+                    animationQueue.unshift(next);
+                }
+            }
+        }
+
+        function startAnimationPlaylist() {
+            if (!AUTO_ANIMATION_ENABLED || loadedAnimations.length === 0) return;
+            initAudioContext();
+
+            if (typeof playCountdown === 'function') setTimeout(() => playCountdown(), 150);
+            if (typeof playBell === 'function') setTimeout(() => playBell(), 650);
+            if (typeof playBreath === 'function') setTimeout(() => playBreath(), 1100);
+            if (typeof playCrowd === 'function') setTimeout(() => playCrowd(), 1400);
+            if (typeof playShout === 'function') setTimeout(() => playShout(), 1800);
+
+            playNextAnimation();
+            startBreathCycle();
+        }
+
+        function playNextAnimation() {
+            if (!mixer || loadedAnimations.length === 0) return;
+            if (animationQueue.length === 0) refillAnimationQueue();
+
+            const pick = animationQueue.shift();
+            if (activeAction && activeAction !== pick.action) {
+                activeAction.fadeOut(0.25);
+            }
+            pick.action.reset();
+            pick.action.fadeIn(0.2);
+            pick.action.play();
+            activeAction = pick.action;
+
+            if (autoComboTimer) clearTimeout(autoComboTimer);
+            const duration = (pick.action.getClip()?.duration || 3) * 1000;
+            autoComboTimer = setTimeout(() => {
+                playNextAnimation();
+            }, duration + 500 + Math.random() * 800);
+
+            if (typeof playCrowd === 'function' && Math.random() > 0.65) playCrowd();
+        }
+
+        function startBreathCycle() {
+            if (!AUTO_ANIMATION_ENABLED) return;
+            setInterval(() => {
+                if (audioInitialized && typeof playBreath === 'function') playBreath();
+            }, 8500);
         }
 
         // --- MediaPipe Pose ---
@@ -659,6 +818,7 @@
         }
 
         function onResultsPose(results) {
+            if (!ENABLE_MOCAP_BLEND) return;
             if (canvasCtx && canvasElement) {
                 canvasCtx.save();
                 canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -1825,12 +1985,19 @@
             const dtVis = Math.min(clock.getDelta(), 0.1);
             const elapsed = clock.getElapsedTime();
 
+            const blendTarget = ENABLE_MOCAP_BLEND && capturing ? 1 : 0;
+            mocapBlend = THREE.MathUtils.lerp(mocapBlend, blendTarget, 0.025);
+
             if (world) {
                 if (lastTime !== undefined) {
                     const dt = (time - lastTime) / 1000;
                     world.step(fixedTimeStep, dt, maxSubSteps);
                 }
                 lastTime = time;
+            }
+
+            if (mixer) {
+                mixer.update(dtVis);
             }
 
             if (bagMesh && bagBody) {
