@@ -410,6 +410,7 @@
         let lastTime;
 
         let bagBody, bagMesh, fanMesh, clockHandHour, clockHandMin, clockHandSec;
+        let bagVisualOffset = new THREE.Vector3();
         let chains = [];
         const mouse = new THREE.Vector2();
         const raycaster = new THREE.Raycaster();
@@ -2785,22 +2786,31 @@
                 last = b;
             }
 
+            const bagShapeOffset = new CANNON.Vec3(0, -0.1, 0);
+            const bagHookOffset = new CANNON.Vec3(0, h/2 + bagShapeOffset.y - 0.05, 0);
+            const bagAttachmentOffset = h/2 + bagShapeOffset.y + 0.05;
+
+            const bagCylinderShape = new CANNON.Cylinder(r, r, h, 16);
+            const bagHookShape = new CANNON.Sphere(0.12);
+
             bagBody = new CANNON.Body({
                 mass: visualConfig.bag.mass,
                 material: physMat,
                 position: new CANNON.Vec3(0, 2, 0),
-                shape: new CANNON.Cylinder(r, r, h, 16),
                 linearDamping: visualConfig.bag.linearDamping,
                 angularDamping: visualConfig.bag.angularDamping,
                 allowSleep: true
             });
+            bagBody.addShape(bagCylinderShape, bagShapeOffset);
+            bagBody.addShape(bagHookShape, bagHookOffset);
             bagBody.sleepSpeedLimit = 0.2;
             bagBody.sleepTimeLimit = 1.0;
             bagBody.shapeOrientations[0].setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
             world.addBody(bagBody);
+            bagVisualOffset.set(bagShapeOffset.x, bagShapeOffset.y, bagShapeOffset.z);
             world.addConstraint(new CANNON.PointToPointConstraint(
                 last,    new CANNON.Vec3(0, -0.125, 0),
-                bagBody, new CANNON.Vec3(0, h/2,   0)
+                bagBody, new CANNON.Vec3(0, bagAttachmentOffset, 0)
             ));
         }
 
@@ -3149,6 +3159,10 @@
 
             if (bagMesh && bagBody) {
                 bagMesh.position.copy(bagBody.position);
+                if (bagVisualOffset.lengthSq() > 0) {
+                    tempV.copy(bagVisualOffset).applyQuaternion(bagBody.quaternion);
+                    bagMesh.position.add(tempV);
+                }
                 bagMesh.quaternion.copy(bagBody.quaternion);
             }
             chains.forEach(o => {
