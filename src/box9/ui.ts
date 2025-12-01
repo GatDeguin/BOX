@@ -9,9 +9,9 @@ const ringOptions: Record<RingId, string> = {
 };
 
 const characterOptions: Record<CharacterId, string> = {
-  striker: 'Striker',
-  brawler: 'Brawler',
-  counter: 'Counter'
+  mma: 'MMA',
+  bodybuilder: 'Bodybuilder',
+  tyson: 'Tyson'
 };
 
 function emitSceneEvent(name: string, detail?: unknown) {
@@ -42,6 +42,7 @@ function createStyles() {
     .box9-stat { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
     .box9-stat small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .box9-stat strong { color: #f6f7fb; }
+    .box9-fighter-personality { margin: 0; color: #b4bed4; line-height: 1.5; }
     .box9-modal-backdrop { position: absolute; inset: 0; background: rgba(3,5,8,0.65); display: none; align-items: center; justify-content: center; pointer-events: auto; }
     .box9-modal { background: #0c111d; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px; width: min(420px, 90vw); box-shadow: 0 18px 80px rgba(0,0,0,0.45); }
     .box9-modal h2 { margin: 0 0 12px; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -246,7 +247,7 @@ function createHud(
 
   const fighterName = document.createElement('h3');
   fighterName.className = 'box9-fighter-name';
-  fighterName.textContent = 'Striker';
+  fighterName.textContent = 'MMA';
 
   const statGrid = document.createElement('div');
   statGrid.className = 'box9-stat-grid';
@@ -274,6 +275,10 @@ function createHud(
 
   statGrid.append(weightStat, reachStat, speedStat);
   fighterCard.append(fighterName, statGrid);
+  const fighterPersonality = document.createElement('p');
+  fighterPersonality.className = 'box9-fighter-personality';
+  fighterPersonality.textContent = 'Competidor táctico, mezcla derribos con boxeo limpio y lee cada distancia.';
+  fighterCard.appendChild(fighterPersonality);
   hud.append(topBar, chipsRow, fighterCard);
 
   const update = () => {
@@ -286,6 +291,7 @@ function createHud(
     weightValue.textContent = fighter.weight;
     reachValue.textContent = fighter.reach;
     speedValue.textContent = fighter.speed;
+    fighterPersonality.textContent = fighter.personality;
 
     setActiveChip(state.character);
   };

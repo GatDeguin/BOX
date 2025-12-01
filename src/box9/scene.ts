@@ -78,17 +78,17 @@ interface FighterAnchor {
 }
 
 const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
-  striker: {
+  mma: {
     camera: new Vector3(-3.5, 2.8, 8),
     lookAt: new Vector3(-1.5, 1.8, 0),
     highlight: new Vector3(-1.5, 2.5, 0)
   },
-  brawler: {
+  bodybuilder: {
     camera: new Vector3(0, 3.1, 8.5),
     lookAt: new Vector3(0, 1.8, 0),
     highlight: new Vector3(0, 2.5, 0)
   },
-  counter: {
+  tyson: {
     camera: new Vector3(3.5, 2.8, 8),
     lookAt: new Vector3(1.5, 1.8, 0),
     highlight: new Vector3(1.5, 2.5, 0)
@@ -96,15 +96,15 @@ const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
 };
 
 const FIGHTER_ANCHORS: Record<CharacterId, FighterAnchor> = {
-  striker: {
+  mma: {
     position: new Vector3(-1.6, 0, 0.8),
     rotation: new Vector3(0, Math.PI / 10, 0)
   },
-  brawler: {
+  bodybuilder: {
     position: new Vector3(0, 0, 0.9),
     rotation: new Vector3(0, 0, 0)
   },
-  counter: {
+  tyson: {
     position: new Vector3(1.6, 0, 0.8),
     rotation: new Vector3(0, -Math.PI / 10, 0)
   }
@@ -124,7 +124,7 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
 };
 
 const ALL_RINGS: RingId[] = ['classic', 'neon', 'rooftop'];
-const ALL_FIGHTERS: CharacterId[] = ['striker', 'brawler', 'counter'];
+const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson'];
 
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
   classic: { effectProfile: 'gimnasio', selectionLight: { color: '#7a9bff', intensity: 1.4 } },
@@ -493,9 +493,9 @@ export function enterSelection(): void {
   ensureAnimationLoop();
   if (!context.selectionTarget) {
     context.selectionTarget = {
-      camera: SELECTION_FOCUS.striker.camera.clone(),
-      lookAt: SELECTION_FOCUS.striker.lookAt.clone(),
-      highlight: SELECTION_FOCUS.striker.highlight.clone()
+      camera: SELECTION_FOCUS.mma.camera.clone(),
+      lookAt: SELECTION_FOCUS.mma.lookAt.clone(),
+      highlight: SELECTION_FOCUS.mma.highlight.clone()
     };
   }
 }
