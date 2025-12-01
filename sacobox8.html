@@ -253,6 +253,10 @@
         let keyLight, fillLight, ringLight, rimLight, ambientLight;
         let doorLight;
         let fluorescentLights = [];
+        let fluorescentGlowCards = [];
+        let dustSystem, dustVelocities = [], dustOffsets = [];
+        let uiSparks = [];
+        let spriteTexture;
         let bokehPass;
 
         const lightBases = {
@@ -312,6 +316,7 @@
         let currentPreset = 'night';
         let baseFogDensity = lightingPresets[currentPreset].fogDensity;
         let volumetricBaseHue = lightingPresets[currentPreset].volumetricHue;
+        let ambientBaseIntensity = lightingPresets[currentPreset].ambientBase;
 
         // Golpes y respiración de luz
         const IMPACT_FLASH_DURATION = 0.12;
@@ -344,6 +349,125 @@
         // Reutilización de vectores para deformación
         const tempV = new THREE.Vector3();
         const tempDisp = new THREE.Vector3();
+
+        function getSpriteTexture() {
+            if (spriteTexture) return spriteTexture;
+            const size = 64;
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.3, 'rgba(255,230,170,0.8)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            spriteTexture = new THREE.CanvasTexture(canvas);
+            spriteTexture.needsUpdate = true;
+            return spriteTexture;
+        }
+
+        function spawnUiSpark(clientX, clientY, strength = 0.4) {
+            if (!scene || !camera) return;
+            const ndc = new THREE.Vector3(
+                (clientX / window.innerWidth) * 2 - 1,
+                -(clientY / window.innerHeight) * 2 + 1,
+                0.2
+            );
+            ndc.unproject(camera);
+            const dir = ndc.sub(camera.position).normalize();
+            const pos = camera.position.clone().add(dir.clone().multiplyScalar(1.2));
+            const mat = new THREE.SpriteMaterial({
+                map: getSpriteTexture(),
+                color: 0xfff3c2,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.copy(pos);
+            sprite.scale.setScalar(0.25 + strength * 0.25);
+            scene.add(sprite);
+            uiSparks.push({
+                sprite,
+                life: 0.28,
+                velocity: dir.multiplyScalar(0.6 * (0.6 + strength)),
+                spin: (Math.random() - 0.5) * 6
+            });
+        }
+
+        function updateUiSparks(dt) {
+            if (!uiSparks.length) return;
+            for (let i = uiSparks.length - 1; i >= 0; i--) {
+                const s = uiSparks[i];
+                s.life -= dt;
+                if (s.life <= 0 || !s.sprite) {
+                    if (s.sprite) scene.remove(s.sprite);
+                    uiSparks.splice(i, 1);
+                    continue;
+                }
+                const fade = s.life / 0.28;
+                s.sprite.material.opacity = fade;
+                s.sprite.material.rotation += s.spin * dt;
+                s.sprite.position.addScaledVector(s.velocity, dt);
+                s.sprite.scale.multiplyScalar(1.0 + dt * 1.8);
+            }
+        }
+
+        function createDustParticles() {
+            if (!scene) return;
+            const count = 420;
+            const positions = new Float32Array(count * 3);
+            dustVelocities = new Array(count);
+            dustOffsets = new Array(count);
+            for (let i = 0; i < count; i++) {
+                const idx = i * 3;
+                positions[idx] = (Math.random() - 0.5) * 6.5;
+                positions[idx + 1] = 0.1 + Math.random() * 1.2;
+                positions[idx + 2] = (Math.random() - 0.5) * 6.5;
+                dustVelocities[i] = 0.3 + Math.random() * 0.35;
+                dustOffsets[i] = Math.random() * 50;
+            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({
+                map: getSpriteTexture(),
+                size: 0.08,
+                color: 0xbeb7aa,
+                transparent: true,
+                opacity: 0.6,
+                depthWrite: false,
+                sizeAttenuation: true,
+                blending: THREE.AdditiveBlending
+            });
+            dustSystem = new THREE.Points(geometry, material);
+            dustSystem.frustumCulled = false;
+            scene.add(dustSystem);
+        }
+
+        function updateDust(elapsed, dt) {
+            if (!dustSystem || !dustSystem.geometry.attributes.position) return;
+            const posAttr = dustSystem.geometry.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                const idx = i * 3;
+                let x = posAttr.array[idx];
+                let y = posAttr.array[idx + 1];
+                let z = posAttr.array[idx + 2];
+                const sway = noiseGen ? (noiseGen.noise2D(elapsed * 0.12, dustOffsets[i]) * 0.5 + 0.5) : 0.5;
+                x += (sway - 0.5) * dt * 0.35;
+                z += Math.sin(elapsed * 0.6 + dustOffsets[i]) * dt * 0.18;
+                y += dustVelocities[i] * dt;
+                if (y > 2.6) {
+                    y = 0.05 + Math.random() * 0.3;
+                    x = (Math.random() - 0.5) * 6.5;
+                    z = (Math.random() - 0.5) * 6.5;
+                }
+                posAttr.array[idx] = x;
+                posAttr.array[idx + 1] = y;
+                posAttr.array[idx + 2] = z;
+            }
+            posAttr.needsUpdate = true;
+        }
 
         // Shake de cámara
         let shakeTime = 0;
@@ -980,6 +1104,7 @@
             setupMuteButton();
             setupPresetButton();
             setupViewButton();
+            setupUiFxEvents();
 
             // Tyson + webcam
             loadTysonModel();
@@ -1351,6 +1476,8 @@
             locker.position.set(4, 1.1, -4); locker.rotation.y = -0.3; locker.castShadow = true; locker.receiveShadow = true;
             scene.add(locker);
 
+            createDustParticles();
+
             const postGeo = new THREE.CylinderGeometry(0.1, 0.1, 3);
             const ropeGeo = new THREE.CylinderGeometry(0.03, 0.03, 6);
             const redMat = new THREE.MeshStandardMaterial({color: 0x880000});
@@ -1373,6 +1500,24 @@
                 fl.rotation.x = -Math.PI / 2;
                 scene.add(fl);
                 fluorescentLights.push(fl);
+
+                const glow = new THREE.Mesh(
+                    new THREE.PlaneGeometry(flWidth * 1.6, flHeight * 2.4),
+                    new THREE.MeshBasicMaterial({
+                        map: getSpriteTexture(),
+                        color: 0xeef8ff,
+                        transparent: true,
+                        opacity: 0.45,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false,
+                        side: THREE.DoubleSide
+                    })
+                );
+                glow.position.copy(fl.position);
+                glow.rotation.x = fl.rotation.x;
+                glow.renderOrder = 2;
+                scene.add(glow);
+                fluorescentGlowCards.push(glow);
             }
 
             createClock();
@@ -1485,6 +1630,7 @@
             lightBases.fluorescent = preset.fluorescentBase;
             baseFogDensity = preset.fogDensity;
             volumetricBaseHue = preset.volumetricHue;
+            ambientBaseIntensity = preset.ambientBase;
 
             if (keyLight) keyLight.color.setHex(preset.keyColor);
             if (fillLight) fillLight.color.setHex(preset.fillColor);
@@ -1529,11 +1675,18 @@
             updateLabel();
         }
 
-        function registerPunch(strength = 1) {
+        function triggerImpactFlash(strength = 1.0, addPunchEnergy = true) {
             const s = THREE.MathUtils.clamp(strength, 0, 1);
-            punchActivity = Math.min(1.0, punchActivity + 0.3 * s);
+            if (addPunchEnergy) {
+                punchActivity = Math.min(1.0, punchActivity + 0.3 * s);
+            }
             impactFlashTime = IMPACT_FLASH_DURATION;
             impactFlashStrength = s;
+        }
+
+        function registerPunch(strength = 1) {
+            const s = THREE.MathUtils.clamp(strength, 0, 1);
+            triggerImpactFlash(s, true);
 
             if (audioInitialized) {
                 if (s > 0.85 && Math.random() > 0.45) playShout();
@@ -1575,10 +1728,18 @@
                 fillLight.intensity = Math.max(0.0, lightBases.fill * f);
             }
 
+            if (ambientLight) {
+                const n = noiseGen.noise2D(elapsed * 0.35, 9.1) * 0.5 + 0.5;
+                const flick = 1.0 + (n - 0.5) * 0.2;
+                const flashBoost = 1.0 + flashPhase * 0.25 + punchActivity * 0.08;
+                ambientLight.intensity = Math.max(0.0, ambientBaseIntensity * flick * flashBoost);
+            }
+
             if (rimLight) {
                 const n = noiseGen.noise2D(elapsed * 0.6, 8.3) * 0.5 + 0.5;
+                const flashBoost = 1.0 + flashPhase * 0.4 * (0.5 + 0.5 * impactFlashStrength);
                 const f = 1.0 + (n - 0.5) * 0.3 + punchActivity * 0.2;
-                rimLight.intensity = Math.max(0.0, lightBases.rim * f);
+                rimLight.intensity = Math.max(0.0, lightBases.rim * f * flashBoost);
             }
 
             if (ringLight) {
@@ -1604,14 +1765,19 @@
                         flick *= THREE.MathUtils.lerp(0.3, 0.7, k);
                     }
                     const base = lightBases.fluorescent;
-                    l.intensity = Math.max(0.0, base * flick);
+                    const intensity = Math.max(0.0, base * flick);
+                    l.intensity = intensity;
+                    if (fluorescentGlowCards[i]) {
+                        fluorescentGlowCards[i].material.opacity = THREE.MathUtils.clamp(0.3 + (intensity / base) * 0.35, 0, 0.85);
+                    }
                 });
             }
         }
 
-        function updateFog(dt) {
+        function updateFog(dt, elapsed) {
             if (!scene || !scene.fog) return;
-            const targetDensity = baseFogDensity;
+            const fogNoise = noiseGen ? (noiseGen.noise2D(elapsed * 0.05, 2.2) * 0.5 + 0.5) : 0.5;
+            const targetDensity = baseFogDensity * (0.85 + fogNoise * 0.3);
             const h = THREE.MathUtils.clamp((camera.position.y - 0.5) / 4.0, 0.0, 1.0);
             const gradientDensity = THREE.MathUtils.lerp(targetDensity * 0.4, targetDensity, h);
             scene.fog.density += (gradientDensity - scene.fog.density) * 0.05;
@@ -1884,6 +2050,20 @@
             });
         }
 
+        function setupUiFxEvents() {
+            const ids = ['presetBtn', 'muteBtn', 'viewBtn'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const handler = (evt) => {
+                    spawnUiSpark(evt.clientX, evt.clientY, evt.type === 'click' ? 0.7 : 0.4);
+                    triggerImpactFlash(evt.type === 'click' ? 0.45 : 0.25, false);
+                };
+                el.addEventListener('mouseenter', handler);
+                el.addEventListener('click', handler);
+            });
+        }
+
         // --- INTERACCIÓN (click sobre saco: solo si DEBUG_MOUSE_PUNCH = true) ---
         function onPointerDown(e) {
             if (!DEBUG_MOUSE_PUNCH) return;
@@ -1967,7 +2147,8 @@
 
             if (volumetricMesh) {
                 volumetricMesh.material.uniforms.uTime.value = elapsed;
-                const hue = volumetricBaseHue || 0.08;
+                const hueNoise = noiseGen ? (noiseGen.noise2D(elapsed * 0.1, 9.1) * 0.5 + 0.5) * 0.015 : 0.0;
+                const hue = (volumetricBaseHue || 0.08) + hueNoise;
                 const l = 0.7 + Math.sin(elapsed) * 0.05 + punchActivity * 0.08;
                 volumetricMesh.material.uniforms.uColor.value.setHSL(hue, 0.6, l);
             }
@@ -1975,6 +2156,9 @@
             if (doorGodrayMesh) {
                 doorGodrayMesh.material.uniforms.uTime.value = elapsed;
             }
+
+            updateDust(elapsed, dtVis);
+            updateUiSparks(dtVis);
 
             if (bagMesh && bokehPass && bokehPass.materialBokeh && bokehPass.materialBokeh.uniforms.focus) {
                 const d = camera.position.distanceTo(bagMesh.position);
@@ -2009,7 +2193,7 @@
             }
 
             updateMesh();
-            updateFog(dtVis);
+            updateFog(dtVis, elapsed);
 
             // Golpes desde manos del personaje
             updatePosePunch(dtVis);
