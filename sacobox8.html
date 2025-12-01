@@ -57,6 +57,12 @@
             right: 110px;
             z-index: 20;
         }
+        #webcamBtn {
+            position: absolute;
+            top: 16px;
+            right: 204px;
+            z-index: 20;
+        }
         #presetBtn {
             position: absolute;
             top: 16px;
@@ -227,6 +233,11 @@
         🔊 ON
     </button>
 
+    <!-- Botón de webcam -->
+    <button id="webcamBtn" class="pill-button">
+        📷 Webcam OFF
+    </button>
+
     <!-- Botón de vista en 3ra persona -->
     <button id="viewBtn" class="pill-button">
         🎯 POV
@@ -237,7 +248,7 @@
     <!-- Webcam + pose overlay -->
     <video id="input_video" playsinline muted></video>
     <canvas id="pose_canvas"></canvas>
-    <div class="webcam-label">Haz click en la escena para iniciar la webcam (opcional)</div>
+    <div class="webcam-label">Webcam desactivada</div>
 
     <!-- Debug info -->
     <div id="debugPanel">
@@ -675,10 +686,13 @@
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
         const canvasCtx = canvasElement ? canvasElement.getContext('2d') : null;
+        const webcamInfoLabel = document.querySelector('.webcam-label');
+        const webcamToggleBtn = document.getElementById('webcamBtn');
 
         if (!ENABLE_MOCAP_BLEND) {
             if (videoElement) videoElement.style.display = 'none';
             if (canvasElement) canvasElement.style.display = 'none';
+            if (webcamToggleBtn) webcamToggleBtn.style.display = 'none';
         }
 
         let poseInstance = null;
@@ -687,6 +701,19 @@
         let lastPoseLandmarks = null;
         let smoothedLandmarks = null;
         let mocapStarted = false;
+
+        function updateWebcamUiState(active) {
+            if (videoElement) videoElement.style.display = active ? 'block' : 'none';
+            if (canvasElement) canvasElement.style.display = active ? 'block' : 'none';
+            if (webcamToggleBtn) {
+                webcamToggleBtn.textContent = active ? '📷 Webcam ON' : '📷 Webcam OFF';
+            }
+            if (webcamInfoLabel) {
+                webcamInfoLabel.textContent = active
+                    ? 'Webcam activa: seguimiento de pose en vivo'
+                    : 'Webcam desactivada';
+            }
+        }
 
         const POSE_LM = {
             NOSE: 0,
@@ -1441,11 +1468,11 @@
         }
 
         async function startCapture() {
-            if (!videoElement) return;
-            if (!poseInstance) initPose();
-            if (!poseInstance) return;
+            if (!videoElement || !canvasElement) return false;
+            if (capturing) return true;
 
-            capturing = true;
+            if (!poseInstance) initPose();
+            if (!poseInstance) return false;
 
             const constraints = {
                 audio: false,
@@ -1461,12 +1488,21 @@
                 videoElement.srcObject = stream;
                 await videoElement.play();
 
+                capturing = true;
+                mocapStarted = true;
+                updateWebcamUiState(true);
                 resizeCanvasToVideo();
 
                 const CameraMP = window.Camera;
                 if (!CameraMP) {
                     console.error('MediaPipe Camera no está disponible');
-                    return;
+                    stopCapture();
+                    return false;
+                }
+
+                if (cameraMP) {
+                    cameraMP.stop();
+                    cameraMP = null;
                 }
 
                 cameraMP = new CameraMP(videoElement, {
@@ -1478,21 +1514,62 @@
                     height: videoElement.videoHeight,
                 });
                 cameraMP.start();
+                return true;
             } catch (err) {
                 console.error('Error al iniciar cámara:', err);
                 capturing = false;
+                updateWebcamUiState(false);
+                return false;
             }
         }
 
+        function stopCapture() {
+            capturing = false;
+            mocapStarted = false;
+
+            if (cameraMP) {
+                cameraMP.stop();
+                cameraMP = null;
+            }
+
+            if (videoElement && videoElement.srcObject) {
+                const tracks = videoElement.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            if (videoElement) {
+                videoElement.pause();
+            }
+
+            if (poseInstance && typeof poseInstance.close === 'function') {
+                poseInstance.close();
+            }
+            poseInstance = null;
+
+            if (canvasCtx && canvasElement) {
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            }
+
+            updateWebcamUiState(false);
+        }
+
         function setupMocap() {
-            if (!videoElement) return;
-            const onFirstClick = () => {
-                if (!mocapStarted) {
-                    mocapStarted = true;
-                    startCapture();
+            if (!videoElement || !webcamToggleBtn) return;
+
+            updateWebcamUiState(false);
+
+            const toggleWebcam = async () => {
+                if (capturing) {
+                    stopCapture();
+                } else {
+                    const started = await startCapture();
+                    if (!started) {
+                        stopCapture();
+                    }
                 }
             };
-            window.addEventListener('click', onFirstClick, { once: true });
+
+            webcamToggleBtn.addEventListener('click', toggleWebcam);
         }
 
         // Seguimiento de manos para detectar golpes
@@ -2574,7 +2651,7 @@
         }
 
         function setupUiFxEvents() {
-            const ids = ['presetBtn', 'muteBtn', 'viewBtn'];
+            const ids = ['presetBtn', 'muteBtn', 'viewBtn', 'webcamBtn'];
             ids.forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
