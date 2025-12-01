@@ -340,6 +340,7 @@
                 'sonidos/golpe_9.mp3',
                 'sonidos/golpe_10.mp3'
             ],
+            heavyImpact: 'sonidos/impacto_grave.mp3',
             bell: 'sonidos/campana.mp3',
             countdown: 'sonidos/cuenta_atras.wav',
             breath: 'sonidos/respira.wav',
@@ -1259,6 +1260,7 @@
 
                         if (!audioInitialized) initAudioContext();
                         playImpactSound(force);
+                        playHeavyImpactSound(force);
 
                         registerPunch(strength);
 
@@ -2156,6 +2158,7 @@
         async function loadAllAudio() {
             const entries = [];
             audioFiles.impacts.forEach((file) => entries.push(['impact:' + file, file]));
+            entries.push(['heavyImpact', audioFiles.heavyImpact]);
             entries.push(['bell', audioFiles.bell]);
             entries.push(['countdown', audioFiles.countdown]);
             entries.push(['breath', audioFiles.breath]);
@@ -2198,6 +2201,11 @@
             if (impactFiles.length === 0) return;
             const pick = impactFiles[Math.floor(Math.random() * impactFiles.length)];
             playBuffer(pick, { volume: vol, playbackRate: rate });
+        }
+
+        function playHeavyImpactSound(strength = 1) {
+            const vol = THREE.MathUtils.clamp(strength / 60, 0.25, 0.7);
+            playBuffer('heavyImpact', { volume: vol });
         }
 
         function playBell() { playBuffer('bell', { volume: 0.9 }); }
