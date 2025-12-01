@@ -209,6 +209,10 @@
     let boxer, boxerMixer;
     const mixers = [];
     const clock = new THREE.Clock();
+    const fixedTimeStep = 1 / 60;
+    const maxDelta = 0.1;
+    let accumulator = 0;
+    let lastTime;
 
     const state = {
       preset: 'night',
@@ -450,10 +454,26 @@
       if (!state.muted && audioBank.ambience.paused) audioBank.ambience.play().catch(() => {});
     }
 
-    function animate() {
+    function animate(time) {
       requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      world.step(1 / 60, delta, 3);
+      const delta = Math.min(clock.getDelta(), maxDelta);
+
+      if (world) {
+        if (lastTime !== undefined) {
+          const frameDelta = Math.min(maxDelta, (time - lastTime) / 1000);
+          accumulator += frameDelta;
+
+          while (accumulator >= fixedTimeStep) {
+            world.step(fixedTimeStep);
+            accumulator -= fixedTimeStep;
+          }
+
+          accumulator = Math.min(accumulator, fixedTimeStep);
+        }
+
+        lastTime = time;
+      }
+
       mixers.forEach((m) => m.update(delta));
 
       orbitControls.enabled = state.view === 'third';
