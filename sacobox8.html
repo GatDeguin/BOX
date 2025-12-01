@@ -553,6 +553,8 @@
         let activeAction = null;
         let autoComboTimer = null;
 
+        const tysonFloorBox = new THREE.Box3();
+
         const tmpVecA = new THREE.Vector3();
         const tmpVecB = new THREE.Vector3();
         const tmpDir  = new THREE.Vector3();
@@ -870,6 +872,19 @@
             setInterval(() => {
                 if (audioInitialized) playBreath();
             }, 8500);
+        }
+
+        function keepTysonFeetOnFloor() {
+            if (!tysonRoot) return;
+
+            tysonRoot.updateMatrixWorld(true);
+            tysonFloorBox.setFromObject(tysonRoot);
+            const correction = -tysonFloorBox.min.y;
+
+            if (Math.abs(correction) > 1e-4) {
+                tysonRoot.position.y += correction;
+                tysonRoot.updateMatrixWorld(true);
+            }
         }
 
         // --- MediaPipe Pose ---
@@ -2118,6 +2133,7 @@
 
             if (mixer) {
                 mixer.update(dtVis);
+                keepTysonFeetOnFloor();
             }
 
             if (bagMesh && bagBody) {
