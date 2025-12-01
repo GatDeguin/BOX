@@ -144,6 +144,23 @@
             border-bottom: none;
         }
 
+        #debugPanel .control-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr 0.8fr;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+        }
+
+        #debugPanel .control-row:last-child {
+            border-bottom: none;
+        }
+
+        #debugPanel .control-row input[type="range"] {
+            width: 100%;
+        }
+
         #debugPanel .label {
             text-transform: uppercase;
             letter-spacing: 0.08em;
@@ -265,6 +282,21 @@
             <span class="label">Sonido</span>
             <span class="value" id="debugSound">—</span>
         </div>
+        <div class="control-row">
+            <span class="label">Masa</span>
+            <input id="bagMass" type="range" min="20" max="120" step="1" value="60" />
+            <span class="value" id="bagMassVal">60 kg</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Lin. damping</span>
+            <input id="bagLinearDamping" type="range" min="0" max="1" step="0.01" value="0.6" />
+            <span class="value" id="bagLinearDampingVal">0.60</span>
+        </div>
+        <div class="control-row">
+            <span class="label">Ang. damping</span>
+            <input id="bagAngularDamping" type="range" min="0" max="1" step="0.01" value="0.8" />
+            <span class="value" id="bagAngularDampingVal">0.80</span>
+        </div>
     </div>
 
     <script type="module">
@@ -332,7 +364,10 @@
                 elasticity: 0.15,
                 damping: 0.85,
                 noiseFactor: 0.03,
-                punchForce: 80
+                punchForce: 80,
+                mass: 60,
+                linearDamping: 0.6,
+                angularDamping: 0.8
             }
         };
 
@@ -423,7 +458,12 @@
                 fogColor: 0x020203,
                 fogDensity: 0.06,
                 background: 0x020203,
-                volumetricHue: 0.09
+                volumetricHue: 0.09,
+                bagPhysics: {
+                    mass: 60,
+                    linearDamping: 0.6,
+                    angularDamping: 0.8
+                }
             },
             sunset: {
                 keyColor: 0xffc189,
@@ -444,7 +484,12 @@
                 fogColor: 0x130b06,
                 fogDensity: 0.048,
                 background: 0x130b06,
-                volumetricHue: 0.07
+                volumetricHue: 0.07,
+                bagPhysics: {
+                    mass: 52,
+                    linearDamping: 0.55,
+                    angularDamping: 0.78
+                }
             }
         };
 
@@ -546,6 +591,63 @@
         }
 
         refreshDebugPanel();
+
+        const bagControlElements = {
+            mass: document.getElementById('bagMass'),
+            massValue: document.getElementById('bagMassVal'),
+            linearDamping: document.getElementById('bagLinearDamping'),
+            linearDampingValue: document.getElementById('bagLinearDampingVal'),
+            angularDamping: document.getElementById('bagAngularDamping'),
+            angularDampingValue: document.getElementById('bagAngularDampingVal')
+        };
+
+        function formatDampingValue(value) {
+            return parseFloat(value).toFixed(2);
+        }
+
+        function syncBagControlsFromConfig() {
+            if (!bagControlElements.mass) return;
+            bagControlElements.mass.value = visualConfig.bag.mass;
+            bagControlElements.massValue.textContent = `${visualConfig.bag.mass.toFixed(0)} kg`;
+            bagControlElements.linearDamping.value = visualConfig.bag.linearDamping;
+            bagControlElements.linearDampingValue.textContent = formatDampingValue(visualConfig.bag.linearDamping);
+            bagControlElements.angularDamping.value = visualConfig.bag.angularDamping;
+            bagControlElements.angularDampingValue.textContent = formatDampingValue(visualConfig.bag.angularDamping);
+        }
+
+        function applyBagControlsToConfig() {
+            if (!bagControlElements.mass) return;
+            visualConfig.bag.mass = parseFloat(bagControlElements.mass.value);
+            visualConfig.bag.linearDamping = parseFloat(bagControlElements.linearDamping.value);
+            visualConfig.bag.angularDamping = parseFloat(bagControlElements.angularDamping.value);
+            syncBagControlsFromConfig();
+            applyBagPhysicsToBody();
+        }
+
+        function setupBagControls() {
+            if (!bagControlElements.mass) return;
+            syncBagControlsFromConfig();
+            const handler = () => applyBagControlsToConfig();
+            ['mass', 'linearDamping', 'angularDamping'].forEach(key => {
+                const el = bagControlElements[key];
+                if (el) {
+                    el.addEventListener('input', handler);
+                }
+            });
+        }
+
+        function applyPresetBagSettings(name) {
+            const preset = lightingPresets[name];
+            if (!preset || !preset.bagPhysics) return;
+
+            const { bagPhysics } = preset;
+            if (typeof bagPhysics.mass === 'number') visualConfig.bag.mass = bagPhysics.mass;
+            if (typeof bagPhysics.linearDamping === 'number') visualConfig.bag.linearDamping = bagPhysics.linearDamping;
+            if (typeof bagPhysics.angularDamping === 'number') visualConfig.bag.angularDamping = bagPhysics.angularDamping;
+
+            syncBagControlsFromConfig();
+            applyBagPhysicsToBody();
+        }
 
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
@@ -1869,7 +1971,10 @@
         function init() {
             const container = document.getElementById('canvas-container');
             noiseGen = new SimplexNoise();
-            
+
+            applyPresetBagSettings(currentPreset);
+            setupBagControls();
+
             initScene();
             initRenderer(container);
             initCamera();
@@ -2428,6 +2533,8 @@
 
             currentPreset = name;
 
+            applyPresetBagSettings(name);
+
             lightBases.key = preset.keyBase;
             lightBases.fill = preset.fillBase;
             lightBases.rim = preset.rimBase;
@@ -2599,6 +2706,14 @@
             createPunchingBag(tex.bag, bagMat);
         }
 
+        function applyBagPhysicsToBody() {
+            if (!bagBody) return;
+            bagBody.mass = visualConfig.bag.mass;
+            bagBody.updateMassProperties();
+            bagBody.linearDamping = visualConfig.bag.linearDamping;
+            bagBody.angularDamping = visualConfig.bag.angularDamping;
+        }
+
         function createPunchingBag(tex, physMat) {
             const h = 1.5, r = 0.35;
             let geo = new THREE.CylinderGeometry(r, r, h, 64, 32);
@@ -2671,12 +2786,12 @@
             }
 
             bagBody = new CANNON.Body({
-                mass: 60,
+                mass: visualConfig.bag.mass,
                 material: physMat,
                 position: new CANNON.Vec3(0, 2, 0),
                 shape: new CANNON.Cylinder(r, r, h, 16),
-                linearDamping: 0.6,
-                angularDamping: 0.8,
+                linearDamping: visualConfig.bag.linearDamping,
+                angularDamping: visualConfig.bag.angularDamping,
                 allowSleep: true
             });
             bagBody.sleepSpeedLimit = 0.2;
