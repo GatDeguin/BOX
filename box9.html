@@ -221,6 +221,7 @@
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         const container = document.getElementById('canvas-container');
         const infoLayer = document.getElementById('info-layer');
@@ -327,39 +328,35 @@
         // Fog inicial
         scene.fog = new THREE.FogExp2(lightingPresets.night.fogColor, lightingPresets.night.fogDensity);
 
-        // ------ RING SIMPLE ------
+        // ------ RING DESDE EL REPO ------
+        const gltfLoader = new GLTFLoader();
         const ringGroup = new THREE.Group();
-        const floorGeo = new THREE.PlaneGeometry(18, 18);
-        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111016, roughness: 0.85, metalness: 0.05 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        ringGroup.add(floor);
-
-        const stageGeo = new THREE.BoxGeometry(10, 0.6, 10);
-        const stageMat = new THREE.MeshStandardMaterial({ color: 0x0d0e12, roughness: 0.6 });
-        const stage = new THREE.Mesh(stageGeo, stageMat);
-        stage.position.y = 0.3;
-        ringGroup.add(stage);
-
-        const canvasGeo = new THREE.PlaneGeometry(9.4, 9.4);
-        const canvasMat = new THREE.MeshStandardMaterial({ color: 0x151a25, roughness: 0.35, metalness: 0.08, emissive: 0x0b0b12, emissiveIntensity: 0.35 });
-        const canvas = new THREE.Mesh(canvasGeo, canvasMat);
-        canvas.rotation.x = -Math.PI / 2;
-        canvas.position.y = 0.62;
-        ringGroup.add(canvas);
-
-        const ropeGeo = new THREE.TorusGeometry(5, 0.025, 8, 120);
-        const ropeMat = new THREE.MeshStandardMaterial({ color: 0xff4411, emissive: 0x7f1a06, emissiveIntensity: 0.3 });
-        const rope1 = new THREE.Mesh(ropeGeo, ropeMat);
-        rope1.rotation.x = Math.PI / 2;
-        rope1.position.y = 1;
-        ringGroup.add(rope1);
-        const rope2 = rope1.clone();
-        rope2.position.y = 1.3;
-        ringGroup.add(rope2);
-
         scene.add(ringGroup);
+
+        gltfLoader.load(
+            'Ring 3.glb',
+            (gltf) => {
+                const ringScene = gltf.scene;
+                ringScene.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                const bbox = new THREE.Box3().setFromObject(ringScene);
+                const ringFloorOffset = -bbox.min.y;
+                ringScene.position.set(0, ringFloorOffset, 0);
+                ringGroup.add(ringScene);
+
+                const center = new THREE.Vector3();
+                bbox.getCenter(center);
+                ringLight.position.set(center.x, 3.6, center.z + 0.2);
+                selectionStage.position.y = ringFloorOffset + 0.62;
+            },
+            undefined,
+            (error) => console.error('No se pudo cargar el ring:', error)
+        );
 
         // ------ SUBESCENARIO DE SELECCIÓN ------
         const selectionStage = new THREE.Group();
