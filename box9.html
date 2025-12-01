@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOX 9 - Travelling ringside</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #020203;
+            font-family: "Inter", system-ui, -apple-system, sans-serif;
+        }
+        #overlay {
+            position: absolute;
+            top: 24px;
+            width: 100%;
+            text-align: center;
+            color: #dfe6ff;
+            pointer-events: none;
+            letter-spacing: 0.18em;
+            text-shadow: 0 6px 24px rgba(0,0,0,0.8);
+        }
+        #overlay .badge {
+            display: inline-flex;
+            padding: 12px 24px;
+            border-radius: 999px;
+            background: rgba(12, 16, 26, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 15px 45px rgba(0,0,0,0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <div class="badge">Travelling + DOF + Godrays</div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+        const container = document.getElementById('canvas-container');
+
+        // ------ ESCENA BÁSICA ------
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020203);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 120);
+        camera.position.set(-9, 2.5, 8.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+        container.appendChild(renderer.domElement);
+
+        // POSTPROCESADO
+        const composer = new EffectComposer(renderer);
+        const renderPass = new RenderPass(scene, camera);
+        const bokehPass = new BokehPass(scene, camera, {
+            focus: 4.2,
+            aperture: 0.00045,
+            maxblur: 0.015,
+            width: window.innerWidth,
+            height: window.innerHeight,
+        });
+        const outputPass = new OutputPass();
+        composer.addPass(renderPass);
+        composer.addPass(bokehPass);
+        composer.addPass(outputPass);
+
+        // ------ LUCES Y PRESETS ------
+        const lightingPresets = {
+            night: {
+                ambient: { color: 0x0c0f1a, intensity: 0.65 },
+                key: { color: 0xffb377, intensity: 7.2 },
+                fill: { color: 0x4b6cff, intensity: 0.8 },
+                rim: { color: 0x5ea0ff, intensity: 1.3 },
+                ring: { color: 0xfff0c2, intensity: 1.1 },
+                fogColor: 0x020203,
+                fogDensity: 0.055,
+                volumetricHue: 0.1,
+                background: 0x020203,
+            },
+            sunset: {
+                ambient: { color: 0x2f1a10, intensity: 0.85 },
+                key: { color: 0xffc58f, intensity: 8.4 },
+                fill: { color: 0x9dc3ff, intensity: 0.55 },
+                rim: { color: 0xff8a55, intensity: 1.2 },
+                ring: { color: 0xffe8ba, intensity: 1.0 },
+                fogColor: 0x1b0f08,
+                fogDensity: 0.032,
+                volumetricHue: 0.07,
+                background: 0x1b0f08,
+            },
+        };
+
+        const ambientLight = new THREE.HemisphereLight(0x0c0f1a, 0x050505, 0.8);
+        const keyLight = new THREE.SpotLight(0xffb377, 7.2, 45, Math.PI / 5, 0.42, 1.5);
+        keyLight.position.set(-5, 6, 6);
+        const fillLight = new THREE.SpotLight(0x4b6cff, 0.8, 45, Math.PI / 4, 0.65, 1.4);
+        fillLight.position.set(5, 5, 8);
+        const rimLight = new THREE.DirectionalLight(0x5ea0ff, 1.3);
+        rimLight.position.set(0, 6, -6);
+        const ringLight = new THREE.PointLight(0xfff0c2, 1.1, 20, 1.3);
+        ringLight.position.set(0, 3.6, 3.2);
+
+        scene.add(ambientLight, keyLight, keyLight.target, fillLight, fillLight.target, rimLight, ringLight);
+        keyLight.target.position.set(0, 1.4, 0);
+        fillLight.target.position.set(0, 1.0, 0.5);
+
+        // Fog inicial
+        scene.fog = new THREE.FogExp2(lightingPresets.night.fogColor, lightingPresets.night.fogDensity);
+
+        // ------ RING SIMPLE ------
+        const ringGroup = new THREE.Group();
+        const floorGeo = new THREE.PlaneGeometry(18, 18);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111016, roughness: 0.85, metalness: 0.05 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        ringGroup.add(floor);
+
+        const stageGeo = new THREE.BoxGeometry(10, 0.6, 10);
+        const stageMat = new THREE.MeshStandardMaterial({ color: 0x0d0e12, roughness: 0.6 });
+        const stage = new THREE.Mesh(stageGeo, stageMat);
+        stage.position.y = 0.3;
+        ringGroup.add(stage);
+
+        const canvasGeo = new THREE.PlaneGeometry(9.4, 9.4);
+        const canvasMat = new THREE.MeshStandardMaterial({ color: 0x151a25, roughness: 0.35, metalness: 0.08, emissive: 0x0b0b12, emissiveIntensity: 0.35 });
+        const canvas = new THREE.Mesh(canvasGeo, canvasMat);
+        canvas.rotation.x = -Math.PI / 2;
+        canvas.position.y = 0.62;
+        ringGroup.add(canvas);
+
+        const ropeGeo = new THREE.TorusGeometry(5, 0.025, 8, 120);
+        const ropeMat = new THREE.MeshStandardMaterial({ color: 0xff4411, emissive: 0x7f1a06, emissiveIntensity: 0.3 });
+        const rope1 = new THREE.Mesh(ropeGeo, ropeMat);
+        rope1.rotation.x = Math.PI / 2;
+        rope1.position.y = 1;
+        ringGroup.add(rope1);
+        const rope2 = rope1.clone();
+        rope2.position.y = 1.3;
+        ringGroup.add(rope2);
+
+        scene.add(ringGroup);
+
+        // ------ PARTÍCULAS DE POLVO ------
+        const dustCount = 900;
+        const dustPositions = new Float32Array(dustCount * 3);
+        const dustGeo = new THREE.BufferGeometry();
+        for (let i = 0; i < dustCount; i++) {
+            const ix = i * 3;
+            dustPositions[ix] = (Math.random() - 0.5) * 26;
+            dustPositions[ix + 1] = Math.random() * 6 + 0.5;
+            dustPositions[ix + 2] = (Math.random() - 0.5) * 26;
+        }
+        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+        const dustMat = new THREE.PointsMaterial({
+            size: 0.08,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.36,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const dustPoints = new THREE.Points(dustGeo, dustMat);
+        scene.add(dustPoints);
+
+        // ------ VOLUMETRIC GODRAYS SIMPLES ------
+        const godrayMaterial = new THREE.ShaderMaterial({
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            uniforms: {
+                time: { value: 0 },
+                hue: { value: lightingPresets.night.volumetricHue },
+                opacity: { value: 0.32 },
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec2 vUv;
+                uniform float time;
+                uniform float hue;
+                uniform float opacity;
+                float random(vec2 st){
+                    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+                }
+                void main(){
+                    float radial = smoothstep(0.0, 0.55, 1.0 - length(vUv - 0.5));
+                    float drift = random(vUv + time * 0.07) * 0.4;
+                    float alpha = clamp(radial * 0.9 + drift * 0.25, 0.0, 1.0);
+                    vec3 col = vec3(1.0, 0.8 + hue, 0.65 + hue * 0.6);
+                    gl_FragColor = vec4(col * 0.8, alpha * opacity);
+                }
+            `,
+        });
+        const godrayPlane = new THREE.Mesh(new THREE.PlaneGeometry(10, 8, 1, 1), godrayMaterial);
+        godrayPlane.position.set(-1.5, 2.5, 1.6);
+        godrayPlane.rotation.y = Math.PI / 8;
+        godrayPlane.rotation.x = -0.15;
+        scene.add(godrayPlane);
+
+        // ------ FOG ANIMADO ------
+        let fogTarget = lightingPresets.night.fogDensity;
+        function updateFog(elapsed, mixFactor) {
+            const presetFog = THREE.MathUtils.lerp(lightingPresets.night.fogDensity, lightingPresets.sunset.fogDensity, mixFactor);
+            fogTarget = presetFog + Math.sin(elapsed * 0.35) * 0.01;
+            scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, Math.max(0.0, fogTarget), 0.05);
+            scene.fog.color.lerpColors(new THREE.Color(lightingPresets.night.fogColor), new THREE.Color(lightingPresets.sunset.fogColor), mixFactor);
+            scene.background = scene.fog.color.clone();
+        }
+
+        // ------ TRAVELLING DE CÁMARA ------
+        const travelDuration = 16.0;
+        const startPos = new THREE.Vector3(-9, 2.5, 8.5);
+        const midPos = new THREE.Vector3(-4.5, 3.1, 5.5);
+        const endPos = new THREE.Vector3(0, 2.3, 5.2);
+        const lookTarget = new THREE.Vector3(0, 1.3, 0.4);
+        const tempVec = new THREE.Vector3();
+
+        function smoothstep(t){ return t * t * (3 - 2 * t); }
+
+        function updateCamera(progress){
+            const first = Math.min(progress * 1.6, 1.0);
+            tempVec.copy(startPos).lerp(midPos, smoothstep(Math.min(progress * 1.2, 1.0)));
+            const endLerp = THREE.MathUtils.clamp((progress - 0.45) / 0.55, 0, 1);
+            tempVec.lerp(endPos, smoothstep(endLerp));
+            camera.position.copy(tempVec);
+            camera.lookAt(lookTarget);
+            camera.fov = THREE.MathUtils.lerp(62, 55, smoothstep(endLerp));
+            camera.updateProjectionMatrix();
+        }
+
+        // ------ INTERPOLACIÓN DE LUCES ------
+        function lerpColor(a, b, t){
+            const ca = new THREE.Color(a);
+            const cb = new THREE.Color(b);
+            return ca.lerp(cb, t);
+        }
+        function applyLighting(progress){
+            ambientLight.color.copy(lerpColor(lightingPresets.night.ambient.color, lightingPresets.sunset.ambient.color, progress));
+            ambientLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.ambient.intensity, lightingPresets.sunset.ambient.intensity, progress);
+
+            keyLight.color.copy(lerpColor(lightingPresets.night.key.color, lightingPresets.sunset.key.color, progress));
+            keyLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.key.intensity, lightingPresets.sunset.key.intensity, progress);
+            fillLight.color.copy(lerpColor(lightingPresets.night.fill.color, lightingPresets.sunset.fill.color, progress));
+            fillLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.fill.intensity, lightingPresets.sunset.fill.intensity, progress);
+            rimLight.color.copy(lerpColor(lightingPresets.night.rim.color, lightingPresets.sunset.rim.color, progress));
+            rimLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.rim.intensity, lightingPresets.sunset.rim.intensity, progress);
+            ringLight.color.copy(lerpColor(lightingPresets.night.ring.color, lightingPresets.sunset.ring.color, progress));
+            ringLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.ring.intensity, lightingPresets.sunset.ring.intensity, progress);
+
+            godrayMaterial.uniforms.hue.value = THREE.MathUtils.lerp(
+                lightingPresets.night.volumetricHue,
+                lightingPresets.sunset.volumetricHue,
+                progress
+            );
+        }
+
+        // ------ ANIMACIONES AUXILIARES ------
+        const dustVel = new THREE.Vector3();
+        function animateDust(delta){
+            const positions = dustGeo.attributes.position.array;
+            for(let i = 0; i < dustCount; i++){
+                const ix = i * 3;
+                positions[ix] += Math.sin((ix + delta * 10) * 0.005) * 0.005;
+                positions[ix + 1] += Math.cos((ix + delta * 12) * 0.003) * 0.002;
+                positions[ix + 2] += Math.sin((ix + delta * 14) * 0.004) * 0.004;
+            }
+            dustGeo.attributes.position.needsUpdate = true;
+        }
+
+        // ------ LOOP ------
+        const clock = new THREE.Clock();
+        let finished = false;
+
+        function animate(){
+            if (finished) return;
+            requestAnimationFrame(animate);
+            const elapsed = clock.getElapsedTime();
+            const progress = THREE.MathUtils.clamp(elapsed / travelDuration, 0, 1);
+
+            applyLighting(progress);
+            updateFog(elapsed, progress);
+            updateCamera(progress);
+            animateDust(elapsed);
+            godrayMaterial.uniforms.time.value = elapsed;
+
+            composer.render();
+
+            if (progress >= 1.0) {
+                finished = true;
+                // Render final frame una vez más para dejar la escena lista
+                composer.render();
+            }
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+            bokehPass.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
