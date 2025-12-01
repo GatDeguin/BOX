@@ -394,6 +394,9 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
     if (state.selectionStarted !== lastSelectionStarted) {
       emitSceneEvent('animation-toggle', { active: state.selectionStarted });
+      if (!state.selectionStarted && lastSelectionStarted) {
+        emitSceneEvent('selection-ended');
+      }
       lastSelectionStarted = state.selectionStarted;
     }
 
