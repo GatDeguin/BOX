@@ -99,6 +99,59 @@
             z-index: 32;
             pointer-events: none;
         }
+
+        /* Panel debug */
+        #debugPanel {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            min-width: 220px;
+            background: rgba(10, 12, 18, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #dbeafe;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 12px;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            z-index: 35;
+        }
+
+        #debugPanel .debug-title {
+            font-size: 11px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #f8fafc;
+            opacity: 0.85;
+            margin-bottom: 6px;
+        }
+
+        #debugPanel .debug-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+        }
+
+        #debugPanel .debug-row:last-child {
+            border-bottom: none;
+        }
+
+        #debugPanel .label {
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 11px;
+        }
+
+        #debugPanel .value {
+            font-weight: 700;
+            color: #e2e8f0;
+            text-align: right;
+        }
     </style>
 
     <script type="importmap">
@@ -145,6 +198,23 @@
     <video id="input_video" playsinline muted></video>
     <canvas id="pose_canvas"></canvas>
     <div class="webcam-label">Haz click en la escena para iniciar la webcam (opcional)</div>
+
+    <!-- Debug info -->
+    <div id="debugPanel">
+        <div class="debug-title">Debug</div>
+        <div class="debug-row">
+            <span class="label">Animación</span>
+            <span class="value" id="debugAnimation">—</span>
+        </div>
+        <div class="debug-row">
+            <span class="label">Categoría</span>
+            <span class="value" id="debugCategory">—</span>
+        </div>
+        <div class="debug-row">
+            <span class="label">Sonido</span>
+            <span class="value" id="debugSound">—</span>
+        </div>
+    </div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -353,6 +423,62 @@
         };
 
         let animationDirector = null;
+
+        // Debug state
+        const debugState = {
+            animation: 'Cargando...',
+            category: '—',
+            sound: 'En espera'
+        };
+
+        const debugElements = {
+            animation: document.getElementById('debugAnimation'),
+            category: document.getElementById('debugCategory'),
+            sound: document.getElementById('debugSound')
+        };
+
+        function refreshDebugPanel() {
+            if (!debugElements.animation || !debugElements.category || !debugElements.sound) return;
+            debugElements.animation.textContent = debugState.animation || '—';
+            debugElements.category.textContent = debugState.category || '—';
+            debugElements.sound.textContent = debugState.sound || '—';
+        }
+
+        function formatAnimationLabel(entry) {
+            if (!entry) return '—';
+            if (entry.file) return entry.file.split('/').pop().replace(/\.fbx$/i, '');
+            if (entry.name) return entry.name;
+            const clip = entry.action?.getClip?.();
+            return clip?.name || '—';
+        }
+
+        function updateDebugAnimation(entry) {
+            debugState.animation = formatAnimationLabel(entry);
+            debugState.category = entry?.category || getClipCategory(entry?.name) || '—';
+            refreshDebugPanel();
+        }
+
+        function updateDebugSound(name) {
+            const cleanName = (() => {
+                if (!name) return '—';
+                if (name.startsWith('impact:')) {
+                    return name
+                        .replace('impact:', '')
+                        .split('/')
+                        .pop()
+                        ?.replace(/\.[a-z0-9]+$/i, '') || 'Impacto';
+                }
+                if (name.startsWith('shout:')) {
+                    return 'Grito ' + (parseInt(name.split(':')[1], 10) + 1 || 1);
+                }
+                return name;
+            })();
+
+            debugState.sound = cleanName;
+            refreshDebugPanel();
+        }
+
+        refreshDebugPanel();
 
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
@@ -1028,6 +1154,7 @@
                 next.action.play();
                 this.activeAction = next.action;
 
+                updateDebugAnimation(next);
                 this.handleAudioFor(next);
                 this.scheduleAutoAdvance(next);
             }
@@ -2312,6 +2439,7 @@
             const offset = sliceIndex * segmentDuration;
             const duration = Math.max(0.01, segmentDuration);
 
+            updateDebugSound(name);
             source.start(0, offset, duration);
         }
 
