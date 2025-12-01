@@ -162,35 +162,94 @@ function createLoader() {
 
   loader.append(label, track, error);
 
-  const setProgress = (ratio: number) => {
-    const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
-    bar.style.width = `${Math.round(clamped * 100)}%`;
-  };
+  let lastStarted: string | null = null;
+  const activeLoads = new Map<string, number>();
 
-  const show = (text: string) => {
-    loader.style.display = 'flex';
-    error.style.display = 'none';
-    label.textContent = text;
-    setProgress(0);
-  };
-
-  const showError = (message: string) => {
-    loader.style.display = 'flex';
-    error.style.display = 'block';
-    error.textContent = message;
-  };
-
-  const hide = (delayMs = 0) => {
-    if (delayMs > 0) {
-      setTimeout(() => {
+  const render = (opts?: { error?: string }) => {
+    if (activeLoads.size === 0) {
+      if (opts?.error) {
+        loader.style.display = 'flex';
+        label.textContent = 'Cargando recurso';
+        bar.style.width = '0%';
+        error.textContent = opts.error;
+        error.style.display = 'block';
+      } else {
         loader.style.display = 'none';
-      }, delayMs);
+      }
+      return;
+    }
+
+    loader.style.display = 'flex';
+    const currentUrl = (lastStarted && activeLoads.has(lastStarted))
+      ? lastStarted
+      : Array.from(activeLoads.keys())[0];
+    const ratio = Array.from(activeLoads.values()).reduce((sum, value) => sum + value, 0) / activeLoads.size;
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
+
+    label.textContent = currentUrl ? `Cargando ${describeAsset(currentUrl)}` : 'Cargando recurso';
+    bar.style.width = `${Math.round(clamped * 100)}%`;
+
+    if (opts?.error) {
+      error.textContent = opts.error;
+      error.style.display = 'block';
     } else {
-      loader.style.display = 'none';
+      error.style.display = 'none';
     }
   };
 
-  return { element: loader, show, setProgress, showError, hide };
+  const markStart = (url: string) => {
+    lastStarted = url;
+    activeLoads.set(url, 0);
+    render();
+  };
+
+  const markProgress = (url: string, ratio?: number) => {
+    if (!activeLoads.has(url)) {
+      markStart(url);
+    }
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio ?? 0) ? (ratio as number) : 0));
+    activeLoads.set(url, clamped);
+    render();
+  };
+
+  const markComplete = (url: string) => {
+    if (activeLoads.has(url)) {
+      activeLoads.set(url, 1);
+    }
+    render();
+    setTimeout(() => {
+      activeLoads.delete(url);
+      if (lastStarted === url) {
+        lastStarted = null;
+      }
+      render();
+    }, 350);
+  };
+
+  const markError = (url: string | undefined) => {
+    const message = `Error al cargar ${url ? describeAsset(url) : 'el recurso'}.`;
+    if (url) {
+      activeLoads.delete(url);
+      if (lastStarted === url) {
+        lastStarted = null;
+      }
+    }
+
+    render({ error: message });
+    setTimeout(() => {
+      if (activeLoads.size === 0) {
+        loader.style.display = 'none';
+      }
+    }, 1200);
+  };
+
+  const hide = () => {
+    activeLoads.clear();
+    lastStarted = null;
+    loader.style.display = 'none';
+  };
+
+  return { element: loader, markStart, markProgress, markComplete, markError, hide };
 }
 
 function createHud(
@@ -373,24 +432,24 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   const handleAssetStart = (event: Event) => {
     const detail = (event as CustomEvent<{ url?: string }>).detail;
     if (!detail?.url) return;
-    loader.show(`Cargando ${describeAsset(detail.url)}`);
+    loader.markStart(detail.url);
   };
 
   const handleAssetProgress = (event: Event) => {
-    const detail = (event as CustomEvent<{ ratio?: number }>).detail;
-    if (!detail) return;
-    loader.setProgress(detail.ratio ?? 0);
+    const detail = (event as CustomEvent<{ url?: string; ratio?: number }>).detail;
+    if (!detail?.url) return;
+    loader.markProgress(detail.url, detail.ratio ?? 0);
   };
 
   const handleAssetLoaded = (event: Event) => {
-    const detail = (event as CustomEvent<{ ratio?: number }>).detail;
-    loader.setProgress(detail?.ratio ?? 1);
-    loader.hide(350);
+    const detail = (event as CustomEvent<{ url?: string }>).detail;
+    if (!detail?.url) return;
+    loader.markComplete(detail.url);
   };
 
   const handleAssetError = (event: Event) => {
     const detail = (event as CustomEvent<{ url?: string }>).detail;
-    loader.showError(`Error al cargar ${detail?.url ? describeAsset(detail.url) : 'el recurso'}.`);
+    loader.markError(detail?.url);
   };
 
   window.addEventListener('box9:asset-start', handleAssetStart);
