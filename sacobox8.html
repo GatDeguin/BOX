@@ -354,7 +354,7 @@
 
         let restBreathTimer = null;
         let restBreathingActive = false;
-        const attackAudioTimers = [];
+        const animationAudioTimers = [];
 
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
@@ -859,24 +859,35 @@
         function loadTysonAnimations() {
             if (!tysonRoot) return;
             const loader = new FBXLoader();
-            const files = [
-                // Ataque
+
+            const attackClips = [
                 { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
                 { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Hook.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once' },
                 { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
-                { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' },
-                // Descanso
+                { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' }
+            ];
+
+            const defenseClips = [
+                { file: 'animaciones/defensa/Dodging.fbx', loop: 'once' },
+                { file: 'animaciones/defensa/Left Block.fbx', loop: 'once' }
+            ];
+
+            const restClips = [
                 { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
                 { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Situp To Idle.fbx', loop: 'once' },
-                { file: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
                 { file: 'animaciones/descanso/Pointing Forward.fbx', loop: 'once' }
             ];
 
+            const files = [
+                ...attackClips.map((clip) => ({ ...clip, category: 'attack' })),
+                ...defenseClips.map((clip) => ({ ...clip, category: 'defense' })),
+                ...restClips.map((clip) => ({ ...clip, category: 'rest' }))
+            ];
+
             let loaded = 0;
-            files.forEach(({ file, loop }) => {
+            files.forEach(({ file, loop, category }) => {
                 loader.load(
                     file,
                     (anim) => {
@@ -887,7 +898,7 @@
                             action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
                             action.clampWhenFinished = !isLoop;
                             action.enabled = true;
-                            loadedAnimations.push({ name: file, action });
+                            loadedAnimations.push({ name: file, action, category });
                         }
                         loaded++;
                         if (loaded === files.length) {
@@ -941,10 +952,13 @@
             pick.action.play();
             activeAction = pick.action;
 
-            clearAttackAudioCues();
+            clearAnimationAudioCues();
+            const category = pick.category || getClipCategory(pick.name);
             handleBreathingForClip(pick.name);
-            if (pick.name && pick.name.includes('animaciones/ataque/')) {
+            if (category === 'attack') {
                 scheduleAttackAudio(pick.action, pick.name);
+            } else if (category === 'defense') {
+                scheduleDefenseAudio(pick.action);
             }
 
             if (autoComboTimer) clearTimeout(autoComboTimer);
@@ -954,8 +968,16 @@
             }, duration + 500 + Math.random() * 800);
         }
 
+        function getClipCategory(name = '') {
+            if (typeof name !== 'string') return null;
+            if (name.includes('animaciones/ataque/')) return 'attack';
+            if (name.includes('animaciones/defensa/')) return 'defense';
+            if (name.includes('animaciones/descanso/')) return 'rest';
+            return null;
+        }
+
         function handleBreathingForClip(name = '') {
-            const isRestClip = typeof name === 'string' && name.includes('animaciones/descanso/');
+            const isRestClip = getClipCategory(name) === 'rest';
             if (isRestClip) {
                 restBreathingActive = true;
                 resetRestBreathingTimers();
@@ -998,8 +1020,25 @@
                     playImpactSound(visualConfig.bag.punchForce);
                     if (idx === shoutCueIndex) playShout();
                 }, delay);
-                attackAudioTimers.push(timerId);
+                animationAudioTimers.push(timerId);
             });
+        }
+
+        function scheduleDefenseAudio(action) {
+            const clip = action?.getClip?.();
+            if (!clip) return;
+
+            const cueTimes = extractImpactCueTimes(clip);
+            const pickTime = cueTimes.length ? cueTimes[0] : clip.duration * 0.45;
+            const delay = Math.max(0, pickTime * 1000);
+
+            const timerId = setTimeout(() => {
+                if (!audioInitialized) return;
+                playImpactSound(visualConfig.bag.punchForce * 0.6);
+                if (Math.random() > 0.6) playBreath();
+            }, delay);
+
+            animationAudioTimers.push(timerId);
         }
 
         function extractImpactCueTimes(clip) {
@@ -1030,9 +1069,9 @@
             return spaced;
         }
 
-        function clearAttackAudioCues() {
-            while (attackAudioTimers.length) {
-                const timer = attackAudioTimers.pop();
+        function clearAnimationAudioCues() {
+            while (animationAudioTimers.length) {
+                const timer = animationAudioTimers.pop();
                 clearTimeout(timer);
             }
         }
