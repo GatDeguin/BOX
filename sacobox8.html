@@ -856,6 +856,16 @@
             );
         }
 
+        const BLOCKED_ANIMATION_SUBSTRINGS = [
+            'animaciones/daño/',
+            'animaciones/dano/',
+            'animaciones/damage/'
+        ];
+
+        function isAnimationAllowed(file = '') {
+            return !BLOCKED_ANIMATION_SUBSTRINGS.some((pattern) => file.includes(pattern));
+        }
+
         function loadTysonAnimations() {
             if (!tysonRoot) return;
             const loader = new FBXLoader();
@@ -884,7 +894,11 @@
                 ...attackClips.map((clip) => ({ ...clip, category: 'attack' })),
                 ...defenseClips.map((clip) => ({ ...clip, category: 'defense' })),
                 ...restClips.map((clip) => ({ ...clip, category: 'rest' }))
-            ];
+            ].filter(({ file }) => {
+                const allowed = isAnimationAllowed(file);
+                if (!allowed) console.warn('Animación bloqueada por configuración:', file);
+                return allowed;
+            });
 
             let loaded = 0;
             files.forEach(({ file, loop, category }) => {
