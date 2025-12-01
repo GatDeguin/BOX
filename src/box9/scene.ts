@@ -88,6 +88,12 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
   free: 'neon'
 };
 
+const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
+  classic: { effectProfile: 'gimnasio', selectionLight: { color: '#7a9bff', intensity: 1.4 } },
+  neon: { effectProfile: 'neon', selectionLight: { color: '#8bb1ff', intensity: 1.55 } },
+  rooftop: { effectProfile: 'gimnasio', selectionLight: { color: '#f3d08b', intensity: 1.3 } }
+};
+
 let context: SceneFlowContext | null = null;
 const assetHookListeners = new Set<AssetHooks>();
 const assetManager = new AssetManager({
@@ -103,8 +109,26 @@ let activeRingRequest = 0;
 let activeFighterRequest = 0;
 
 function applyPhaseEffects(phase: ScenePhase) {
-  const profile = PHASE_EFFECTS[phase];
+  const ring = box9Store.getState().ring;
+  const profile = RING_VISUALS[ring]?.effectProfile ?? PHASE_EFFECTS[phase];
   applyEffects(profile);
+}
+
+function applyRingVisualState(ring: RingId, options: { updateEffects?: boolean } = {}) {
+  if (!context) return;
+  const visuals = RING_VISUALS[ring];
+  if (!visuals) return;
+
+  const { updateEffects = true } = options;
+
+  if (context.selectionLight) {
+    context.selectionLight.color.set(visuals.selectionLight.color);
+    context.selectionLight.intensity = visuals.selectionLight.intensity;
+  }
+
+  if (updateEffects) {
+    applyEffects(visuals.effectProfile);
+  }
 }
 
 function ensureAnimationLoop() {
@@ -235,6 +259,7 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   };
 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
+  applyRingVisualState(box9Store.getState().ring, { updateEffects: false });
   applyPhaseEffects('intro');
 
   const state = box9Store.getState();
@@ -277,9 +302,12 @@ function registerSceneEvents(): Record<string, EventListener> {
         stopAnimationLoop();
       }
     },
-    'box9:ring-change': () => {
-      const state = box9Store.getState();
-      replaceRing(state.ring);
+    'box9:ring-change': (event: Event) => {
+      const detail = (event as CustomEvent<{ ring?: RingId }>).detail;
+      const nextRing = detail?.ring ?? box9Store.getState().ring;
+      box9Store.setState({ ring: nextRing });
+      applyRingVisualState(nextRing);
+      replaceRing(nextRing);
     }
   };
 
