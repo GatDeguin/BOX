@@ -137,6 +137,8 @@ const assetManager = new AssetManager({
 
 let activeRingRequest = 0;
 let activeFighterRequest = 0;
+let currentRingModel: Object3D | null = null;
+let currentFighterModel: Object3D | null = null;
 
 function applyPhaseEffects(phase: ScenePhase) {
   const ring = box9Store.getState().ring;
@@ -566,6 +568,7 @@ function attachRingModel(model: Object3D) {
   positionRing(model);
   context.scene.add(model);
   context.ringModel = model;
+  currentRingModel = model;
 }
 
 function attachFighterModel(asset: LoadedAsset, character: CharacterId) {
@@ -576,6 +579,7 @@ function attachFighterModel(asset: LoadedAsset, character: CharacterId) {
   applyAnchorToModel(scene, character);
   context.scene.add(scene);
   context.fighterModel = scene;
+  currentFighterModel = scene;
   setupFighterAnimation(scene, animations);
   playFighterAction('idle');
 }
@@ -596,10 +600,18 @@ function applyAnchorToModel(model: Object3D, character: CharacterId) {
   model.rotation.set(anchor.rotation.x, anchor.rotation.y, anchor.rotation.z);
 }
 
-function disposeAndRemove(object: Object3D | null) {
-  if (!context || !object) return;
-  context.scene.remove(object);
+function disposeAndRemove(object: Object3D | null, targetScene: Scene | null = context?.scene ?? null) {
+  if (!targetScene || !object) return;
+  targetScene.remove(object);
   disposeObject(object);
+
+  if (object === currentRingModel) {
+    currentRingModel = null;
+  }
+
+  if (object === currentFighterModel) {
+    currentFighterModel = null;
+  }
 }
 
 function disposeObject(object: Object3D) {
@@ -607,11 +619,39 @@ function disposeObject(object: Object3D) {
     const mesh = child as Mesh;
     if (mesh.isMesh) {
       mesh.geometry?.dispose();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((material) => material.dispose?.());
-      } else {
-        mesh.material?.dispose?.();
-      }
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => {
+        if (!material) return;
+        disposeMaterialTextures(material as any);
+        material.dispose?.();
+      });
+    }
+  });
+}
+
+function disposeMaterialTextures(material: any) {
+  const textureKeys = [
+    'map',
+    'normalMap',
+    'roughnessMap',
+    'metalnessMap',
+    'aoMap',
+    'emissiveMap',
+    'lightMap',
+    'bumpMap',
+    'alphaMap',
+    'specularMap',
+    'envMap'
+  ];
+
+  textureKeys.forEach((key) => {
+    const value = material?.[key];
+    if (!value) return;
+
+    if (Array.isArray(value)) {
+      value.forEach((texture) => texture?.dispose?.());
+    } else {
+      value.dispose?.();
     }
   });
 }
@@ -685,8 +725,11 @@ function ensureFreeCamControls() {
 export function destroy(): void {
   if (!context) return;
 
+  const scene = context.scene;
+
   if (context.animationFrame !== null) {
     cancelAnimationFrame(context.animationFrame);
+    context.animationFrame = null;
   }
 
   if (context.resizeHandler) {
@@ -697,9 +740,11 @@ export function destroy(): void {
     window.removeEventListener(name, handler);
   });
 
-  disposeAndRemove(context.ringModel);
+  disposeAndRemove(context.ringModel, scene);
   resetFighterAnimation();
-  disposeAndRemove(context.fighterModel);
+  disposeAndRemove(context.fighterModel, scene);
+  context.ringModel = null;
+  context.fighterModel = null;
 
   context.composer.dispose();
   context.renderer.dispose();
@@ -715,5 +760,9 @@ export function destroy(): void {
     context.container.removeChild(context.renderer.domElement);
   }
 
+  assetHookListeners.clear();
+
   context = null;
+  currentRingModel = null;
+  currentFighterModel = null;
 }
