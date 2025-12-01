@@ -158,6 +158,7 @@
   <button id="presetBtn" class="pill-btn">🌙 Noche</button>
   <button id="viewBtn" class="pill-btn">👁️ 1ª persona</button>
   <div id="controls">
+    <div id="statusBadge" class="pill-btn select-none">Pose pendiente</div>
     <button id="muteBtn" class="pill-btn">🔊 ON</button>
   </div>
 
@@ -197,6 +198,7 @@
     const videoEl = document.getElementById('input_video');
     const poseCanvas = document.getElementById('pose_canvas');
     const poseCtx = poseCanvas.getContext('2d');
+    const statusBadge = document.getElementById('statusBadge');
 
     // Scene globals
     let scene, renderer, composer, renderPass, bokehPass;
@@ -213,7 +215,8 @@
       view: 'first',
       muted: false,
       posePaused: false,
-      cameraReady: false
+      cameraReady: false,
+      starting: false
     };
 
     const audioBank = {
@@ -299,9 +302,7 @@
       loadBoxer();
 
       window.addEventListener('resize', onResize);
-      canvasContainer.addEventListener('click', () => {
-        if (!state.cameraReady) startCamera();
-      });
+      canvasContainer.addEventListener('click', startExperience);
       document.addEventListener('keydown', handleHotkeys);
       animate();
     }
@@ -482,29 +483,46 @@
     });
     pose.onResults(onPoseResults);
 
-    function startCamera() {
+    async function startExperience() {
+      if (state.cameraReady || state.starting) return;
+      state.starting = true;
+      updateStatus('Solicitando cámara...');
       try {
-        cameraStream = new Camera(videoEl, {
-          onFrame: async () => {
-            if (!state.posePaused) await pose.send({ image: videoEl });
-          },
-          width: 640,
-          height: 480
-        });
-        cameraStream.start();
+        await startCamera();
         state.cameraReady = true;
         errorOverlay.classList.remove('visible');
         audioBank.ambience.play().catch(() => {});
+        audioBank.bell.play().catch(() => {});
+        updateStatus('Pose activa');
       } catch (err) {
-        showCameraError('No se pudo iniciar la cámara. Revisa permisos.');
+        const readable = err?.name === 'NotAllowedError'
+          ? 'Permiso denegado. Activa la cámara en el navegador.'
+          : 'No se pudo iniciar la cámara. Revisa permisos o dispositivo.';
+        showCameraError(readable);
         console.error(err);
+      } finally {
+        state.starting = false;
       }
+    }
+
+    async function startCamera() {
+      cameraStream = new Camera(videoEl, {
+        onFrame: async () => {
+          if (!state.posePaused && videoEl.videoWidth > 0) {
+            await pose.send({ image: videoEl });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+      await cameraStream.start();
     }
 
     function showCameraError(message) {
       errorText.textContent = message;
       errorOverlay.classList.add('visible');
       state.cameraReady = false;
+      updateStatus('Pose detenida');
     }
 
     function onPoseResults(results) {
@@ -533,14 +551,22 @@
       if (e.code === 'KeyV') switchView();
       if (e.code === 'KeyL') togglePreset();
       if (e.code === 'KeyM') toggleMute();
-      if (e.code === 'Space') state.posePaused = !state.posePaused;
+      if (e.code === 'Space') {
+        state.posePaused = !state.posePaused;
+        updateStatus(state.posePaused ? 'Pose pausada' : 'Pose activa');
+      }
+    }
+
+    function updateStatus(label) {
+      statusBadge.textContent = label;
+      statusBadge.style.opacity = state.cameraReady || state.starting ? 1 : 0.75;
     }
 
     // UI bindings
     presetBtn.addEventListener('click', togglePreset);
     viewBtn.addEventListener('click', switchView);
     muteBtn.addEventListener('click', toggleMute);
-    retryBtn.addEventListener('click', startCamera);
+    retryBtn.addEventListener('click', startExperience);
 
     initScene();
   </script>
