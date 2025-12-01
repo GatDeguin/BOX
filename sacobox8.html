@@ -1208,10 +1208,9 @@
                 this.queue = [];
                 this.activeAction = null;
                 this.activeEntry = null;
-                this.autoComboTimer = null;
-                this.audioTimers = [];
+                this.cues = [];
                 this.restBreathing = false;
-                this.restTimer = null;
+                this.actionTimeState = null;
             }
 
             async loadLibrary(definitions = ANIMATION_LIBRARY) {
@@ -1281,6 +1280,7 @@
                 this.stopAutoAdvance();
                 this.clearAudioCues();
                 this.stopRestBreathing();
+                this.resetCueState();
 
                 if (this.activeAction && this.activeAction !== next.action) {
                     this.activeAction.fadeOut(ANIMATION_RULES.crossFade.out);
@@ -1291,6 +1291,7 @@
                 next.action.play();
                 this.activeAction = next.action;
                 this.activeEntry = next;
+                this.resetCueState();
                 currentAnimationEntry = next;
                 currentAnimationCategory = next.category || getClipCategory(next.name);
 
@@ -1348,15 +1349,14 @@
             }
 
             scheduleAutoAdvance(entry) {
-                const duration = (entry.action.getClip()?.duration || 3) * 1000;
-                this.autoComboTimer = setTimeout(() => this.playNext(), duration + ANIMATION_RULES.autoDelayMs());
+                const duration = entry.action.getClip()?.duration || 3;
+                this.queueMixerCue('auto-advance', entry, duration + ANIMATION_RULES.autoDelayMs() / 1000, () => {
+                    this.playNext();
+                });
             }
 
             stopAutoAdvance() {
-                if (this.autoComboTimer) {
-                    clearTimeout(this.autoComboTimer);
-                    this.autoComboTimer = null;
-                }
+                this.removeCues('auto-advance');
             }
 
             cutCurrentWalk() {
@@ -1383,11 +1383,11 @@
                 const shoutCueIndex = Math.random() > 0.4 ? Math.floor(Math.random() * cueTimes.length) : -1;
 
                 cueTimes.forEach((timeSec, idx) => {
-                    this.queueAudioCue(timeSec * 1000, () => {
+                    this.queueAudioCue(entry, timeSec, () => {
                         if (!audioInitialized) return;
                         playImpactSound(visualConfig.bag.punchForce);
                         if (idx === shoutCueIndex) playShout();
-                    });
+                    }, { repeatEachLoop: true });
                 });
             }
 
@@ -1398,49 +1398,162 @@
                 const cueTimes = extractImpactCueTimes(clip);
                 const pickTime = cueTimes.length ? cueTimes[0] : clip.duration * 0.45;
 
-                this.queueAudioCue(pickTime * 1000, () => {
+                this.queueAudioCue(entry, pickTime, () => {
                     if (!audioInitialized) return;
                     playImpactSound(visualConfig.bag.punchForce * 0.6);
                     if (Math.random() > 0.6) playBreath();
-                });
+                }, { repeatEachLoop: true });
             }
 
             handleRestBreathing(category) {
                 if (category === 'rest') {
                     this.restBreathing = true;
-                    this.scheduleRestBreath(ANIMATION_RULES.rest.initialDelayMs());
+                    this.scheduleRestBreath(this.activeEntry, ANIMATION_RULES.rest.initialDelayMs());
                 } else {
                     this.stopRestBreathing();
                 }
             }
 
-            scheduleRestBreath(delayMs) {
-                this.stopRestBreathing();
-                this.restBreathing = true;
-                this.restTimer = setTimeout(() => {
+            scheduleRestBreath(entry, delayMs) {
+                if (!this.restBreathing) return;
+                this.removeCues('rest-breath');
+                this.queueActionCue('rest-breath', entry, delayMs / 1000, () => {
                     if (!this.restBreathing) return;
                     if (audioInitialized) playBreath();
-                    this.scheduleRestBreath(ANIMATION_RULES.rest.cadenceMs());
-                }, delayMs);
+                    this.scheduleRestBreath(entry, ANIMATION_RULES.rest.cadenceMs());
+                });
             }
 
             stopRestBreathing() {
                 this.restBreathing = false;
-                if (this.restTimer) {
-                    clearTimeout(this.restTimer);
-                    this.restTimer = null;
-                }
+                this.removeCues('rest-breath');
             }
 
-            queueAudioCue(delayMs, cb) {
-                const timerId = setTimeout(cb, Math.max(0, delayMs));
-                this.audioTimers.push(timerId);
+            queueAudioCue(entry, timeSec, cb, options = {}) {
+                this.queueActionCue('audio', entry, timeSec, cb, options);
             }
 
             clearAudioCues() {
-                while (this.audioTimers.length) {
-                    clearTimeout(this.audioTimers.pop());
+                this.removeCues('audio');
+            }
+
+            queueActionCue(tag, entry, clipTime, cb, { repeatEachLoop = false } = {}) {
+                if (!this.mixer || !entry?.action || entry.action !== this.activeAction) return;
+                const clipDuration = entry.action.getClip?.()?.duration || 0;
+                const requiredLoop = clipDuration > 0 ? Math.floor(clipTime / clipDuration) : 0;
+                const normalizedTime = clipDuration > 0 ? clipTime % clipDuration : clipTime;
+                this.cues.push({
+                    tag,
+                    action: entry.action,
+                    mode: 'action',
+                    targetTime: normalizedTime,
+                    requiredLoop,
+                    repeatEachLoop,
+                    lastLoopFired: requiredLoop - 1,
+                    callback: () => {
+                        if (this.activeEntry !== entry) return;
+                        cb();
+                    }
+                });
+            }
+
+            queueMixerCue(tag, entry, delaySeconds, cb) {
+                if (!this.mixer || !entry?.action || entry.action !== this.activeAction) return;
+                this.cues.push({
+                    tag,
+                    action: entry.action,
+                    mode: 'mixer',
+                    targetTime: this.mixer.time + delaySeconds,
+                    callback: () => {
+                        if (this.activeEntry !== entry) return;
+                        cb();
+                    }
+                });
+            }
+
+            removeCues(tag = null) {
+                if (tag === null) {
+                    this.cues = [];
+                    return;
                 }
+                this.cues = this.cues.filter((cue) => cue.tag !== tag);
+            }
+
+            resetCueState() {
+                this.removeCues();
+                if (this.activeAction) {
+                    this.actionTimeState = {
+                        action: this.activeAction,
+                        time: this.activeAction.time,
+                        prevTime: this.activeAction.time,
+                        loop: 0
+                    };
+                } else {
+                    this.actionTimeState = null;
+                }
+            }
+
+            processActionTime() {
+                if (!this.activeAction) {
+                    this.actionTimeState = null;
+                    return;
+                }
+
+                const currentTime = this.activeAction.time;
+                if (!this.actionTimeState || this.actionTimeState.action !== this.activeAction) {
+                    this.actionTimeState = { action: this.activeAction, time: currentTime, prevTime: currentTime, loop: 0 };
+                    return;
+                }
+
+                const prevTime = this.actionTimeState.time;
+                const looped = currentTime + 1e-4 < prevTime;
+                const nextLoop = looped ? this.actionTimeState.loop + 1 : this.actionTimeState.loop;
+                this.actionTimeState = { action: this.activeAction, time: currentTime, prevTime, loop: nextLoop };
+            }
+
+            processCues() {
+                if (!this.mixer || !this.activeAction || !this.actionTimeState) {
+                    this.removeCues();
+                    return;
+                }
+
+                const mixerTime = this.mixer.time;
+                const { time, prevTime, loop } = this.actionTimeState;
+
+                this.cues = this.cues.filter((cue) => {
+                    if (cue.action !== this.activeAction) return false;
+
+                    if (cue.mode === 'mixer') {
+                        if (mixerTime >= cue.targetTime) {
+                            cue.callback();
+                            return false;
+                        }
+                        return true;
+                    }
+
+                    const loopedBack = time + 1e-4 < prevTime;
+                    const isOnEligibleLoop = loop >= (cue.requiredLoop ?? 0);
+                    const crossed =
+                        isOnEligibleLoop &&
+                        ((time >= cue.targetTime && prevTime < cue.targetTime) ||
+                            (loop > cue.lastLoopFired && time >= cue.targetTime));
+
+                    if (isOnEligibleLoop && (crossed || (loopedBack && time >= cue.targetTime))) {
+                        cue.lastLoopFired = loop;
+                        cue.callback();
+                        if (cue.repeatEachLoop) {
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    return true;
+                });
+            }
+
+            update() {
+                this.processActionTime();
+                this.processCues();
             }
         }
 
@@ -2907,6 +3020,7 @@
             if (mixer) {
                 mixer.update(dtVis);
                 keepTysonFeetOnFloor();
+                if (animationDirector) animationDirector.update();
             }
 
             if (bagMesh && bagBody) {
