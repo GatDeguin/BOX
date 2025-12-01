@@ -1770,6 +1770,24 @@
             update() {
                 this.processActionTime();
                 this.processCues();
+                this.ensureNotStuck();
+            }
+
+            ensureNotStuck() {
+                if (!AUTO_ANIMATION_ENABLED || !this.activeAction || !this.activeEntry) return;
+
+                const isRunning = this.activeAction.isRunning?.() !== false;
+                if (isRunning) return;
+
+                const clip = this.activeAction.getClip?.();
+                const duration = clip?.duration ?? 0;
+                const hasDuration = duration > 0;
+                const nearEnd = hasDuration && this.activeAction.time >= duration - 1e-3;
+
+                if (!hasDuration || nearEnd) {
+                    console.warn('Detección de animación trabada, saltando a la siguiente.');
+                    this.playNext();
+                }
             }
         }
 
