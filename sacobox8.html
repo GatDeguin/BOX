@@ -260,56 +260,56 @@
         let bokehPass;
 
         const lightBases = {
-            key: 8.0,
-            fill: 0.5,
-            rim: 0.8,
-            ring: 1.2,
-            door: 16.0,
-            fluorescent: 6.0
+            key: 8.8,
+            fill: 0.8,
+            rim: 1.1,
+            ring: 1.5,
+            door: 18.5,
+            fluorescent: 7.5
         };
 
         const lightingPresets = {
             night: {
                 keyColor: 0xffaa77,
-                keyBase: 7.8,
+                keyBase: 8.8,
                 fillColor: 0x6c7cff,
-                fillBase: 0.7,
+                fillBase: 0.95,
                 rimColor: 0x4a8dff,
-                rimBase: 1.0,
+                rimBase: 1.25,
                 ringColor: 0xffdd88,
-                ringBase: 1.4,
+                ringBase: 1.65,
                 doorColor: 0x4488ff,
-                doorBase: 18.0,
+                doorBase: 19.5,
                 fluorescentColor: 0xf0f6ff,
-                fluorescentBase: 7.5,
+                fluorescentBase: 8.0,
                 ambientSky: 0x222233,
                 ambientGround: 0x000000,
-                ambientBase: 0.5,
+                ambientBase: 0.62,
                 fogColor: 0x020203,
-                fogDensity: 0.07,
+                fogDensity: 0.06,
                 background: 0x020203,
-                volumetricHue: 0.08
+                volumetricHue: 0.09
             },
             sunset: {
                 keyColor: 0xffc189,
-                keyBase: 8.5,
+                keyBase: 9.2,
                 fillColor: 0x7fa0ff,
-                fillBase: 0.55,
+                fillBase: 0.78,
                 rimColor: 0xff9966,
-                rimBase: 0.9,
+                rimBase: 1.1,
                 ringColor: 0xffe1aa,
-                ringBase: 1.1,
+                ringBase: 1.35,
                 doorColor: 0xffa85a,
-                doorBase: 11.0,
+                doorBase: 12.0,
                 fluorescentColor: 0xfff2da,
-                fluorescentBase: 4.5,
+                fluorescentBase: 5.2,
                 ambientSky: 0xffcba4,
                 ambientGround: 0x110800,
-                ambientBase: 0.55,
+                ambientBase: 0.65,
                 fogColor: 0x130b06,
-                fogDensity: 0.045,
+                fogDensity: 0.048,
                 background: 0x130b06,
-                volumetricHue: 0.06
+                volumetricHue: 0.07
             }
         };
 
@@ -395,9 +395,11 @@
             ndc.unproject(camera);
             const dir = ndc.sub(camera.position).normalize();
             const pos = camera.position.clone().add(dir.clone().multiplyScalar(1.2));
+            const hue = 0.08 + Math.random() * 0.08;
+            const sparkColor = new THREE.Color().setHSL(hue, 0.8, 0.62 + strength * 0.1);
             const mat = new THREE.SpriteMaterial({
                 map: getSpriteTexture(),
-                color: 0xfff3c2,
+                color: sparkColor,
                 transparent: true,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false
@@ -408,9 +410,10 @@
             scene.add(sprite);
             uiSparks.push({
                 sprite,
-                life: 0.28,
-                velocity: dir.multiplyScalar(0.6 * (0.6 + strength)),
-                spin: (Math.random() - 0.5) * 6
+                life: 0.36,
+                maxLife: 0.36,
+                velocity: dir.multiplyScalar(0.6 * (0.65 + strength)).add(new THREE.Vector3(0, 0.2 + strength * 0.2, 0)),
+                spin: (Math.random() - 0.5) * 6.5
             });
         }
 
@@ -424,7 +427,7 @@
                     uiSparks.splice(i, 1);
                     continue;
                 }
-                const fade = s.life / 0.28;
+                const fade = Math.pow(s.life / (s.maxLife || 0.36), 1.5);
                 s.sprite.material.opacity = fade;
                 s.sprite.material.rotation += s.spin * dt;
                 s.sprite.position.addScaledVector(s.velocity, dt);
@@ -434,26 +437,26 @@
 
         function createDustParticles() {
             if (!scene) return;
-            const count = 420;
+            const count = 520;
             const positions = new Float32Array(count * 3);
             dustVelocities = new Array(count);
             dustOffsets = new Array(count);
             for (let i = 0; i < count; i++) {
                 const idx = i * 3;
                 positions[idx] = (Math.random() - 0.5) * 6.5;
-                positions[idx + 1] = 0.1 + Math.random() * 1.2;
+                positions[idx + 1] = 0.08 + Math.random() * 1.4;
                 positions[idx + 2] = (Math.random() - 0.5) * 6.5;
-                dustVelocities[i] = 0.3 + Math.random() * 0.35;
+                dustVelocities[i] = 0.32 + Math.random() * 0.42;
                 dustOffsets[i] = Math.random() * 50;
             }
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             const material = new THREE.PointsMaterial({
                 map: getSpriteTexture(),
-                size: 0.08,
-                color: 0xbeb7aa,
+                size: 0.085,
+                color: 0xdcd4c6,
                 transparent: true,
-                opacity: 0.6,
+                opacity: 0.55,
                 depthWrite: false,
                 sizeAttenuation: true,
                 blending: THREE.AdditiveBlending
@@ -465,6 +468,9 @@
 
         function updateDust(elapsed, dt) {
             if (!dustSystem || !dustSystem.geometry.attributes.position) return;
+            if (dustSystem.material) {
+                dustSystem.material.opacity = 0.5 + Math.sin(elapsed * 0.4) * 0.08;
+            }
             const posAttr = dustSystem.geometry.attributes.position;
             for (let i = 0; i < posAttr.count; i++) {
                 const idx = i * 3;
@@ -472,11 +478,12 @@
                 let y = posAttr.array[idx + 1];
                 let z = posAttr.array[idx + 2];
                 const sway = noiseGen ? (noiseGen.noise2D(elapsed * 0.12, dustOffsets[i]) * 0.5 + 0.5) : 0.5;
-                x += (sway - 0.5) * dt * 0.35;
-                z += Math.sin(elapsed * 0.6 + dustOffsets[i]) * dt * 0.18;
+                const swirl = elapsed * 0.08 + dustOffsets[i] * 0.15;
+                x += (sway - 0.5) * dt * 0.38 + Math.cos(swirl) * dt * 0.12;
+                z += Math.sin(elapsed * 0.6 + dustOffsets[i]) * dt * 0.2 + Math.sin(swirl) * dt * 0.12;
                 y += dustVelocities[i] * dt;
-                if (y > 2.6) {
-                    y = 0.05 + Math.random() * 0.3;
+                if (y > 2.8) {
+                    y = 0.05 + Math.random() * 0.4;
                     x = (Math.random() - 0.5) * 6.5;
                     z = (Math.random() - 0.5) * 6.5;
                 }
@@ -1632,15 +1639,15 @@
 
             const wallH = 5;
             const wL = new THREE.Mesh(new THREE.PlaneGeometry(3, wallH), wallMat);
-            wL.position.set(-3.5, wallH/2, -5); wL.receiveShadow=true; scene.add(wL);
+            wL.position.set(-3.9, wallH/2, -5); wL.receiveShadow=true; scene.add(wL);
             const wR = new THREE.Mesh(new THREE.PlaneGeometry(5, wallH), wallMat);
-            wR.position.set(2.5, wallH/2, -5); wR.receiveShadow=true; scene.add(wR);
+            wR.position.set(2.1, wallH/2, -5); wR.receiveShadow=true; scene.add(wR);
             const wT = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), wallMat);
-            wT.position.set(-1, 4, -5); wT.receiveShadow=true; scene.add(wT);
+            wT.position.set(-1.4, 4, -5); wT.receiveShadow=true; scene.add(wT);
 
             doorLight = new THREE.RectAreaLight(0x4488ff, lightBases.door, 2, 3);
-            doorLight.position.set(-1, 1.5, -5.2);
-            doorLight.lookAt(-1, 1.5, 0);
+            doorLight.position.set(-1.4, 1.5, -5.2);
+            doorLight.lookAt(-1.4, 1.5, 0);
             scene.add(doorLight);
             
             const godrayGeo = new THREE.PlaneGeometry(3.2, 4.8);
@@ -1698,7 +1705,7 @@
                 blending: THREE.AdditiveBlending
             });
             doorGodrayMesh = new THREE.Mesh(godrayGeo, godrayMat);
-            doorGodrayMesh.position.set(-1, 2.2, -4.9);
+            doorGodrayMesh.position.set(-1.4, 2.2, -4.9);
             scene.add(doorGodrayMesh);
 
             const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(12, wallH), wallMat);
@@ -1822,14 +1829,16 @@
         }
 
         function initLights() {
-            ambientLight = new THREE.HemisphereLight(0x222233, 0x000000, 0.45);
+            ambientLight = new THREE.HemisphereLight(0x222233, 0x000000, 0.52);
             scene.add(ambientLight);
 
             keyLight = new THREE.SpotLight(0xffaa77, lightBases.key);
-            keyLight.position.set(0, 5.5, 0); 
+            keyLight.position.set(0, 5.5, 0);
             keyLight.target.position.set(0, 1, 0);
-            keyLight.angle = Math.PI/4;
-            keyLight.penumbra = 0.5;
+            keyLight.angle = Math.PI * 0.38;
+            keyLight.penumbra = 0.82;
+            keyLight.distance = 16;
+            keyLight.decay = 1.6;
             keyLight.castShadow = !isMobile;
             keyLight.shadow.mapSize.set(1024, 1024);
             keyLight.shadow.bias = -0.0001;
@@ -1837,7 +1846,7 @@
             scene.add(keyLight.target);
 
             fillLight = new THREE.PointLight(0x6c7cff, lightBases.fill);
-            fillLight.position.set(3, 2, 3);
+            fillLight.position.set(3.2, 2.1, 3.2);
             scene.add(fillLight);
 
             ringLight = new THREE.PointLight(0xffdd88, lightBases.ring, 6, 2);
@@ -1853,7 +1862,7 @@
         }
 
         function createVolumetricLight() {
-            const geometry = new THREE.CylinderGeometry(0.1, 3.0, 6, 32, 1, true);
+            const geometry = new THREE.CylinderGeometry(0.05, 3.6, 6, 48, 1, true);
             const material = new THREE.ShaderMaterial({
                 uniforms: {
                     uTime: { value: 0 },
@@ -1861,8 +1870,10 @@
                 },
                 vertexShader: `
                     varying vec2 vUv;
+                    varying vec3 vPos;
                     void main() {
                         vUv = uv;
+                        vPos = position;
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                     }
                 `,
@@ -1870,6 +1881,7 @@
                     uniform float uTime;
                     uniform vec3 uColor;
                     varying vec2 vUv;
+                    varying vec3 vPos;
                     float rand(vec2 n) { return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453); }
                     float noise(vec2 p){
                         vec2 ip = floor(p); vec2 u = fract(p);
@@ -1878,9 +1890,13 @@
                         return res*res;
                     }
                     void main() {
-                        float mist = noise(vec2(vUv.x * 20.0, vUv.y * 6.0 + uTime * 0.3));
-                        float alpha = (1.0 - vUv.y) * 0.15 * (0.8 + mist * 0.4);
-                        alpha *= smoothstep(0.0, 0.2, vUv.y);
+                        float radial = length(vPos.xz) / 3.6;
+                        float beam = smoothstep(1.0, 0.2, radial);
+                        float mist = noise(vec2(vUv.x * 22.0, vUv.y * 7.0 + uTime * 0.32));
+                        float alpha = beam * (1.0 - vUv.y) * 0.16 * (0.85 + mist * 0.45);
+                        alpha *= smoothstep(0.0, 0.18, vUv.y);
+                        alpha *= smoothstep(1.0, 0.78, vUv.y);
+                        if (alpha < 0.01) discard;
                         gl_FragColor = vec4(uColor, alpha);
                     }
                 `,
@@ -1892,6 +1908,15 @@
             volumetricMesh = new THREE.Mesh(geometry, material);
             volumetricMesh.position.y = 2.5;
             scene.add(volumetricMesh);
+        }
+
+        function alignVolumetricLight() {
+            if (!volumetricMesh || !keyLight || !keyLight.target) return;
+            const dir = new THREE.Vector3().subVectors(keyLight.target.position, keyLight.position).normalize();
+            volumetricMesh.position.copy(keyLight.position).add(dir.clone().multiplyScalar(3.0));
+            volumetricMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+            const spread = THREE.MathUtils.lerp(0.9, 1.1, punchActivity);
+            volumetricMesh.scale.set(spread, 1, spread);
         }
 
         function applyLightingPreset(name) {
@@ -2446,6 +2471,7 @@
             updateLights(elapsed, dtVis, flashPhase);
 
             if (volumetricMesh) {
+                alignVolumetricLight();
                 volumetricMesh.material.uniforms.uTime.value = elapsed;
                 const hueNoise = noiseGen ? (noiseGen.noise2D(elapsed * 0.1, 9.1) * 0.5 + 0.5) * 0.015 : 0.0;
                 const hue = (volumetricBaseHue || 0.08) + hueNoise;
