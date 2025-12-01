@@ -216,6 +216,29 @@
         };
 
         const audioConfig = { enabled: true, volume: 0.8 };
+        const audioBuffers = new Map();
+        const audioFiles = {
+            impacts: [
+                'sonidos/golpe_1.mp3',
+                'sonidos/golpe_2.mp3',
+                'sonidos/golpe_3.mp3',
+                'sonidos/golpe_4.mp3',
+                'sonidos/golpe_5.mp3',
+                'sonidos/golpe_7.mp3',
+                'sonidos/golpe_8.mp3',
+                'sonidos/golpe_9.mp3',
+                'sonidos/golpe_10.mp3'
+            ],
+            bell: 'sonidos/campana.mp3',
+            countdown: 'sonidos/cuenta_atras.wav',
+            breath: 'sonidos/respira.wav',
+            crowd: 'sonidos/publico_enojado.wav',
+            shouts: [
+                'sonidos/grito_1.wav',
+                'sonidos/grito_2.wav',
+                'sonidos/grito_3.wav'
+            ]
+        };
 
         // Posición base del boxeador respecto al saco (ajústalo si querés)
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
@@ -314,8 +337,9 @@
         let impactFlashStrength = 0;
 
         // Audio
-        let audioContext, masterGain, kickBuffer;
+        let audioContext, masterGain;
         let audioInitialized = false;
+        const attackAudioTimers = [];
 
         // Mezcla de animaciones automáticas vs. mocap (webcam):
         // - Poné AUTO_ANIMATION_ENABLED en false para desactivar el combo automático y dejar solo mocap.
@@ -790,6 +814,8 @@
             }, duration + 500 + Math.random() * 800);
 
             if (typeof playCrowd === 'function' && Math.random() > 0.65) playCrowd();
+            clearAttackAudioCues();
+            scheduleAttackAudio(pick.action, pick.name);
         }
 
         function startBreathCycle() {
@@ -985,7 +1011,7 @@
                         deform(worldPos, dirToBag);
 
                         if (!audioInitialized) initAudioContext();
-                        playSound(force);
+                        playImpact(force);
 
                         registerPunch(strength);
 
@@ -1854,77 +1880,126 @@
             masterGain = audioContext.createGain();
             masterGain.gain.value = audioConfig.volume;
             masterGain.connect(audioContext.destination);
-            createBuffers();
+            loadAllAudio();
         }
 
-        function createBuffers() {
-            const sr = audioContext.sampleRate;
-            const len = sr * 0.5;
-            kickBuffer = audioContext.createBuffer(1, len, sr);
-            const data = kickBuffer.getChannelData(0);
-            for(let i=0; i<len; i++) {
-                const env = Math.pow(1 - (i/len), 3);
-                data[i] = (Math.random() * 2 - 1) * env;
+        async function loadAudioBuffer(url) {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            return audioContext.decodeAudioData(arrayBuffer);
+        }
+
+        async function loadAllAudio() {
+            const entries = [];
+            audioFiles.impacts.forEach((file) => entries.push(['impact:' + file, file]));
+            entries.push(['bell', audioFiles.bell]);
+            entries.push(['countdown', audioFiles.countdown]);
+            entries.push(['breath', audioFiles.breath]);
+            entries.push(['crowd', audioFiles.crowd]);
+            audioFiles.shouts.forEach((file, idx) => entries.push([`shout:${idx}`, file]));
+
+            for (const [key, file] of entries) {
+                try {
+                    const buffer = await loadAudioBuffer(file);
+                    audioBuffers.set(key, buffer);
+                } catch (err) {
+                    console.warn('No se pudo cargar el audio', file, err);
+                }
             }
         }
 
-        function playSound(strength) {
-            if (!audioConfig.enabled) return;
-            if (!audioContext) return;
+        function playBuffer(name, { volume = 1, playbackRate = 1 } = {}) {
+            if (!audioConfig.enabled || !audioContext) return;
+            const buffer = audioBuffers.get(name);
+            if (!buffer) return;
 
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
+            if (audioContext.state === 'suspended') audioContext.resume();
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.playbackRate.value = playbackRate;
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = volume;
+
+            source.connect(gainNode);
+            gainNode.connect(masterGain);
+            source.start();
+        }
+
+        function playImpact(strength = 1) {
+            const vol = THREE.MathUtils.clamp(strength / 90, 0.2, 1.1);
+            const rate = 0.9 + Math.random() * 0.2;
+            const impactKeys = audioFiles.impacts.map((file) => 'impact:' + file).filter((k) => audioBuffers.has(k));
+            if (impactKeys.length === 0) return;
+            const pick = impactKeys[Math.floor(Math.random() * impactKeys.length)];
+            playBuffer(pick, { volume: vol, playbackRate: rate });
+        }
+
+        function playBell() { playBuffer('bell', { volume: 0.9 }); }
+        function playCountdown() { playBuffer('countdown', { volume: 0.85 }); }
+        function playBreath() { playBuffer('breath', { volume: 0.35 + Math.random() * 0.15 }); }
+        function playCrowd() { playBuffer('crowd', { volume: 0.6 }); }
+        function playShout() {
+            const shoutKeys = audioFiles.shouts
+                .map((_, idx) => `shout:${idx}`)
+                .filter((key) => audioBuffers.has(key));
+            if (shoutKeys.length === 0) return;
+            const pick = shoutKeys[Math.floor(Math.random() * shoutKeys.length)];
+            playBuffer(pick, { volume: 0.65 + Math.random() * 0.2 });
+        }
+
+        function scheduleAttackAudio(action, clipName = '') {
+            const clip = action?.getClip?.();
+            if (!clip || !(typeof clipName === 'string' && clipName.includes('animaciones/ataque/'))) return;
+
+            const cueTimes = extractImpactCueTimes(clip);
+            const shoutCueIndex = Math.random() > 0.4 ? Math.floor(Math.random() * cueTimes.length) : -1;
+
+            cueTimes.forEach((timeSec, idx) => {
+                const delay = Math.max(0, timeSec * 1000);
+                const timerId = setTimeout(() => {
+                    if (!audioInitialized) return;
+                    playImpact(visualConfig.bag.punchForce);
+                    if (idx === shoutCueIndex) playShout();
+                }, delay);
+                attackAudioTimers.push(timerId);
+            });
+        }
+
+        function extractImpactCueTimes(clip) {
+            const times = [];
+            clip.tracks.forEach((track) => {
+                if (track.times && track.times.length) {
+                    track.times.forEach((t) => times.push(t));
+                }
+            });
+
+            times.sort((a, b) => a - b);
+            const uniqueTimes = times.filter((t, i) => i === 0 || Math.abs(t - times[i - 1]) > 1e-3);
+            const minWindow = clip.duration * 0.2;
+            const maxWindow = clip.duration * 0.9;
+            const filtered = uniqueTimes.filter((t) => t >= minWindow && t <= maxWindow);
+
+            const spaced = [];
+            filtered.forEach((t) => {
+                if (spaced.every((p) => Math.abs(p - t) > 0.3)) spaced.push(t);
+            });
+
+            if (spaced.length === 0) {
+                spaced.push(clip.duration * 0.6);
+            } else if (spaced.length > 3) {
+                spaced.length = 3;
             }
 
-            const t = audioContext.currentTime;
-            const normStrength = Math.min(1.0, strength / 60);
+            return spaced;
+        }
 
-            const src = audioContext.createBufferSource();
-            src.buffer = kickBuffer;
-            
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(100 + normStrength * 150, t);
-            filter.Q.value = 2.0;
-
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(normStrength * 0.8, t + 0.005);
-            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
-
-            src.connect(filter);
-            filter.connect(gain);
-            gain.connect(masterGain);
-            src.start(t);
-            src.stop(t + 0.5);
-
-            const subOsc = audioContext.createOscillator();
-            subOsc.type = 'sine';
-            subOsc.frequency.setValueAtTime(70 + normStrength * 10, t);
-            subOsc.frequency.exponentialRampToValueAtTime(10, t + 0.4);
-
-            const subGain = audioContext.createGain();
-            subGain.gain.setValueAtTime(normStrength * 0.9, t);
-            subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-
-            subOsc.connect(subGain);
-            subGain.connect(masterGain);
-            subOsc.start(t);
-            subOsc.stop(t + 0.4);
-
-            const knockOsc = audioContext.createOscillator();
-            knockOsc.type = 'triangle';
-            knockOsc.frequency.setValueAtTime(120, t);
-            knockOsc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-
-            const knockGain = audioContext.createGain();
-            knockGain.gain.setValueAtTime(normStrength * 0.3, t);
-            knockGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-
-            knockOsc.connect(knockGain);
-            knockGain.connect(masterGain);
-            knockOsc.start(t);
-            knockOsc.stop(t + 0.15);
+        function clearAttackAudioCues() {
+            while (attackAudioTimers.length) {
+                const timer = attackAudioTimers.pop();
+                clearTimeout(timer);
+            }
         }
 
         function setupMuteButton() {
@@ -1961,7 +2036,7 @@
                 const impulse = new CANNON.Vec3(dir.x*f, dir.y*f*0.2, dir.z*f);
                 bagBody.applyImpulse(impulse, new CANNON.Vec3(hit.point.x, hit.point.y, hit.point.z));
                 deform(hit.point, dir);
-                playSound(f);
+                playImpact(f);
 
                 registerPunch(1.0);
 
