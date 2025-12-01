@@ -1,6 +1,7 @@
 import { box9Store, Box9Store, RingId, CharacterId } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
+import { BOX9_ASSET_SECTIONS } from './inventory';
 import { getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 
 const ringOptions: Record<RingId, string> = {
@@ -61,6 +62,12 @@ function createStyles() {
     .box9-progress { height: 8px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
     .box9-progress-bar { height: 100%; width: 0; background: linear-gradient(135deg, #3f5cff, #7a9bff); transition: width 140ms ease; }
     .box9-error { color: #ffb7b7; font-size: 12px; }
+    .box9-asset-list { display: grid; gap: 12px; max-height: min(60vh, 520px); overflow: auto; padding-right: 4px; }
+    .box9-asset-section { border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px 14px; }
+    .box9-asset-section h3 { margin: 0 0 8px; letter-spacing: 0.06em; text-transform: uppercase; font-size: 13px; color: #e9ecf4; }
+    .box9-asset-section ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .box9-asset-section li { color: #dce2f5; line-height: 1.4; font-size: 14px; }
+    .box9-asset-section small { display: block; color: #9aa3ba; font-size: 12px; }
   `;
   document.head.appendChild(style);
 }
@@ -163,9 +170,66 @@ function createLoadingOverlay() {
   return { overlay, progressBar, errorText };
 }
 
+function createAssetModal(onClose: () => void) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'box9-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'box9-modal';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'Inventario de assets';
+
+  const description = document.createElement('p');
+  description.className = 'box9-progress-note';
+  description.textContent = 'Listado de modelos, animaciones, texturas y sonidos disponibles en BOX9.';
+
+  const sectionList = document.createElement('div');
+  sectionList.className = 'box9-asset-list';
+
+  BOX9_ASSET_SECTIONS.forEach((section) => {
+    const sectionCard = document.createElement('div');
+    sectionCard.className = 'box9-asset-section';
+
+    const title = document.createElement('h3');
+    title.textContent = section.title;
+
+    const list = document.createElement('ul');
+
+    section.items.forEach((item) => {
+      const li = document.createElement('li');
+      li.textContent = item.label;
+      if (item.detail) {
+        const small = document.createElement('small');
+        small.textContent = item.detail;
+        li.appendChild(small);
+      }
+      list.appendChild(li);
+    });
+
+    sectionCard.append(title, list);
+    sectionList.appendChild(sectionCard);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'box9-modal-actions';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'box9-button box9-secondary';
+  closeButton.textContent = 'Cerrar';
+  closeButton.addEventListener('click', () => onClose());
+
+  actions.append(closeButton);
+  modal.append(heading, description, sectionList, actions);
+  backdrop.appendChild(modal);
+
+  return { backdrop };
+}
+
 function createHud(
   store: Box9Store,
   onOpenModal: () => void,
+  onOpenAssets: () => void,
   onToggleFreeCam: () => void,
   onSelectCharacter: (character: CharacterId) => void
 ) {
@@ -211,7 +275,12 @@ function createHud(
   optionsButton.textContent = 'Opciones';
   optionsButton.addEventListener('click', () => onOpenModal());
 
-  actions.append(freeCamButton, optionsButton);
+  const assetsButton = document.createElement('button');
+  assetsButton.className = 'box9-button';
+  assetsButton.textContent = 'Assets';
+  assetsButton.addEventListener('click', () => onOpenAssets());
+
+  actions.append(freeCamButton, optionsButton, assetsButton);
   topBar.append(status, actions);
 
   const chipsRow = document.createElement('div');
@@ -416,6 +485,10 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
   );
 
+  const { backdrop: assetBackdrop } = createAssetModal(() => {
+    assetBackdrop.style.display = 'none';
+  });
+
   const { hud, update: updateHud } = createHud(
     store,
     () => {
@@ -423,6 +496,9 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       ringSelect.value = state.ring;
       freeCamToggle.checked = state.freeCamera;
       backdrop.style.display = 'flex';
+    },
+    () => {
+      assetBackdrop.style.display = 'flex';
     },
     () => {
       const next = !store.getState().freeCamera;
@@ -484,7 +560,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     });
   });
 
-  container.append(overlay, hud, backdrop, loadingOverlay);
+  container.append(overlay, hud, backdrop, assetBackdrop, loadingOverlay);
   root.appendChild(container);
   initSelectionControls(store, {
     onStartSelection: (character) => {
