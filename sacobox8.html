@@ -761,8 +761,8 @@
                     bbox.getSize(size);
                     bbox.getCenter(center);
 
-                    const targetHeight = 1.8;
-                    const scale = targetHeight / size.y;
+            const targetHeight = 3.6;
+            const scale = targetHeight / size.y;
                     tysonRoot.scale.setScalar(scale);
 
                     bbox.setFromObject(tysonRoot);
@@ -841,6 +841,8 @@
             initAudioContext();
             setTimeout(() => playBell(), 250);
             setTimeout(() => playBreath(), 500);
+            setTimeout(() => playCrowd(), 800);
+            setTimeout(() => playShout(), 1200);
             playNextAnimation();
             startBreathCycle();
         }
