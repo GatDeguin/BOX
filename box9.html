@@ -108,6 +108,79 @@
             width: 100vw;
             height: 100vh;
         }
+
+        #character-ui {
+            position: absolute;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            color: #dfe6ff;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            text-shadow: 0 4px 16px rgba(0,0,0,0.7);
+            pointer-events: none;
+            z-index: 12;
+        }
+
+        .chip {
+            background: rgba(10, 12, 18, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            padding: 10px 16px;
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+        }
+
+        .chip .label {
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #9fb3ff;
+        }
+
+        .chip .value {
+            font-weight: 700;
+            color: #f7fbff;
+        }
+
+        .chip.speed span {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            margin-left: 4px;
+            border-radius: 3px;
+            background: linear-gradient(180deg, #73f2ff 0%, #5a7bff 100%);
+            opacity: 0.28;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+        }
+
+        .chip.speed span.active {
+            opacity: 1;
+            box-shadow: 0 0 12px rgba(92, 153, 255, 0.8);
+        }
+
+        #selection-helper {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 18px;
+            border-radius: 10px;
+            background: rgba(9, 10, 15, 0.72);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+            color: #cbd5ff;
+            letter-spacing: 0.08em;
+            font-size: 12px;
+            text-transform: uppercase;
+            pointer-events: none;
+            z-index: 12;
+        }
     </style>
 </head>
 <body>
@@ -132,16 +205,32 @@
 
     <div id="canvas-container"></div>
 
+    <div id="selection-helper" style="display:none;">Navega con ←/→ o mando • Enter para elegir</div>
+    <div id="character-ui" style="display:none;">
+        <div class="chip" id="chip-name"><span class="label">Nombre</span><span class="value">---</span></div>
+        <div class="chip" id="chip-weight"><span class="label">Peso</span><span class="value">---</span></div>
+        <div class="chip" id="chip-reach"><span class="label">Alcance</span><span class="value">---</span></div>
+        <div class="chip speed" id="chip-speed"><span class="label">Velocidad</span><span class="value">---</span></div>
+    </div>
+
     <script type="module">
         import * as THREE from 'three';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
         const container = document.getElementById('canvas-container');
         const infoLayer = document.getElementById('info-layer');
         const startBtn = document.getElementById('startBtn');
+        const selectionHelper = document.getElementById('selection-helper');
+        const characterUi = document.getElementById('character-ui');
+        const chipName = document.getElementById('chip-name').querySelector('.value');
+        const chipWeight = document.getElementById('chip-weight').querySelector('.value');
+        const chipReach = document.getElementById('chip-reach').querySelector('.value');
+        const chipSpeed = document.getElementById('chip-speed');
 
         container.style.pointerEvents = 'none';
 
@@ -171,6 +260,14 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
         container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.enabled = false;
+        controls.minDistance = 4;
+        controls.maxDistance = 10;
+        controls.maxPolarAngle = Math.PI / 1.8;
 
         // POSTPROCESADO
         const composer = new EffectComposer(renderer);
@@ -263,6 +360,142 @@
         ringGroup.add(rope2);
 
         scene.add(ringGroup);
+
+        // ------ SUBESCENARIO DE SELECCIÓN ------
+        const selectionStage = new THREE.Group();
+        selectionStage.position.set(0, 0.62, -0.4);
+
+        const podium = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.7, 1.7, 0.4, 40, 1, false),
+            new THREE.MeshStandardMaterial({ color: 0x0f141f, roughness: 0.45, metalness: 0.15, emissive: 0x0b0f16, emissiveIntensity: 0.2 })
+        );
+        podium.receiveShadow = true;
+        selectionStage.add(podium);
+
+        const podiumRim = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.8, 1.8, 0.05, 40, 1, true),
+            new THREE.MeshStandardMaterial({ color: 0x202c44, roughness: 0.3, metalness: 0.4, emissive: 0x11265a, emissiveIntensity: 0.35, side: THREE.DoubleSide })
+        );
+        podiumRim.position.y = 0.22;
+        selectionStage.add(podiumRim);
+
+        const stageGrid = new THREE.Mesh(
+            new THREE.CircleGeometry(2.8, 48),
+            new THREE.MeshBasicMaterial({ color: 0x112033, opacity: 0.2, transparent: true })
+        );
+        stageGrid.rotation.x = -Math.PI / 2;
+        stageGrid.position.y = -0.05;
+        selectionStage.add(stageGrid);
+
+        scene.add(selectionStage);
+
+        const characterLoader = new FBXLoader();
+        const characterConfigs = [
+            { name: 'Tyson', model: 'Tyson.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '101 kg', reach: '210 cm', speed: 5 },
+            { name: 'Rookie', model: 'Boxing.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '83 kg', reach: '190 cm', speed: 3 },
+            { name: 'Cyber', model: 'Cyber_boxing.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '95 kg', reach: '202 cm', speed: 4 },
+        ];
+
+        const characterSlots = [];
+        const mixers = [];
+        let selectionActive = false;
+        let currentCharacter = 0;
+        let selectedCharacter = null;
+        let gameState = 'cinematic';
+        let lastPadSwap = 0;
+
+        function buildSpeedBars(level){
+            const valueEl = chipSpeed.querySelector('.value');
+            valueEl.textContent = `Lvl ${level}`;
+            chipSpeed.querySelectorAll('.speed-bar').forEach(bar => bar.remove());
+            for(let i = 0; i < 5; i++){
+                const bar = document.createElement('span');
+                bar.classList.add('speed-bar');
+                if(i < level){
+                    bar.classList.add('active');
+                }
+                chipSpeed.appendChild(bar);
+            }
+        }
+
+        function updateCharacterUi(config){
+            chipName.textContent = config?.name ?? '---';
+            chipWeight.textContent = config?.weight ?? '---';
+            chipReach.textContent = config?.reach ?? '---';
+            buildSpeedBars(config?.speed ?? 0);
+        }
+
+        function setActiveCharacter(index){
+            currentCharacter = THREE.MathUtils.euclideanModulo(index, characterConfigs.length);
+            characterSlots.forEach((slot, i) => {
+                slot.group.visible = i === currentCharacter;
+                if(i === currentCharacter && slot.actions.idle){
+                    slot.actions.idle.reset().play();
+                }
+            });
+            updateCharacterUi(characterConfigs[currentCharacter]);
+        }
+
+        function loadAnimation(slot, path, key){
+            characterLoader.load(path, (animAsset) => {
+                if (!animAsset.animations.length) return;
+                const clip = animAsset.animations[0];
+                const action = slot.mixer.clipAction(clip);
+                action.loop = THREE.LoopRepeat;
+                action.clampWhenFinished = true;
+                if(key === 'idle'){
+                    action.play();
+                }
+                slot.actions[key] = action;
+            });
+        }
+
+        function loadCharacter(config, index){
+            characterLoader.load(config.model, (model) => {
+                model.scale.setScalar(0.007);
+                model.position.set(0, 0.28, 0);
+                model.traverse((child) => {
+                    if(child.isMesh){
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                const holder = new THREE.Group();
+                holder.visible = index === 0;
+                holder.add(model);
+                selectionStage.add(holder);
+
+                const mixer = new THREE.AnimationMixer(model);
+                mixers.push(mixer);
+
+                const slot = { group: holder, mixer, actions: {}, config };
+                characterSlots[index] = slot;
+
+                loadAnimation(slot, config.idle, 'idle');
+                loadAnimation(slot, config.jab, 'jab');
+
+                if(index === 0){
+                    updateCharacterUi(config);
+                }
+            });
+        }
+
+        characterConfigs.forEach((cfg, i) => loadCharacter(cfg, i));
+
+        const presetNight = lightingPresets.night;
+        const selectionDirectional = new THREE.DirectionalLight(presetNight.key.color, 1.8);
+        selectionDirectional.position.set(-2.2, 3.2, 2.8);
+        scene.add(selectionDirectional);
+
+        const selectionRim = new THREE.DirectionalLight(presetNight.rim.color, 1.3);
+        selectionRim.position.set(1.8, 2.6, -2.8);
+        scene.add(selectionRim);
+
+        const selectionSpot = new THREE.SpotLight(presetNight.ring.color, 2.15, 14, Math.PI / 5, 0.3, 1.8);
+        selectionSpot.position.set(0, 4.1, 0.9);
+        selectionSpot.target = podium;
+        scene.add(selectionSpot, selectionSpot.target);
 
         // ------ PARTÍCULAS DE POLVO ------
         const dustCount = 900;
@@ -376,6 +609,13 @@
             ringLight.color.copy(lerpColor(lightingPresets.night.ring.color, lightingPresets.sunset.ring.color, progress));
             ringLight.intensity = THREE.MathUtils.lerp(lightingPresets.night.ring.intensity, lightingPresets.sunset.ring.intensity, progress);
 
+            selectionDirectional.color.copy(lerpColor(lightingPresets.night.key.color, lightingPresets.sunset.key.color, progress));
+            selectionDirectional.intensity = THREE.MathUtils.lerp(1.8, 2.4, progress);
+            selectionRim.color.copy(lerpColor(lightingPresets.night.rim.color, lightingPresets.sunset.rim.color, progress));
+            selectionRim.intensity = THREE.MathUtils.lerp(1.3, 1.9, progress);
+            selectionSpot.color.copy(lerpColor(lightingPresets.night.ring.color, lightingPresets.sunset.ring.color, progress));
+            selectionSpot.intensity = THREE.MathUtils.lerp(2.15, 2.6, progress);
+
             godrayMaterial.uniforms.hue.value = THREE.MathUtils.lerp(
                 lightingPresets.night.volumetricHue,
                 lightingPresets.sunset.volumetricHue,
@@ -384,41 +624,119 @@
         }
 
         // ------ ANIMACIONES AUXILIARES ------
-        const dustVel = new THREE.Vector3();
-        function animateDust(delta){
+        function animateDust(time){
             const positions = dustGeo.attributes.position.array;
             for(let i = 0; i < dustCount; i++){
                 const ix = i * 3;
-                positions[ix] += Math.sin((ix + delta * 10) * 0.005) * 0.005;
-                positions[ix + 1] += Math.cos((ix + delta * 12) * 0.003) * 0.002;
-                positions[ix + 2] += Math.sin((ix + delta * 14) * 0.004) * 0.004;
+                positions[ix] += Math.sin((ix + time * 10) * 0.005) * 0.005;
+                positions[ix + 1] += Math.cos((ix + time * 12) * 0.003) * 0.002;
+                positions[ix + 2] += Math.sin((ix + time * 14) * 0.004) * 0.004;
             }
             dustGeo.attributes.position.needsUpdate = true;
         }
 
+        function updateMixers(delta){
+            mixers.forEach((mixer) => mixer.update(delta));
+        }
+
+        function previewJab(slot){
+            if(slot?.actions?.jab && slot?.actions?.idle){
+                slot.actions.jab.reset();
+                slot.actions.jab.setLoop(THREE.LoopOnce);
+                slot.actions.jab.clampWhenFinished = true;
+                slot.actions.jab.play();
+                slot.actions.jab.crossFadeFrom(slot.actions.idle, 0.18, false);
+                setTimeout(() => {
+                    slot.actions.idle.reset().fadeIn(0.2).play();
+                }, 820);
+            }
+        }
+
+        function navigateCharacter(direction){
+            if(!selectionActive) return;
+            const nextIndex = currentCharacter + direction;
+            setActiveCharacter(nextIndex);
+            previewJab(characterSlots[currentCharacter]);
+        }
+
+        function confirmSelection(){
+            if(!selectionActive) return;
+            selectedCharacter = characterConfigs[currentCharacter];
+            selectionActive = false;
+            selectionHelper.textContent = `${selectedCharacter.name} elegido • Volviendo al juego`;
+            controls.enabled = false;
+            camera.position.copy(new THREE.Vector3(0, 2.3, 5.2));
+            camera.lookAt(new THREE.Vector3(0, 1.3, 0.4));
+            gameState = 'playing';
+        }
+
+        function startSelectionMode(){
+            selectionActive = true;
+            controls.enabled = true;
+            controls.target.set(0, 1.0, 0);
+            controls.update();
+            selectionHelper.style.display = 'block';
+            characterUi.style.display = 'flex';
+            setActiveCharacter(currentCharacter);
+        }
+
+        window.addEventListener('keydown', (event) => {
+            if(!selectionActive) return;
+            if(event.code === 'ArrowLeft' || event.code === 'KeyA'){
+                navigateCharacter(-1);
+            }
+            if(event.code === 'ArrowRight' || event.code === 'KeyD'){
+                navigateCharacter(1);
+            }
+            if(event.code === 'Enter' || event.code === 'Space'){
+                confirmSelection();
+            }
+        });
+
+        function pollGamepad(delta){
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            const pad = pads.find((p) => p);
+            if(!pad) return;
+            lastPadSwap += delta;
+            const axisX = pad.axes[0] ?? 0;
+            if(Math.abs(axisX) > 0.4 && lastPadSwap > 0.35){
+                navigateCharacter(axisX < 0 ? -1 : 1);
+                lastPadSwap = 0;
+            }
+            if(pad.buttons[0]?.pressed){
+                confirmSelection();
+            }
+        }
+
         // ------ LOOP ------
         const clock = new THREE.Clock();
-        let finished = false;
+        let travelTime = 0;
 
         function animate(){
-            if (finished) return;
             requestAnimationFrame(animate);
-            const elapsed = clock.getElapsedTime();
-            const progress = THREE.MathUtils.clamp(elapsed / travelDuration, 0, 1);
+            const delta = clock.getDelta();
+            travelTime += delta;
+            const elapsed = travelTime;
+            const progress = THREE.MathUtils.clamp(travelTime / travelDuration, 0, 1);
 
             applyLighting(progress);
             updateFog(elapsed, progress);
-            updateCamera(progress);
+
+            if(gameState === 'cinematic'){
+                updateCamera(progress);
+                if(progress >= 1.0){
+                    gameState = 'selecting';
+                    startSelectionMode();
+                }
+            } else {
+                controls.update();
+                updateMixers(delta);
+                pollGamepad(delta);
+            }
+
             animateDust(elapsed);
             godrayMaterial.uniforms.time.value = elapsed;
-
             composer.render();
-
-            if (progress >= 1.0) {
-                finished = true;
-                // Render final frame una vez más para dejar la escena lista
-                composer.render();
-            }
         }
 
         animate();
