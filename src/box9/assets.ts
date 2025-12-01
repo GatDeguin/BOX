@@ -5,7 +5,9 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils';
 import { CharacterId, RingId } from './state';
 
 export interface AssetHooks {
+  onStart?: (url: string) => void;
   onProgress?: (url: string, ratio: number) => void;
+  onLoaded?: (url: string) => void;
   onError?: (url: string, error: unknown) => void;
 }
 
@@ -96,6 +98,7 @@ export class AssetManager {
   async load(url: string, options: AssetOptions = {}): Promise<LoadedAsset> {
     if (!this.cache.has(url)) {
       const loaderType = this.getLoaderType(url);
+      this.hooks.onStart?.(url);
       const promise = this.loadWithLoader(url, loaderType).catch((error) => {
         this.cache.delete(url);
         this.hooks.onError?.(url, error);
@@ -130,6 +133,7 @@ export class AssetManager {
         (result) => {
           const scene = (result as any).scene ?? result;
           const animations = (result as any).animations ?? [];
+          this.hooks.onLoaded?.(url);
           resolve({ scene, animations });
         },
         (event) => {

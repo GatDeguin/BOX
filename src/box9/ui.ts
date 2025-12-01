@@ -13,6 +13,17 @@ const characterOptions: Record<CharacterId, string> = {
   counter: 'Counter'
 };
 
+function describeAsset(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes('ring 2')) return ringOptions.neon;
+  if (lower.includes('ring 3')) return ringOptions.rooftop;
+  if (lower.includes('ring')) return ringOptions.classic;
+  if (lower.includes('tyson')) return 'Tyson';
+  if (lower.includes('dummy')) return 'Training Dummy';
+  if (lower.includes('bag')) return 'Saco de golpeo';
+  return 'recurso';
+}
+
 function emitSceneEvent(name: string, detail?: unknown) {
   window.dispatchEvent(new CustomEvent(`box9:${name}`, { detail }));
 }
@@ -49,6 +60,11 @@ function createStyles() {
     .box9-field select, .box9-field input[type="checkbox"] { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #fff; }
     .box9-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .box9-secondary { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); color: #e9ecf4; }
+    .box9-loader { position: fixed; left: 16px; bottom: 16px; min-width: 240px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px 12px; display: none; flex-direction: column; gap: 6px; pointer-events: none; box-shadow: 0 10px 30px rgba(0,0,0,0.45); }
+    .box9-loader-label { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; color: #e9ecf4; }
+    .box9-loader-track { position: relative; height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+    .box9-loader-bar { position: absolute; inset: 0; width: 0; background: linear-gradient(135deg, #3f5cff, #7a9bff); transition: width 120ms ease; }
+    .box9-loader-error { color: #ff9f9f; font-size: 12px; display: none; }
   `;
   document.head.appendChild(style);
 }
@@ -123,6 +139,58 @@ function createModal(onClose: () => void, onApply: (ring: RingId, freeCamera: bo
   backdrop.appendChild(modal);
 
   return { backdrop, ringSelect, freeCamToggle };
+}
+
+function createLoader() {
+  const loader = document.createElement('div');
+  loader.className = 'box9-loader';
+
+  const label = document.createElement('div');
+  label.className = 'box9-loader-label';
+  label.textContent = 'Cargando recurso';
+
+  const track = document.createElement('div');
+  track.className = 'box9-loader-track';
+
+  const bar = document.createElement('div');
+  bar.className = 'box9-loader-bar';
+  track.appendChild(bar);
+
+  const error = document.createElement('div');
+  error.className = 'box9-loader-error';
+  error.textContent = 'No se pudo cargar el recurso.';
+
+  loader.append(label, track, error);
+
+  const setProgress = (ratio: number) => {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
+    bar.style.width = `${Math.round(clamped * 100)}%`;
+  };
+
+  const show = (text: string) => {
+    loader.style.display = 'flex';
+    error.style.display = 'none';
+    label.textContent = text;
+    setProgress(0);
+  };
+
+  const showError = (message: string) => {
+    loader.style.display = 'flex';
+    error.style.display = 'block';
+    error.textContent = message;
+  };
+
+  const hide = (delayMs = 0) => {
+    if (delayMs > 0) {
+      setTimeout(() => {
+        loader.style.display = 'none';
+      }, delayMs);
+    } else {
+      loader.style.display = 'none';
+    }
+  };
+
+  return { element: loader, show, setProgress, showError, hide };
 }
 
 function createHud(
@@ -300,6 +368,36 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
   );
 
+  const loader = createLoader();
+
+  const handleAssetStart = (event: Event) => {
+    const detail = (event as CustomEvent<{ url?: string }>).detail;
+    if (!detail?.url) return;
+    loader.show(`Cargando ${describeAsset(detail.url)}`);
+  };
+
+  const handleAssetProgress = (event: Event) => {
+    const detail = (event as CustomEvent<{ ratio?: number }>).detail;
+    if (!detail) return;
+    loader.setProgress(detail.ratio ?? 0);
+  };
+
+  const handleAssetLoaded = (event: Event) => {
+    const detail = (event as CustomEvent<{ ratio?: number }>).detail;
+    loader.setProgress(detail?.ratio ?? 1);
+    loader.hide(350);
+  };
+
+  const handleAssetError = (event: Event) => {
+    const detail = (event as CustomEvent<{ url?: string }>).detail;
+    loader.showError(`Error al cargar ${detail?.url ? describeAsset(detail.url) : 'el recurso'}.`);
+  };
+
+  window.addEventListener('box9:asset-start', handleAssetStart);
+  window.addEventListener('box9:asset-progress', handleAssetProgress);
+  window.addEventListener('box9:asset-loaded', handleAssetLoaded);
+  window.addEventListener('box9:asset-error', handleAssetError);
+
   let lastSelectionStarted = store.getState().selectionStarted;
 
   store.subscribe((state) => {
@@ -323,7 +421,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     });
   });
 
-  container.append(overlay, hud, backdrop);
+  container.append(overlay, hud, backdrop, loader.element);
   root.appendChild(container);
   initSelectionControls(store, {
     onStartSelection: (character) => {

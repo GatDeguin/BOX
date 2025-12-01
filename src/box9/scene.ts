@@ -65,6 +65,14 @@ interface SelectionTarget {
   highlight: Vector3;
 }
 
+type AssetEventType = 'start' | 'progress' | 'loaded' | 'error';
+
+interface AssetEventDetail {
+  url: string;
+  ratio?: number;
+  error?: unknown;
+}
+
 const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
   striker: {
     camera: new Vector3(-3.5, 2.8, 8),
@@ -104,11 +112,26 @@ const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selection
 
 let context: SceneFlowContext | null = null;
 const assetHookListeners = new Set<AssetHooks>();
+
+function emitAssetEvent(type: AssetEventType, detail: AssetEventDetail) {
+  window.dispatchEvent(new CustomEvent(`box9:asset-${type}`, { detail }));
+}
+
 const assetManager = new AssetManager({
+  onStart: (url) => {
+    emitAssetEvent('start', { url });
+    assetHookListeners.forEach((hooks) => hooks.onStart?.(url));
+  },
   onProgress: (url, ratio) => {
+    emitAssetEvent('progress', { url, ratio });
     assetHookListeners.forEach((hooks) => hooks.onProgress?.(url, ratio));
   },
+  onLoaded: (url) => {
+    emitAssetEvent('loaded', { url, ratio: 1 });
+    assetHookListeners.forEach((hooks) => hooks.onLoaded?.(url));
+  },
   onError: (url, error) => {
+    emitAssetEvent('error', { url, error });
     assetHookListeners.forEach((hooks) => hooks.onError?.(url, error));
   }
 });
