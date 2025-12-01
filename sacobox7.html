@@ -59,6 +59,13 @@
             z-index: 20;
         }
 
+        #viewBtn {
+            position: absolute;
+            top: 16px;
+            left: 110px;
+            z-index: 20;
+        }
+
         /* Webcam + overlay pose */
         #input_video {
             position: fixed;
@@ -185,6 +192,11 @@
     <!-- Botón de preset día/noche -->
     <button id="presetBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
         🌙 Noche
+    </button>
+
+    <!-- Botón de cámara en tercera persona -->
+    <button id="viewBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
+        👁️ 1ra persona
     </button>
 
     <!-- Botón de mute -->
@@ -331,6 +343,28 @@
         let opponentCurrent = null;
         let opponentHealth = 100;
 
+        // Head bob
+        const baseTarget = new THREE.Vector3(BOXER_BASE_X, 1.65, BOXER_BASE_Z);
+
+        const viewTargetOffset = new THREE.Vector3();
+        const viewModes = {
+            firstPerson: {
+                targetOffset: new THREE.Vector3(0, 0, 0),
+                positionFn: () => new THREE.Vector3(BOXER_BASE_X, 1.75, BOXER_BASE_Z + 0.35),
+                controls: { minDistance: 0.01, maxDistance: 0.8, enableZoom: false }
+            },
+            thirdPerson: {
+                targetOffset: new THREE.Vector3(0, 0.05, 0),
+                positionFn: () => new THREE.Vector3(
+                    baseTarget.x,
+                    baseTarget.y + 0.6,
+                    baseTarget.z + 2.1
+                ),
+                controls: { minDistance: 1.2, maxDistance: 3.0, enableZoom: true }
+            }
+        };
+        let currentViewMode = 'firstPerson';
+
         const lightBases = {
             key: 8.0,
             fill: 0.5,
@@ -398,9 +432,6 @@
         // Audio
         let audioContext, masterGain, kickBuffer;
         let audioInitialized = false;
-
-        // Head bob
-        const baseTarget = new THREE.Vector3(BOXER_BASE_X, 1.65, BOXER_BASE_Z);
 
         // Reutilización de vectores para deformación
         const tempV = new THREE.Vector3();
@@ -1066,6 +1097,7 @@
 
             setupMuteButton();
             setupPresetButton();
+            setupViewButton();
 
             // Tyson + webcam
             loadTysonModel();
@@ -1643,6 +1675,48 @@
             updateLabel();
         }
 
+        function applyViewMode(mode) {
+            const config = viewModes[mode];
+            if (!config || !camera) return;
+
+            currentViewMode = mode;
+            if (config.targetOffset) {
+                viewTargetOffset.copy(config.targetOffset);
+            }
+
+            const desiredPosition = config.positionFn ? config.positionFn() : config.position;
+            if (desiredPosition) {
+                camera.position.copy(desiredPosition);
+            }
+
+            if (controls && config.controls) {
+                const { minDistance, maxDistance, enableZoom } = config.controls;
+                if (typeof minDistance === 'number') controls.minDistance = minDistance;
+                if (typeof maxDistance === 'number') controls.maxDistance = maxDistance;
+                if (typeof enableZoom === 'boolean') controls.enableZoom = enableZoom;
+            }
+
+            if (controls) controls.update();
+        }
+
+        function setupViewButton() {
+            const viewBtn = document.getElementById('viewBtn');
+            if (!viewBtn) return;
+
+            const updateLabel = () => {
+                viewBtn.textContent = currentViewMode === 'firstPerson' ? '👁️ 1ra persona' : '🎥 3ra persona';
+            };
+
+            viewBtn.addEventListener('click', () => {
+                const nextMode = currentViewMode === 'firstPerson' ? 'thirdPerson' : 'firstPerson';
+                applyViewMode(nextMode);
+                updateLabel();
+            });
+
+            applyViewMode(currentViewMode);
+            updateLabel();
+        }
+
         function registerPunch(strength = 1) {
             const s = THREE.MathUtils.clamp(strength, 0, 1);
             punchActivity = Math.min(1.0, punchActivity + 0.3 * s);
@@ -2099,9 +2173,9 @@
             const bobY = Math.sin(elapsed * 1.8) * bobAmount;
             const swayX = Math.sin(elapsed * 1.2) * swayAmount;
             controls.target.set(
-                baseTarget.x + swayX,
-                baseTarget.y + bobY,
-                baseTarget.z
+                baseTarget.x + swayX + viewTargetOffset.x,
+                baseTarget.y + bobY + viewTargetOffset.y,
+                baseTarget.z + viewTargetOffset.z
             );
 
             controls.update();
