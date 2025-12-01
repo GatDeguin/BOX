@@ -183,6 +183,20 @@
             font-size: 12px;
         }
 
+        .option-select {
+            pointer-events: auto;
+            background: rgba(10, 12, 18, 0.85);
+            color: #eaf1ff;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            padding: 8px 10px;
+            min-width: 150px;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            outline: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+        }
+
         .option-toggle {
             width: 48px;
             height: 26px;
@@ -343,6 +357,16 @@
                 </label>
             </div>
             <div class="option-row">
+                <label for="ringSelect">
+                    Ring
+                    <span>Elige entre el escenario neon o el gimnasio de Box 6.</span>
+                </label>
+                <select id="ringSelect" class="option-select">
+                    <option value="escenario">Escenario</option>
+                    <option value="gimnasio">Gimnasio Box 6</option>
+                </select>
+            </div>
+            <div class="option-row">
                 <label>
                     Créditos
                     <span>Modelos FBX y GLB desde los assets locales del proyecto.</span>
@@ -381,6 +405,7 @@
         const closeModalBtn = document.getElementById('closeModalBtn');
         const skipIntroToggle = document.getElementById('skipIntro');
         const freeCamToggle = document.getElementById('freeCam');
+        const ringSelect = document.getElementById('ringSelect');
         const selectionHelper = document.getElementById('selection-helper');
         const characterUi = document.getElementById('character-ui');
         const chipName = document.getElementById('chip-name').querySelector('.value');
@@ -402,6 +427,12 @@
 
         let skipIntro = false;
         let freeCameraMode = false;
+        let ringVariant = 'escenario';
+
+        const ringOptions = {
+            escenario: { path: 'modelos/Ring 3.glb', lift: 0.62 },
+            gimnasio: { path: 'modelos/Ring 2.glb', lift: 0.62 },
+        };
 
         const openModal = () => modalLayer.classList.add('active');
         const closeModal = () => modalLayer.classList.remove('active');
@@ -445,6 +476,11 @@
 
         freeCamToggle.addEventListener('change', (event) => {
             freeCameraMode = event.target.checked;
+        });
+
+        ringSelect.addEventListener('change', (event) => {
+            ringVariant = event.target.value;
+            loadRing(ringVariant);
         });
 
         // ------ ESCENA BÁSICA ------
@@ -530,33 +566,55 @@
         const ringGroup = new THREE.Group();
         scene.add(ringGroup);
 
+        let ringLoadId = 0;
+
+        function disposeRing(){
+            ringGroup.traverse((child) => {
+                if(child.isMesh){
+                    child.geometry?.dispose();
+                    if(Array.isArray(child.material)){
+                        child.material.forEach(mat => mat?.dispose?.());
+                    } else {
+                        child.material?.dispose?.();
+                    }
+                }
+            });
+            ringGroup.clear();
+        }
+
         const assetBaseUrl = new URL('./', import.meta.url);
         const resolveAsset = (name) => new URL(name, assetBaseUrl).href;
 
-        gltfLoader.load(
-            resolveAsset('modelos/Ring 3.glb'),
-            (gltf) => {
-                const ringScene = gltf.scene;
-                ringScene.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                });
+        function loadRing(variant = 'escenario'){
+            const config = ringOptions[variant] ?? ringOptions.escenario;
+            const loadId = ++ringLoadId;
+            gltfLoader.load(
+                resolveAsset(config.path),
+                (gltf) => {
+                    if(loadId !== ringLoadId) return;
+                    disposeRing();
+                    const ringScene = gltf.scene;
+                    ringScene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
 
-                const bbox = new THREE.Box3().setFromObject(ringScene);
-                const ringFloorOffset = -bbox.min.y;
-                ringScene.position.set(0, ringFloorOffset, 0);
-                ringGroup.add(ringScene);
+                    const bbox = new THREE.Box3().setFromObject(ringScene);
+                    const ringFloorOffset = -bbox.min.y;
+                    ringScene.position.set(0, ringFloorOffset, 0);
+                    ringGroup.add(ringScene);
 
-                const center = new THREE.Vector3();
-                bbox.getCenter(center);
-                ringLight.position.set(center.x, 3.6, center.z + 0.2);
-                selectionStage.position.y = ringFloorOffset + 0.62;
-            },
-            undefined,
-            (error) => console.error('No se pudo cargar el ring:', error)
-        );
+                    const center = new THREE.Vector3();
+                    bbox.getCenter(center);
+                    ringLight.position.set(center.x, 3.6, center.z + 0.2);
+                    selectionStage.position.y = ringFloorOffset + (config.lift ?? 0.62);
+                },
+                undefined,
+                (error) => console.error('No se pudo cargar el ring:', error)
+            );
+        }
 
         // ------ SUBESCENARIO DE SELECCIÓN ------
         const selectionStage = new THREE.Group();
@@ -585,6 +643,8 @@
         selectionStage.add(stageGrid);
 
         scene.add(selectionStage);
+
+        loadRing(ringVariant);
 
         const characterLoader = new FBXLoader();
         const characterConfigs = [
