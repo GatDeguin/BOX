@@ -534,7 +534,7 @@
         const resolveAsset = (name) => new URL(name, assetBaseUrl).href;
 
         gltfLoader.load(
-            resolveAsset('Ring 3.glb'),
+            resolveAsset('modelos/Ring 3.glb'),
             (gltf) => {
                 const ringScene = gltf.scene;
                 ringScene.traverse((child) => {
@@ -588,9 +588,9 @@
 
         const characterLoader = new FBXLoader();
         const characterConfigs = [
-            { name: 'Tyson', model: 'Tyson.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '101 kg', reach: '210 cm', speed: 5 },
-            { name: 'Rookie', model: 'Boxing.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '83 kg', reach: '190 cm', speed: 3 },
-            { name: 'Cyber', model: 'Cyber_boxing.fbx', idle: 'Walking.fbx', jab: 'Lead Jab.fbx', weight: '95 kg', reach: '202 cm', speed: 4 },
+            { name: 'Tyson', model: 'modelos/Tyson.fbx', idle: 'animaciones/Walking.fbx', jab: 'animaciones/Lead Jab.fbx', weight: '101 kg', reach: '210 cm', speed: 5 },
+            { name: 'Rookie', model: 'animaciones/Boxing.fbx', idle: 'animaciones/Walking.fbx', jab: 'animaciones/Lead Jab.fbx', weight: '83 kg', reach: '190 cm', speed: 3 },
+            { name: 'Cyber', model: 'modelos/Cyber_boxing.fbx', idle: 'animaciones/Walking.fbx', jab: 'animaciones/Lead Jab.fbx', weight: '95 kg', reach: '202 cm', speed: 4 },
         ];
 
         const characterSlots = [];
