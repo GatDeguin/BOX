@@ -10,6 +10,7 @@ import {
   Vector3,
   WebGLRenderer
 } from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { AssetHooks, AssetManager } from './assets';
 import { box9Store, CharacterId, RingId } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
@@ -40,6 +41,7 @@ interface SceneFlowContext {
   travelingCamera: PerspectiveCamera;
   freeCamera: PerspectiveCamera;
   activeCamera: PerspectiveCamera;
+  freeCamControls: OrbitControls | null;
   phase: ScenePhase;
   selectionTarget: SelectionTarget | null;
   animationFrame: number | null;
@@ -246,6 +248,7 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     outputPass,
     travelingCamera,
     freeCamera,
+    freeCamControls: null,
     activeCamera: travelingCamera,
     phase: 'intro',
     selectionTarget: null,
@@ -352,8 +355,9 @@ function handleResize() {
 
 function animate(_timestamp?: number) {
   if (!context) return;
-  const { composer, travelingCamera, freeCamera, phase, clock } = context;
-  const elapsed = clock.getElapsedTime();
+  const { composer, travelingCamera, phase, clock, freeCamControls } = context;
+  const delta = clock.getDelta();
+  const elapsed = clock.elapsedTime;
 
   if (phase === 'intro') {
     travelingCamera.position.x = 8 * Math.cos(elapsed * 0.25);
@@ -374,7 +378,7 @@ function animate(_timestamp?: number) {
       travelingCamera.lookAt(0, 1.75, 0);
     }
   } else if (phase === 'free') {
-    freeCamera.lookAt(0, 1.5, 0);
+    freeCamControls?.update(delta);
   }
 
   composer.render();
@@ -395,6 +399,10 @@ export function enterSelection(): void {
   setActiveCamera(context.travelingCamera);
   applyPhaseEffects('selection');
 
+  if (context.freeCamControls) {
+    context.freeCamControls.enabled = false;
+  }
+
   ensureAnimationLoop();
   if (!context.selectionTarget) {
     context.selectionTarget = {
@@ -407,9 +415,15 @@ export function enterSelection(): void {
 
 export function enableFreeCam(): void {
   if (!context) return;
+  ensureFreeCamControls();
   context.phase = 'free';
   applyPhaseEffects('free');
   setActiveCamera(context.freeCamera);
+
+  if (context.freeCamControls) {
+    context.freeCamControls.enabled = true;
+    context.freeCamControls.update();
+  }
   ensureAnimationLoop();
 }
 
@@ -536,6 +550,16 @@ function disposeObject(object: Object3D) {
   });
 }
 
+function ensureFreeCamControls() {
+  if (!context || context.freeCamControls) return;
+
+  const controls = new OrbitControls(context.freeCamera, context.renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 1.5, 0);
+  controls.enabled = false;
+  context.freeCamControls = controls;
+}
+
 export function destroy(): void {
   if (!context) return;
 
@@ -556,6 +580,8 @@ export function destroy(): void {
 
   context.composer.dispose();
   context.renderer.dispose();
+
+  context.freeCamControls?.dispose();
 
   if (context.selectionLight) {
     context.scene.remove(context.selectionLight);
