@@ -606,6 +606,9 @@
                     tysonRoot.position.z += -center.z + BOXER_BASE_Z;
                     tysonRoot.position.y += -bbox.min.y;
 
+                    // Orientar al boxeador hacia el saco desde el inicio
+                    tysonRoot.rotation.y = Math.PI;
+
                     scene.add(tysonRoot);
                     scene.updateMatrixWorld(true);
                     captureBindInfo();
