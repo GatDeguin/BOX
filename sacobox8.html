@@ -433,7 +433,7 @@
 
         const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
 
-        const RING_MODEL_URL = 'modelos/Ring.glb';
+        const RING_MODEL_URL = 'modelos/Ring 2.glb';
 
         const gltfLoader = new GLTFLoader();
 
@@ -2525,7 +2525,7 @@
                 RING_MODEL_URL,
                 (gltf) => {
                     const ring = gltf.scene || gltf;
-                    ring.position.set(4.6, 0, 3.0);
+                    ring.position.set(8.6, 0, 3.0);
                     ring.rotation.y = Math.PI / 2;
                     ring.scale.setScalar(0.9);
                     ring.traverse((child) => {
