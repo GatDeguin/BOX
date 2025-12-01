@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boxeo VR - Full Body Edition</title>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Pose (Cambio importante: De Hands a Pose) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #000;
+            color: white;
+            user-select: none;
+        }
+
+        #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        #video-feed {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            height: 180px;
+            transform: scaleX(-1);
+            border: 2px solid #00ffaa;
+            border-radius: 12px;
+            z-index: 2;
+            opacity: 0.6;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            padding: 40px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+
+        .score-val {
+            font-size: 80px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 20px #ff0055;
+            line-height: 0.8;
+            font-family: Impact, sans-serif;
+        }
+        
+        .score-lbl { font-size: 20px; color: #ff0055; letter-spacing: 4px; text-transform: uppercase; }
+
+        .health-bar-frame {
+            width: 500px;
+            height: 30px;
+            background: #222;
+            border: 3px solid #555;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #ffaa00, #ff0044);
+            transition: width 0.1s;
+        }
+
+        .center-hud {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #combo-display {
+            position: absolute;
+            right: 50px;
+            top: 150px;
+            text-align: right;
+            transform: rotate(-5deg);
+        }
+
+        .combo-n { font-size: 100px; color: #ffff00; font-weight: bold; text-shadow: 4px 4px 0 #ff0000; line-height: 0.8; }
+        .combo-t { font-size: 30px; color: #fff; font-style: italic; }
+
+        /* Pantallas */
+        #start-screen, #game-over-screen {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+        }
+        #game-over-screen { display: none; }
+
+        h1 {
+            font-size: 80px;
+            background: -webkit-linear-gradient(#00ffff, #ff0055);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+            text-transform: uppercase;
+            font-style: italic;
+        }
+
+        p { color: #aaa; max-width: 600px; text-align: center; font-size: 22px; line-height: 1.5; margin-bottom: 40px; }
+
+        button {
+            background: #fff; color: #000;
+            border: none; padding: 20px 60px;
+            font-size: 30px; font-weight: 900;
+            text-transform: uppercase;
+            cursor: pointer;
+            transform: skewX(-10deg);
+            transition: 0.2s;
+            box-shadow: 10px 10px 0 #ff0055;
+        }
+        button:hover { background: #ff0055; color: #fff; box-shadow: 10px 10px 0 #fff; }
+
+        .loading { margin-top: 20px; color: #00ffaa; font-family: monospace; display: none; }
+        
+        #instructions {
+            margin-top: 30px;
+            font-size: 16px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <video id="input-video" style="display:none"></video>
+    <canvas id="video-feed"></canvas>
+    <div id="container"></div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div>
+                <div class="score-lbl">Puntuación</div>
+                <div class="score-val" id="score">0</div>
+            </div>
+            <div class="center-hud">
+                <div class="score-lbl">Integridad Saco</div>
+                <div class="health-bar-frame">
+                    <div class="health-fill" id="bag-health"></div>
+                </div>
+            </div>
+        </div>
+        <div id="combo-display">
+            <div class="combo-n" id="combo">0</div>
+            <div class="combo-t">HITS</div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>Neon Fight VR</h1>
+        <p>
+            <strong>MODO CUERPO COMPLETO</strong><br>
+            La cámara sigue tu cabeza.<br>
+            ¡Agáchate para esquivar y moverte!<br>
+            Asegúrate de que la cámara vea tu cintura para arriba.
+        </p>
+        <button id="start-btn">ENTRAR AL RING</button>
+        <div class="loading" id="loading-text">Calibrando Sensores...</div>
+        <div id="instructions">Aléjate ~2 metros de la cámara</div>
+    </div>
+
+    <script>
+        // --- Configuración Global ---
+        let scene, camera, renderer;
+        let bag, bagChain, targetSpot;
+        
+        // Player Body Parts
+        const player = {
+            leftArm: { upper: null, lower: null, glove: null, light: null },
+            rightArm: { upper: null, lower: null, glove: null, light: null },
+            headPos: new THREE.Vector3(0, 1.6, 4)
+        };
+
+        let audioCtx;
+        
+        const gameState = {
+            score: 0,
+            combo: 0,
+            bagHealth: 100,
+            lastHit: 0,
+            isPlaying: false
+        };
+
+        const bagPhysics = {
+            velocity: new THREE.Vector3(),
+            angleX: 0,
+            angleZ: 0,
+            angularVelX: 0,
+            angularVelZ: 0
+        };
+
+        // DOM
+        const videoElement = document.getElementById('input-video');
+        const canvasFeed = document.getElementById('video-feed');
+        const ctxFeed = canvasFeed.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const comboEl = document.getElementById('combo');
+        const healthEl = document.getElementById('bag-health');
+
+        // --- Three.js ---
+        function initThree() {
+            const container = document.getElementById('container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.Fog(0x050505, 2, 15);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 1.6, 4);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild(renderer.domElement);
+
+            // Luces Ambientales
+            const ambient = new THREE.AmbientLight(0x222222);
+            scene.add(ambient);
+
+            // Luz cenital del ring
+            const spot = new THREE.SpotLight(0xffffff, 1);
+            spot.position.set(0, 6, 0);
+            spot.castShadow = true;
+            spot.angle = 0.8;
+            spot.penumbra = 0.5;
+            scene.add(spot);
+
+            createEnvironment();
+            createBag();
+            createPlayerBody();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function createEnvironment() {
+            // Suelo
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.5 });
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const grid = new THREE.GridHelper(30, 30, 0x333333, 0x000000);
+            scene.add(grid);
+
+            // Postes del ring (visuales)
+            const postGeo = new THREE.BoxGeometry(0.5, 4, 0.5);
+            const postMat = new THREE.MeshStandardMaterial({color: 0x333333, emissive: 0x110000});
+            const positions = [[-4, -4], [4, -4], [-4, 4], [4, 4]];
+            
+            positions.forEach(pos => {
+                const p = new THREE.Mesh(postGeo, postMat);
+                p.position.set(pos[0], 2, pos[1]);
+                scene.add(p);
+                
+                // Luz en el poste
+                const pl = new THREE.PointLight(0xff0055, 0.5, 10);
+                pl.position.set(pos[0], 3.8, pos[1]);
+                scene.add(pl);
+            });
+        }
+
+        function createBag() {
+            const pivot = new THREE.Group();
+            pivot.position.set(0, 3.5, -1.5);
+            scene.add(pivot);
+            bagChain = pivot;
+
+            // Cadena
+            const chain = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, 1.5),
+                new THREE.MeshStandardMaterial({color: 0x888888})
+            );
+            chain.position.y = -0.75;
+            pivot.add(chain);
+
+            // Saco
+            const bagGeo = new THREE.CylinderGeometry(0.35, 0.35, 1.5, 32);
+            const bagMat = new THREE.MeshStandardMaterial({
+                color: 0xaa0000, roughness: 0.3, metalness: 0.2
+            });
+            bag = new THREE.Mesh(bagGeo, bagMat);
+            bag.position.y = -1.8;
+            bag.castShadow = true;
+            bag.receiveShadow = true;
+            pivot.add(bag);
+
+            // Target (Punto débil)
+            targetSpot = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 16, 16),
+                new THREE.MeshBasicMaterial({color: 0xffff00, opacity: 0.5, transparent: true})
+            );
+            targetSpot.position.set(0, 0, 0.36);
+            bag.add(targetSpot);
+            
+            animateTarget();
+        }
+
+        function animateTarget() {
+            if(!gameState.isPlaying) return;
+            const angle = (Math.random()-0.5) * 2.5;
+            const h = (Math.random()-0.5) * 1.0;
+            targetSpot.position.set(Math.sin(angle)*0.36, h, Math.cos(angle)*0.36);
+            setTimeout(animateTarget, 2000);
+        }
+
+        function createPlayerBody() {
+            // Función auxiliar para crear segmentos de brazo (Huesos visuales)
+            function createLimb(color) {
+                const geo = new THREE.CylinderGeometry(0.04, 0.03, 1, 8);
+                geo.translate(0, -0.5, 0); // Pivote en la parte superior
+                const mat = new THREE.MeshBasicMaterial({
+                    color: color, 
+                    transparent: true, 
+                    opacity: 0.4,
+                    wireframe: true
+                });
+                return new THREE.Mesh(geo, mat);
+            }
+
+            // Brazo Izquierdo (Verde/Azul)
+            player.leftArm.upper = createLimb(0x00ffaa);
+            player.leftArm.lower = createLimb(0x00ffaa);
+            scene.add(player.leftArm.upper);
+            scene.add(player.leftArm.lower);
+
+            // Guante Izquierdo
+            const gloveGeo = new THREE.BoxGeometry(0.15, 0.15, 0.2);
+            const gloveMatL = new THREE.MeshStandardMaterial({color: 0x00ffaa, roughness:0.2});
+            player.leftArm.glove = new THREE.Mesh(gloveGeo, gloveMatL);
+            scene.add(player.leftArm.glove);
+            
+            // Luz Guante Izquierdo
+            player.leftArm.light = new THREE.PointLight(0x00ffaa, 1, 3);
+            player.leftArm.glove.add(player.leftArm.light);
+
+            // Brazo Derecho (Rojo/Naranja)
+            player.rightArm.upper = createLimb(0xffaa00);
+            player.rightArm.lower = createLimb(0xffaa00);
+            scene.add(player.rightArm.upper);
+            scene.add(player.rightArm.lower);
+
+            // Guante Derecho
+            const gloveMatR = new THREE.MeshStandardMaterial({color: 0xffaa00, roughness:0.2});
+            player.rightArm.glove = new THREE.Mesh(gloveGeo, gloveMatR);
+            scene.add(player.rightArm.glove);
+
+            // Luz Guante Derecho
+            player.rightArm.light = new THREE.PointLight(0xffaa00, 1, 3);
+            player.rightArm.glove.add(player.rightArm.light);
+        }
+
+        // --- Lógica de Pose (MediaPipe) ---
+        function onResults(results) {
+            // Dibujar feed 2D
+            canvasFeed.width = videoElement.videoWidth;
+            canvasFeed.height = videoElement.videoHeight;
+            ctxFeed.save();
+            ctxFeed.clearRect(0, 0, canvasFeed.width, canvasFeed.height);
+            ctxFeed.drawImage(results.image, 0, 0, canvasFeed.width, canvasFeed.height);
+            
+            if (results.poseLandmarks) {
+                drawConnectors(ctxFeed, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(ctxFeed, results.poseLandmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
+
+                updatePlayerPose(results.poseLandmarks);
+            }
+            ctxFeed.restore();
+        }
+
+        function updatePlayerPose(landmarks) {
+            // Landmarks importantes (MediaPipe Pose):
+            // 0: Nariz
+            // 11: Hombro Izquierdo, 12: Hombro Derecho
+            // 13: Codo Izquierdo, 14: Codo Derecho
+            // 15: Muñeca Izquierda, 16: Muñeca Derecha
+            
+            // --- 1. HEAD TRACKING (Mover Cámara) ---
+            const nose = landmarks[0];
+            const hipLeft = landmarks[23];
+            const hipRight = landmarks[24];
+
+            // Mapear posición de la nariz al mundo 3D
+            // Invertimos X para efecto espejo
+            const headX = (0.5 - nose.x) * 6; 
+            // Altura Y: Calibrar según caderas para agacharse
+            // Si la nariz baja relativa a la altura normal, bajamos cámara.
+            const headY = (1.0 - nose.y) * 2 + 1.0; 
+            
+            // Suavizado de cámara (Lerp)
+            camera.position.x += (headX - camera.position.x) * 0.1;
+            camera.position.y += (headY - camera.position.y) * 0.1;
+            // Limitamos para no marear
+            camera.position.y = Math.max(0.5, Math.min(2.2, camera.position.y));
+
+            // --- 2. ARM TRACKING (Cinemática Inversa simplificada / Mapeo directo) ---
+            
+            // Función para actualizar un brazo
+            function updateArm(armObj, idxShoulder, idxElbow, idxWrist, isRight) {
+                const shoulderLM = landmarks[idxShoulder];
+                const elbowLM = landmarks[idxElbow];
+                const wristLM = landmarks[idxWrist];
+
+                // Convertir landmarks a Vector3 (Mismo espacio que la cabeza)
+                // Offset base del cuerpo (El cuerpo se mueve con la cámara en X/Z aprox)
+                const bodyOffsetX = camera.position.x;
+                const bodyOffsetY = camera.position.y - 0.2; // Hombros bajo ojos
+                const bodyOffsetZ = camera.position.z; // Jugador en Z=4
+
+                // Posición Hombro (Estimada relativa a la cabeza para estabilidad)
+                // O usar landmarks puros. Usaremos landmarks puros escalados.
+                const sX = (0.5 - shoulderLM.x) * 6;
+                const sY = (1.0 - shoulderLM.y) * 2.5;
+                const sZ = bodyOffsetZ + (shoulderLM.z * 2); // Z relativo
+
+                const eX = (0.5 - elbowLM.x) * 6;
+                const eY = (1.0 - elbowLM.y) * 2.5;
+                const eZ = bodyOffsetZ + (elbowLM.z * 2) - 1.0; // Ajuste profundidad
+
+                const wX = (0.5 - wristLM.x) * 6;
+                const wY = (1.0 - wristLM.y) * 2.5;
+                // Multiplicador Z agresivo para puñetazos
+                const punchFactor = 4.0;
+                let wZ = bodyOffsetZ + (wristLM.z * 6); 
+
+                // Vectores
+                const vShoulder = new THREE.Vector3(sX, sY, sZ);
+                const vElbow = new THREE.Vector3(eX, eY, eZ);
+                const vWrist = new THREE.Vector3(wX, wY, wZ);
+
+                // --- Actualizar Mallas ---
+                
+                // 1. Upper Arm (Hombro -> Codo)
+                armObj.upper.position.copy(vShoulder);
+                armObj.upper.lookAt(vElbow);
+                // Escalar longitud para conectar
+                const distUpper = vShoulder.distanceTo(vElbow);
+                armObj.upper.scale.set(1, 1, distUpper); // Cylinder escala en Y por defecto, pero rotamos
+                // Fix: Cylinder geometry oriented along Y. lookAt aligns +Z. 
+                // Necesitamos rotar la geometría o usar un truco.
+                // Truco: Usar lookAt y rotar geometria X -90.
+                armObj.upper.rotation.x -= Math.PI/2; 
+                // Ajuste escala (geometry height=1)
+                armObj.upper.scale.set(1, distUpper, 1);
+
+                // 2. Lower Arm (Codo -> Muñeca)
+                armObj.lower.position.copy(vElbow);
+                armObj.lower.lookAt(vWrist);
+                const distLower = vElbow.distanceTo(vWrist);
+                armObj.lower.rotation.x -= Math.PI/2;
+                armObj.lower.scale.set(1, distLower, 1);
+
+                // 3. Guante
+                // Suavizado
+                armObj.glove.position.lerp(vWrist, 0.5);
+                
+                // Rotación Guante (apuntar al saco si está cerca, o seguir brazo)
+                armObj.glove.lookAt(new THREE.Vector3(vWrist.x, vWrist.y, vWrist.z - 1));
+
+                // --- Detección Golpes ---
+                checkHit(armObj.glove, isRight);
+            }
+
+            // Actualizar Izquierdo (Landmarks 11, 13, 15)
+            updateArm(player.leftArm, 11, 13, 15, false);
+            // Actualizar Derecho (Landmarks 12, 14, 16)
+            updateArm(player.rightArm, 12, 14, 16, true);
+        }
+
+        function checkHit(gloveMesh, isRight) {
+            const bagPos = new THREE.Vector3();
+            bag.getWorldPosition(bagPos);
+
+            const dist = gloveMesh.position.distanceTo(bagPos);
+            const now = Date.now();
+
+            // Lógica de impacto mejorada
+            if (dist < 0.6 && (now - gameState.lastHit > 200)) {
+                // Verificar que el golpe va hacia adelante (velocidad o posición Z)
+                if (gloveMesh.position.z < -0.5) { // Cerca del saco en profundidad
+                    
+                    // Fuerza del golpe (simulada random + velocidad teórica)
+                    const power = 1; 
+
+                    // Vector de impacto (desde guante hacia saco)
+                    const impactVec = new THREE.Vector3().subVectors(bagPos, gloveMesh.position).normalize();
+                    
+                    // Aplicar físicas al saco
+                    bagPhysics.angularVelX += impactVec.z * 0.15; // Golpear hacia fondo rota en X
+                    bagPhysics.angularVelZ -= impactVec.x * 0.15; // Golpear lateral rota en Z
+
+                    // Critico?
+                    const targetPos = new THREE.Vector3();
+                    targetSpot.getWorldPosition(targetPos);
+                    const distTarget = gloveMesh.position.distanceTo(targetPos);
+                    const isCrit = distTarget < 0.3;
+
+                    registerHit(isCrit);
+                    gameState.lastHit = now;
+                    
+                    // Feedback luz
+                    const light = isRight ? player.rightArm.light : player.leftArm.light;
+                    light.intensity = 5;
+                    setTimeout(() => light.intensity = 1, 100);
+                }
+            }
+        }
+
+        function registerHit(isCrit) {
+            playSound(isCrit);
+
+            const dmg = isCrit ? 10 : 5;
+            gameState.score += dmg * 10;
+            gameState.combo++;
+            gameState.bagHealth -= dmg;
+            
+            scoreEl.innerText = gameState.score;
+            comboEl.innerText = gameState.combo;
+            healthEl.style.width = Math.max(0, gameState.bagHealth) + '%';
+            
+            // Animación UI
+            comboEl.style.transform = "scale(1.5)";
+            setTimeout(() => comboEl.style.transform = "scale(1)", 50);
+
+            if(gameState.bagHealth <= 0) {
+                gameState.bagHealth = 100;
+                bag.material.color.setHex(Math.random() * 0xffffff);
+                gameState.score += 500;
+            }
+        }
+
+        function playSound(isCrit) {
+            if(!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.type = isCrit ? 'square' : 'triangle';
+            osc.frequency.setValueAtTime(isCrit ? 100 : 200, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+            
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Físicas del Saco (Spring Damper system simple)
+            const gravity = 0.005;
+            const damping = 0.95;
+
+            // X Axis (Adelante/Atrás)
+            bagPhysics.angularVelX -= Math.sin(bagPhysics.angleX) * gravity;
+            bagPhysics.angularVelX *= damping;
+            bagPhysics.angleX += bagPhysics.angularVelX;
+
+            // Z Axis (Izquierda/Derecha)
+            bagPhysics.angularVelZ -= Math.sin(bagPhysics.angleZ) * gravity;
+            bagPhysics.angularVelZ *= damping;
+            bagPhysics.angleZ += bagPhysics.angularVelZ;
+
+            // Aplicar rotaciones
+            bagChain.rotation.x = bagPhysics.angleX;
+            bagChain.rotation.z = bagPhysics.angleZ;
+
+            // Saco gira un poco sobre su eje Y al ser golpeado de lado
+            bag.rotation.y += bagPhysics.angularVelZ * 0.5;
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Inicio ---
+        const startBtn = document.getElementById('start-btn');
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            document.getElementById('loading-text').style.display = 'block';
+            
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            initThree();
+
+            // Configurar MediaPipe Pose
+            const pose = new Pose({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }});
+            
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            pose.onResults(onResults);
+
+            const cam = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({image: videoElement});
+                },
+                width: 640,
+                height: 480
+            });
+            await cam.start();
+
+            document.getElementById('start-screen').style.display = 'none';
+            gameState.isPlaying = true;
+            animate();
+        });
+
+    </script>
+</body>
+</html>
