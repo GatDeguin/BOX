@@ -310,6 +310,7 @@
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         // --- UTILIDAD DE RUIDO ---
         class SimplexNoise {
@@ -400,6 +401,10 @@
         const DUST_ENABLED = false;
 
         const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
+
+        const RING_MODEL_URL = 'modelos/Ring.glb';
+
+        const gltfLoader = new GLTFLoader();
 
         // --- VARIABLES GLOBALES ESCENA ---
         let scene, camera, renderer, controls, composer;
@@ -2372,16 +2377,24 @@
                 createDustParticles();
             }
 
-            const postGeo = new THREE.CylinderGeometry(0.1, 0.1, 3);
-            const ropeGeo = new THREE.CylinderGeometry(0.03, 0.03, 6);
-            const redMat = new THREE.MeshStandardMaterial({color: 0x880000});
-            const pA = new THREE.Mesh(postGeo, metal); pA.position.set(5, 1.5, 0);
-            const pB = new THREE.Mesh(postGeo, metal); pB.position.set(5, 1.5, 6);
-            scene.add(pA, pB);
-            for(let i=1; i<=3; i++) {
-                const rope = new THREE.Mesh(ropeGeo, redMat);
-                rope.rotation.x = Math.PI/2; rope.position.set(5, 0.8 + i*0.6, 3); scene.add(rope);
-            }
+            gltfLoader.load(
+                RING_MODEL_URL,
+                (gltf) => {
+                    const ring = gltf.scene || gltf;
+                    ring.position.set(4.6, 0, 3.0);
+                    ring.rotation.y = Math.PI / 2;
+                    ring.scale.setScalar(0.9);
+                    ring.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    scene.add(ring);
+                },
+                undefined,
+                (err) => console.warn('No se pudo cargar el ring:', err)
+            );
 
             const flWidth = 3.0;
             const flHeight = 0.35;
