@@ -96,6 +96,8 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
   free: 'neon'
 };
 
+const ALL_RINGS: RingId[] = ['classic', 'neon', 'rooftop'];
+
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
   classic: { effectProfile: 'gimnasio', selectionLight: { color: '#7a9bff', intensity: 1.4 } },
   neon: { effectProfile: 'neon', selectionLight: { color: '#8bb1ff', intensity: 1.55 } },
@@ -285,6 +287,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     })
     .catch(() => {});
 
+  preloadRings(state.ring);
+
   const fighterRequest = ++activeFighterRequest;
   assetManager
     .loadFighter(state.character)
@@ -333,9 +337,15 @@ function registerSceneEvents(): Record<string, EventListener> {
     'box9:ring-change': (event: Event) => {
       const detail = (event as CustomEvent<{ ring?: RingId }>).detail;
       const nextRing = detail?.ring ?? box9Store.getState().ring;
-      box9Store.setState({ ring: nextRing });
+
+      if (box9Store.getState().ring !== nextRing) {
+        box9Store.setState({ ring: nextRing });
+      }
+
       applyRingVisualState(nextRing);
+      applyPhaseEffects(context?.phase ?? 'intro');
       replaceRing(nextRing);
+      preloadRings(nextRing);
     }
   };
 
@@ -499,6 +509,13 @@ export function loadFighter(character: CharacterId, hooks?: AssetHooks): Promise
 function registerAssetHooks(hooks: AssetHooks) {
   assetHookListeners.add(hooks);
   return () => assetHookListeners.delete(hooks);
+}
+
+function preloadRings(excludeRing?: RingId) {
+  const targets = ALL_RINGS.filter((ring) => ring !== excludeRing);
+  targets.forEach((ring) => {
+    assetManager.loadRing(ring).catch(() => {});
+  });
 }
 
 function replaceRing(ring: RingId) {
