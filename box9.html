@@ -38,12 +38,98 @@
             backdrop-filter: blur(14px);
             box-shadow: 0 15px 45px rgba(0,0,0,0.6);
         }
+        #info-layer {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            pointer-events: auto;
+            z-index: 20;
+            transition: opacity 0.6s ease, filter 0.6s ease;
+        }
+        #info-layer.fade-out {
+            opacity: 0;
+            filter: blur(12px);
+            pointer-events: none;
+        }
+        #info {
+            text-align: center;
+            color: #eaf1ff;
+            font-family: "Inter", system-ui, -apple-system, sans-serif;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+            z-index: 10;
+        }
+        #info .instruction {
+            background: radial-gradient(circle at top, rgba(200,200,220,0.1), rgba(5,5,8,0.9));
+            padding: 18px 40px 24px;
+            border-radius: 6px;
+            border-bottom: 2px solid rgba(255, 100, 50, 0.4);
+            display: inline-flex;
+            flex-direction: column;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 12px 42px rgba(0,0,0,0.8);
+        }
+        .pill-btn {
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 18px;
+            min-width: 88px;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #f6f7ff;
+            background: rgba(0,0,0,0.72);
+            border: 1px solid rgba(255,255,255,0.32);
+            border-radius: 999px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        .pill-btn:hover {
+            transform: translateY(-1px) scale(1.02);
+            background: rgba(10,12,18,0.9);
+            box-shadow: 0 12px 36px rgba(0,0,0,0.65);
+        }
+        .pill-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+        }
+        .cta-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
     </style>
 </head>
 <body>
     <div id="overlay">
         <div class="badge">Travelling + DOF + Godrays</div>
     </div>
+
+    <div id="info-layer">
+        <div id="info">
+            <div class="instruction">
+                <div style="font-size:11px; letter-spacing:0.34em; opacity:0.8; text-transform:uppercase; color:#cbd5ff;">Box 9 • Travelling Ringside</div>
+                <h1 style="font-size:26px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">Entra al Ring</h1>
+                <p style="font-size:13px; letter-spacing:0.12em; color:#cbd5ff; text-transform:uppercase; margin: 0;">Pulsa para iniciar • Godrays • Depth of Field</p>
+                <div class="cta-row">
+                    <button class="pill-btn" id="startBtn">Jugar</button>
+                    <button class="pill-btn" id="optionsBtn">Opciones</button>
+                    <button class="pill-btn" id="creditsBtn">Créditos</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
 
     <script type="module">
@@ -54,6 +140,25 @@
         import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
         const container = document.getElementById('canvas-container');
+        const infoLayer = document.getElementById('info-layer');
+        const startBtn = document.getElementById('startBtn');
+
+        container.style.pointerEvents = 'none';
+
+        const fadeOutOverlay = () => {
+            if (infoLayer.classList.contains('fade-out')) return;
+            infoLayer.classList.add('fade-out');
+            setTimeout(() => {
+                infoLayer.style.display = 'none';
+                container.style.pointerEvents = 'auto';
+            }, 650);
+        };
+
+        infoLayer.addEventListener('click', fadeOutOverlay);
+        startBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            fadeOutOverlay();
+        });
 
         // ------ ESCENA BÁSICA ------
         const scene = new THREE.Scene();
