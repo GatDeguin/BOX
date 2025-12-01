@@ -458,6 +458,7 @@
         let volumetricMesh;
         let doorGodrayMesh;
         let keyLight, fillLight, ringLight, rimLight, ambientLight;
+        let cinemaBackLight;
         let doorLight;
         let fluorescentLights = [];
         let fluorescentGlowCards = [];
@@ -471,6 +472,7 @@
             fill: 0.8,
             rim: 1.1,
             ring: 1.5,
+            cinemaBack: 0.22,
             door: 18.5,
             fluorescent: 7.5
         };
@@ -485,6 +487,8 @@
                 rimBase: 1.25,
                 ringColor: 0xffdd88,
                 ringBase: 1.65,
+                cinemaBackColor: 0x1a2846,
+                cinemaBackBase: 0.22,
                 doorColor: 0x4488ff,
                 doorBase: 19.5,
                 fluorescentColor: 0xf0f6ff,
@@ -511,6 +515,8 @@
                 rimBase: 1.1,
                 ringColor: 0xffe1aa,
                 ringBase: 1.35,
+                cinemaBackColor: 0x2c1b10,
+                cinemaBackBase: 0.18,
                 doorColor: 0xffa85a,
                 doorBase: 12.0,
                 fluorescentColor: 0xfff2da,
@@ -2626,6 +2632,14 @@
             rimLight.castShadow = false;
             scene.add(rimLight);
             scene.add(rimLight.target);
+
+            cinemaBackLight = new THREE.SpotLight(lightingPresets[currentPreset].cinemaBackColor, lightBases.cinemaBack, 12, Math.PI / 3.2, 0.9, 1);
+            cinemaBackLight.position.set(0, 1.6, -7.6);
+            cinemaBackLight.target.position.set(0, 1.2, 0);
+            cinemaBackLight.castShadow = false;
+            cinemaBackLight.penumbra = 0.95;
+            scene.add(cinemaBackLight);
+            scene.add(cinemaBackLight.target);
         }
 
         function createVolumetricLight() {
@@ -2698,6 +2712,7 @@
             lightBases.fill = preset.fillBase;
             lightBases.rim = preset.rimBase;
             lightBases.ring = preset.ringBase;
+            lightBases.cinemaBack = preset.cinemaBackBase;
             lightBases.door = preset.doorBase;
             lightBases.fluorescent = preset.fluorescentBase;
             baseFogDensity = preset.fogDensity;
@@ -2708,6 +2723,7 @@
             if (fillLight) fillLight.color.setHex(preset.fillColor);
             if (rimLight) rimLight.color.setHex(preset.rimColor);
             if (ringLight) ringLight.color.setHex(preset.ringColor);
+            if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
             if (ambientLight) {
                 ambientLight.color.setHex(preset.ambientSky);
                 ambientLight.groundColor.setHex(preset.ambientGround);
@@ -2727,6 +2743,8 @@
             if (scene && scene.background) {
                 scene.background.setHex(preset.background);
             }
+
+            if (cinemaBackLight) cinemaBackLight.intensity = preset.cinemaBackBase;
         }
 
         function setupPresetButton() {
@@ -2813,6 +2831,12 @@
                 const n = noiseGen.noise2D(elapsed * 1.2, 2.7) * 0.5 + 0.5;
                 const f = 1.0 + (n - 0.5) * 0.25 + punchActivity * 0.3 + flashPhase * 0.6 * impactFlashStrength;
                 ringLight.intensity = Math.max(0.0, lightBases.ring * f);
+            }
+
+            if (cinemaBackLight) {
+                const n = noiseGen.noise2D(elapsed * 0.18, 1.7) * 0.5 + 0.5;
+                const f = 1.0 + (n - 0.5) * 0.08;
+                cinemaBackLight.intensity = Math.max(0.0, lightBases.cinemaBack * f);
             }
 
             if (doorLight) {
