@@ -551,6 +551,7 @@
         const bonesByName = {};
         let mixer = null;
         const loadedAnimations = [];
+        let animationQueue = [];
         let activeAction = null;
         let autoComboTimer = null;
         const tysonTexture = new THREE.TextureLoader().load(TYSON_TEXTURE_URL);
@@ -579,6 +580,14 @@
                 bonesByName[name.toLowerCase()] ||
                 bonesByName['mixamorig' + name]
             );
+        }
+
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
         }
 
         const BIND = {};
@@ -855,6 +864,7 @@
                         }
                         loaded++;
                         if (loaded === files.length) {
+                            refillAnimationQueue();
                             startAnimationPlaylist();
                         }
                     },
@@ -863,11 +873,26 @@
                         console.error('No se pudo cargar animación', file, err);
                         loaded++;
                         if (loaded === files.length) {
+                            refillAnimationQueue();
                             startAnimationPlaylist();
                         }
                     }
                 );
             });
+        }
+
+        function refillAnimationQueue() {
+            const filtered = loadedAnimations.filter(({ action }) => action !== activeAction);
+            const pool = filtered.length > 0 ? filtered : loadedAnimations.slice();
+            animationQueue = shuffleArray(pool.slice());
+
+            if (animationQueue.length > 1 && animationQueue[0].action === activeAction) {
+                const swapIndex = animationQueue.findIndex(({ action }) => action !== activeAction);
+                if (swapIndex > 0) {
+                    const [next] = animationQueue.splice(swapIndex, 1);
+                    animationQueue.unshift(next);
+                }
+            }
         }
 
         function startAnimationPlaylist() {
@@ -883,7 +908,9 @@
 
         function playNextAnimation() {
             if (!mixer || loadedAnimations.length === 0) return;
-            const pick = loadedAnimations[Math.floor(Math.random() * loadedAnimations.length)];
+            if (animationQueue.length === 0) refillAnimationQueue();
+
+            const pick = animationQueue.shift();
             if (activeAction && activeAction !== pick.action) {
                 activeAction.fadeOut(0.25);
             }
