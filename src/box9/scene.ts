@@ -14,6 +14,7 @@ import {
   WebGLRenderer
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import { AssetHooks, AssetManager, LoadedAsset } from './assets';
 import { box9Store, CharacterId, RingId } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
@@ -45,10 +46,16 @@ interface SceneFlowContext {
   freeCamera: PerspectiveCamera;
   activeCamera: PerspectiveCamera;
   freeCamControls: OrbitControls | null;
+  pointerLockControls: PointerLockControls | null;
+  freeCamKeyState: { forward: boolean; backward: boolean; left: boolean; right: boolean };
+  freeCamInputHandlers: { keydown: (event: KeyboardEvent) => void; keyup: (event: KeyboardEvent) => void } | null;
+  pointerLockClickHandler: (() => void) | null;
   phase: ScenePhase;
   selectionTarget: SelectionTarget | null;
   animationFrame: number | null;
   resizeHandler: (() => void) | null;
+  resizeObserver: ResizeObserver | null;
+  pendingResize: number | null;
   clock: Clock;
   selectionLight: SpotLight | null;
   eventHandlers: Record<string, EventListener>;
@@ -178,6 +185,8 @@ function stopAnimationLoop() {
     context.animationFrame = null;
   }
 
+  disableFreeCamInputs();
+
   context.clock.stop();
 }
 
@@ -279,11 +288,17 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     travelingCamera,
     freeCamera,
     freeCamControls: null,
+    pointerLockControls: null,
+    freeCamKeyState: { forward: false, backward: false, left: false, right: false },
+    freeCamInputHandlers: null,
+    pointerLockClickHandler: null,
     activeCamera: travelingCamera,
     phase: 'intro',
     selectionTarget: null,
     animationFrame: null,
     resizeHandler,
+    resizeObserver: null,
+    pendingResize: null,
     clock: new Clock(),
     selectionLight,
     eventHandlers,
@@ -297,6 +312,11 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
   applyRingVisualState(box9Store.getState().ring, { updateEffects: false });
   applyPhaseEffects('intro');
+
+  const resizeObserver = new ResizeObserver(() => handleResize());
+  resizeObserver.observe(container);
+  context.resizeObserver = resizeObserver;
+  handleResize();
 
   const state = box9Store.getState();
 
@@ -381,8 +401,19 @@ function registerSceneEvents(): Record<string, EventListener> {
 function handleResize() {
   if (!context) return;
   const { renderer, container, travelingCamera, freeCamera, composer } = context;
-  const width = container.clientWidth || window.innerWidth;
-  const height = container.clientHeight || window.innerHeight;
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+
+  if (!width || !height) {
+    if (context.pendingResize === null) {
+      context.pendingResize = requestAnimationFrame(() => {
+        if (!context) return;
+        context.pendingResize = null;
+        handleResize();
+      });
+    }
+    return;
+  }
 
   renderer.setSize(width, height);
 
@@ -419,6 +450,7 @@ function animate(_timestamp?: number) {
       travelingCamera.lookAt(0, 1.75, 0);
     }
   } else if (phase === 'free') {
+    updateFreeCamMovement(delta);
     freeCamControls?.update(delta);
   }
 
@@ -446,6 +478,9 @@ export function enterSelection(): void {
     context.freeCamControls.enabled = false;
   }
 
+  disableFreeCamInputs();
+  context.pointerLockControls?.unlock();
+
   ensureAnimationLoop();
   if (!context.selectionTarget) {
     context.selectionTarget = {
@@ -467,6 +502,7 @@ export function enableFreeCam(): void {
     context.freeCamControls.enabled = true;
     context.freeCamControls.update();
   }
+  enableFreeCamInputs();
   ensureAnimationLoop();
 }
 
@@ -532,6 +568,10 @@ export function loadFighter(character: CharacterId, hooks?: AssetHooks): Promise
 function registerAssetHooks(hooks: AssetHooks) {
   assetHookListeners.add(hooks);
   return () => assetHookListeners.delete(hooks);
+}
+
+export function subscribeAssetManager(hooks: AssetHooks): () => void {
+  return registerAssetHooks(hooks);
 }
 
 function preloadRings(excludeRing?: RingId) {
@@ -713,13 +753,116 @@ function playFighterAction(type: 'idle' | 'pose') {
 }
 
 function ensureFreeCamControls() {
-  if (!context || context.freeCamControls) return;
+  if (!context) return;
 
-  const controls = new OrbitControls(context.freeCamera, context.renderer.domElement);
-  controls.enableDamping = true;
-  controls.target.set(0, 1.5, 0);
-  controls.enabled = false;
-  context.freeCamControls = controls;
+  if (!context.freeCamControls) {
+    const controls = new OrbitControls(context.freeCamera, context.renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.5, 0);
+    controls.enabled = false;
+    context.freeCamControls = controls;
+  }
+
+  if (!context.pointerLockControls) {
+    const pointerLock = new PointerLockControls(context.freeCamera, context.renderer.domElement);
+    pointerLock.addEventListener('lock', () => {
+      if (!context) return;
+      if (context.freeCamControls) {
+        context.freeCamControls.enabled = false;
+      }
+    });
+    pointerLock.addEventListener('unlock', () => {
+      if (!context) return;
+      if (context.freeCamControls) {
+        context.freeCamControls.enabled = true;
+      }
+      context.freeCamKeyState = { forward: false, backward: false, left: false, right: false };
+    });
+    context.pointerLockControls = pointerLock;
+  }
+}
+
+function enableFreeCamInputs() {
+  if (!context || context.freeCamInputHandlers) return;
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    switch (event.key.toLowerCase()) {
+      case 'w':
+        context!.freeCamKeyState.forward = true;
+        break;
+      case 's':
+        context!.freeCamKeyState.backward = true;
+        break;
+      case 'a':
+        context!.freeCamKeyState.left = true;
+        break;
+      case 'd':
+        context!.freeCamKeyState.right = true;
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleKeyup = (event: KeyboardEvent) => {
+    switch (event.key.toLowerCase()) {
+      case 'w':
+        context!.freeCamKeyState.forward = false;
+        break;
+      case 's':
+        context!.freeCamKeyState.backward = false;
+        break;
+      case 'a':
+        context!.freeCamKeyState.left = false;
+        break;
+      case 'd':
+        context!.freeCamKeyState.right = false;
+        break;
+      default:
+        break;
+    }
+  };
+
+  window.addEventListener('keydown', handleKeydown);
+  window.addEventListener('keyup', handleKeyup);
+  context.freeCamInputHandlers = { keydown: handleKeydown, keyup: handleKeyup };
+
+  if (!context.pointerLockClickHandler) {
+    const clickHandler = () => context?.pointerLockControls?.lock();
+    context.renderer.domElement.addEventListener('click', clickHandler);
+    context.pointerLockClickHandler = clickHandler;
+  }
+}
+
+function disableFreeCamInputs() {
+  if (!context) return;
+
+  if (context.freeCamInputHandlers) {
+    window.removeEventListener('keydown', context.freeCamInputHandlers.keydown);
+    window.removeEventListener('keyup', context.freeCamInputHandlers.keyup);
+    context.freeCamInputHandlers = null;
+  }
+
+  if (context.pointerLockClickHandler) {
+    context.renderer.domElement.removeEventListener('click', context.pointerLockClickHandler);
+    context.pointerLockClickHandler = null;
+  }
+
+  context.pointerLockControls?.unlock();
+  context.freeCamKeyState = { forward: false, backward: false, left: false, right: false };
+}
+
+function updateFreeCamMovement(delta: number) {
+  if (!context?.pointerLockControls || !context.pointerLockControls.isLocked) return;
+
+  const { freeCamKeyState, pointerLockControls } = context;
+  const speed = 6;
+  const distance = speed * delta;
+
+  if (freeCamKeyState.forward) pointerLockControls.moveForward(distance);
+  if (freeCamKeyState.backward) pointerLockControls.moveForward(-distance);
+  if (freeCamKeyState.left) pointerLockControls.moveRight(-distance);
+  if (freeCamKeyState.right) pointerLockControls.moveRight(distance);
 }
 
 export function destroy(): void {
@@ -734,6 +877,14 @@ export function destroy(): void {
 
   if (context.resizeHandler) {
     window.removeEventListener('resize', context.resizeHandler);
+  }
+
+  if (context.resizeObserver) {
+    context.resizeObserver.disconnect();
+  }
+
+  if (context.pendingResize !== null) {
+    cancelAnimationFrame(context.pendingResize);
   }
 
   Object.entries(context.eventHandlers).forEach(([name, handler]) => {
