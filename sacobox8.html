@@ -663,6 +663,8 @@
         const defaultCameraPosition = new THREE.Vector3(0, 1.75, 2.2);
         const thirdPersonCameraOffset = new THREE.Vector3(0.0, 1.35, -4.5);
         const thirdPersonTargetOffset = new THREE.Vector3(0.0, 0.15, -0.4);
+        const povCameraOffset = new THREE.Vector3(0.0, 0.05, 0.12);
+        const povTargetOffset = new THREE.Vector3(0.0, 0.02, 0.32);
         let thirdPersonActive = false;
 
         // Reutilización de vectores para deformación
@@ -893,6 +895,8 @@
         let tysonRoot = null;
         let skeleton = null;
         const bonesByName = {};
+        const headBoneCandidates = ['HeadTop_End', 'Head', 'LeftEye', 'RightEye'];
+        let headBone = null;
         let mixer = null;
         const tysonTexture = new THREE.TextureLoader().load(TYSON_TEXTURE_URL);
         tysonTexture.colorSpace = THREE.SRGBColorSpace;
@@ -920,6 +924,19 @@
                 bonesByName[name.toLowerCase()] ||
                 bonesByName['mixamorig' + name]
             );
+        }
+
+        function getHeadBone() {
+            if (headBone && headBone.parent) return headBone;
+            headBone = null;
+            for (const candidate of headBoneCandidates) {
+                const bone = getBone(candidate);
+                if (bone) {
+                    headBone = bone;
+                    break;
+                }
+            }
+            return headBone;
         }
 
         function shuffleArray(arr) {
@@ -3235,15 +3252,35 @@
                 bokehPass.materialBokeh.uniforms.focus.value = d;
             }
 
-            const bobAmount = 0.03;
-            const swayAmount = 0.04;
-            const bobY = Math.sin(elapsed * 1.8) * bobAmount;
-            const swayX = Math.sin(elapsed * 1.2) * swayAmount;
-            controls.target.set(
-                targetBase.x + swayX,
-                targetBase.y + bobY,
-                targetBase.z
-            );
+            const headAnchor = getHeadBone();
+            const usingHeadAnchor = !thirdPersonActive && headAnchor;
+
+            if (usingHeadAnchor) {
+                headAnchor.getWorldPosition(tmpVecA);
+                headAnchor.getWorldQuaternion(tmpQuatA);
+
+                targetBase.copy(tmpVecA).add(tmpDir.copy(povTargetOffset).applyQuaternion(tmpQuatA));
+                camera.position.copy(tmpVecA).add(tmpVecB.copy(povCameraOffset).applyQuaternion(tmpQuatA));
+            } else if (!thirdPersonActive) {
+                camera.position.copy(defaultCameraPosition);
+                targetBase.copy(baseTarget);
+            }
+
+            const bobEnabled = thirdPersonActive || !usingHeadAnchor;
+            if (bobEnabled) {
+                const bobAmount = 0.03;
+                const swayAmount = 0.04;
+                const bobY = Math.sin(elapsed * 1.8) * bobAmount;
+                const swayX = Math.sin(elapsed * 1.2) * swayAmount;
+                tmpVecB.set(
+                    targetBase.x + swayX,
+                    targetBase.y + bobY,
+                    targetBase.z
+                );
+                controls.target.copy(tmpVecB);
+            } else {
+                controls.target.copy(targetBase);
+            }
 
             controls.update();
 
