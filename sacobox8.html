@@ -553,11 +553,13 @@
         let activeAction = null;
         let autoComboTimer = null;
 
+        const MODEL_FORWARD = new THREE.Vector3(0, 0, 1);
         const tysonFloorBox = new THREE.Box3();
 
         const tmpVecA = new THREE.Vector3();
         const tmpVecB = new THREE.Vector3();
         const tmpDir  = new THREE.Vector3();
+        const tmpQuatA = new THREE.Quaternion();
 
         function lmToVec3(lm) {
             if (!lm) return null;
@@ -731,6 +733,26 @@
             orientBoneFromLandmarks('RightLeg',    POSE_LM.RIGHT_KNEE,     POSE_LM.RIGHT_ANKLE);
         }
 
+        function orientTysonTowardBag(force = false) {
+            if (!tysonRoot || !bagMesh) return;
+
+            tmpVecA.copy(bagMesh.position).sub(tysonRoot.position);
+            tmpVecA.y = 0;
+
+            if (tmpVecA.lengthSq() < 1e-6) return;
+
+            const targetQuat = tmpQuatA.setFromUnitVectors(
+                MODEL_FORWARD,
+                tmpVecA.normalize()
+            );
+
+            if (force) {
+                tysonRoot.quaternion.copy(targetQuat);
+            } else {
+                tysonRoot.quaternion.slerp(targetQuat, 0.15);
+            }
+        }
+
         function loadTysonModel() {
             const loader = new FBXLoader();
             loader.load(
@@ -763,19 +785,18 @@
                     bbox.getSize(size);
                     bbox.getCenter(center);
 
-            const targetHeight = 3.6;
-            const scale = targetHeight / size.y;
+                    const targetHeight = 3.6;
+                    const scale = targetHeight / size.y;
                     tysonRoot.scale.setScalar(scale);
 
                     bbox.setFromObject(tysonRoot);
                     bbox.getCenter(center);
 
-                    // Orientar al boxeador hacia el saco (que está en Z=0 mirando en -Z)
-                    tysonRoot.rotation.y = Math.PI;
-
                     tysonRoot.position.x += -center.x + BOXER_BASE_X;
                     tysonRoot.position.z += -center.z + BOXER_BASE_Z;
                     tysonRoot.position.y += -bbox.min.y;
+
+                    orientTysonTowardBag(true);
 
                     scene.add(tysonRoot);
                     scene.updateMatrixWorld(true);
@@ -2144,6 +2165,8 @@
                 o.m.position.copy(o.b.position);
                 o.m.quaternion.copy(o.b.quaternion);
             });
+
+            orientTysonTowardBag();
 
             if (fanMesh) fanMesh.rotation.y -= 2.0 * dtVis;
 
