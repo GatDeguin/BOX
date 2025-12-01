@@ -892,7 +892,8 @@
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
         const MODEL_URL = 'modelos/Tyson.fbx';
-        const TYSON_TEXTURE_URL = 'texturas/gltf_embedded_0.jpeg';
+        // Textura base del modelo de Tyson (corregimos la ruta inexistente)
+        const TYSON_TEXTURE_URL = 'texturas/Tyson.jpeg';
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
