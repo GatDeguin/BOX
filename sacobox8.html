@@ -2526,9 +2526,9 @@
                 RING_MODEL_URL,
                 (gltf) => {
                     const ring = gltf.scene || gltf;
-                    ring.position.set(8.6, 0, 3.0);
+                    ring.position.set(11.58, 0, 3.33);
                     ring.rotation.y = Math.PI / 2;
-                    ring.scale.setScalar(0.25);
+                    ring.scale.setScalar(0.2);
                     ring.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
