@@ -446,7 +446,8 @@
         // ============================
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
-        const MODEL_URL = 'Tyson.fbx';
+        const MODEL_URL = new URL('./Tyson.fbx', import.meta.url).href;
+        const RING_URL = new URL('./Ring 3.glb', import.meta.url).href;
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
@@ -800,8 +801,9 @@
                         'Fall Over.fbx',
                     ];
                     animationFiles.forEach((file, idx) => {
+                        const url = new URL(`./${file}`, import.meta.url).href;
                         loader.load(
-                            file,
+                            url,
                             (animAsset) => {
                                 if (!animAsset.animations || !animAsset.animations.length || !opponentMixer) return;
                                 const clip = animAsset.animations[0];
@@ -1501,7 +1503,7 @@
         function loadRingScene() {
             const loader = new GLTFLoader();
             loader.load(
-                'Ring 3.glb',
+                RING_URL,
                 (gltf) => {
                     ringScene = gltf.scene;
                     ringScene.traverse((obj) => {
