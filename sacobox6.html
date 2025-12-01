@@ -253,7 +253,8 @@
         let scene, camera, renderer, controls, composer;
         let world;
         const fixedTimeStep = 1 / 60;
-        const maxSubSteps = 5;
+        const maxDelta = 0.1;
+        let accumulator = 0;
         let lastTime;
 
         let bagBody, bagMesh, fanMesh, clockHandHour, clockHandMin, clockHandSec;
@@ -2065,9 +2066,17 @@
 
             if (world) {
                 if (lastTime !== undefined) {
-                    const dt = (time - lastTime) / 1000;
-                    world.step(fixedTimeStep, dt, maxSubSteps);
+                    const frameDelta = Math.min(maxDelta, (time - lastTime) / 1000);
+                    accumulator += frameDelta;
+
+                    while (accumulator >= fixedTimeStep) {
+                        world.step(fixedTimeStep);
+                        accumulator -= fixedTimeStep;
+                    }
+
+                    accumulator = Math.min(accumulator, fixedTimeStep);
                 }
+
                 lastTime = time;
             }
 
