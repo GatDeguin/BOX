@@ -897,10 +897,33 @@
 
         function keepTysonFeetOnFloor() {
             if (!tysonRoot) return;
-
             tysonRoot.updateMatrixWorld(true);
-            tysonFloorBox.setFromObject(tysonRoot);
-            const correction = -tysonFloorBox.min.y;
+
+            // Usar solo los huesos de los pies para evitar que las manos
+            // (cuando golpean hacia abajo) eleven todo el modelo al
+            // calcular el contacto con el suelo.
+            const footBones = [
+                'LeftFoot', 'RightFoot',
+                'LeftToeBase', 'RightToeBase',
+                'LeftToe_End', 'RightToe_End'
+            ];
+
+            let minFootY = Infinity;
+            footBones.forEach((name) => {
+                const bone = getBone(name);
+                if (!bone) return;
+                const pos = new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld);
+                minFootY = Math.min(minFootY, pos.y);
+            });
+
+            if (!isFinite(minFootY)) {
+                // Fallback: usar la bounding box completa si no se
+                // localizaron los huesos esperados.
+                tysonFloorBox.setFromObject(tysonRoot);
+                minFootY = tysonFloorBox.min.y;
+            }
+
+            const correction = -minFootY;
 
             if (Math.abs(correction) > 1e-4) {
                 tysonRoot.position.y += correction;
