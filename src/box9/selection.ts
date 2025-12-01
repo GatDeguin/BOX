@@ -1,4 +1,5 @@
 import { box9Store, Box9Store, CharacterId, getDefaultRingForCharacter } from './state';
+import { canFightCharacter, getFightLockReason, normalizeProgress } from './progression';
 import { activateSelection, confirmCharacterSelection, playIdleAnimation } from './scene';
 
 export interface FighterDetails {
@@ -67,6 +68,16 @@ export function initSelectionControls(
   const applySelection = (id: CharacterId, animation: 'idle' | 'pose' = 'idle') => {
     const preferredRing = getDefaultRingForCharacter(id);
     const state = store.getState();
+    const progress = normalizeProgress(state.progress);
+
+    if (!canFightCharacter(id, progress)) {
+      window.dispatchEvent(
+        new CustomEvent('box9:character-locked', {
+          detail: { character: id, reason: getFightLockReason(id, progress) }
+        })
+      );
+      return false;
+    }
 
     if (state.ring !== preferredRing) {
       store.setState({ ring: preferredRing });
@@ -82,18 +93,25 @@ export function initSelectionControls(
       playIdleAnimation(id);
       callbacks.onIdle?.(id);
     }
+
+    return true;
   };
 
   const cycle = (direction: number) => {
-    currentIndex = clampIndex(currentIndex + direction);
-    const next = fighters[currentIndex].id;
-    applySelection(next, 'idle');
+    const targetIndex = clampIndex(currentIndex + direction);
+    const next = fighters[targetIndex].id;
+    const success = applySelection(next, 'idle');
+    if (success) {
+      currentIndex = targetIndex;
+    }
   };
 
   const confirm = () => {
     const fighter = fighters[currentIndex];
-    applySelection(fighter.id, 'pose');
-    store.setState({ selectionStarted: false });
+    const success = applySelection(fighter.id, 'pose');
+    if (success) {
+      store.setState({ selectionStarted: false });
+    }
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
@@ -172,7 +190,10 @@ export function initSelectionControls(
   const handleChipSelection = (event: Event) => {
     const detail = (event as CustomEvent<{ character: CharacterId }>).detail;
     if (!detail) return;
-    applySelection(detail.character, 'idle');
+    const success = applySelection(detail.character, 'idle');
+    if (success) {
+      currentIndex = fighters.findIndex((fighter) => fighter.id === detail.character);
+    }
   };
 
   const handleStoreChange = () => {

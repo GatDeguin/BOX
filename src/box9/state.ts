@@ -1,6 +1,15 @@
 export type RingId = 'mmaGym' | 'bodybuilderArena' | 'tysonRing';
 export type CharacterId = 'mma' | 'bodybuilder' | 'tyson';
 
+export type GloveLevel = 'entrenamiento' | 'pro' | 'secreto';
+
+export interface ProgressionState {
+  wins: Record<CharacterId, number>;
+  gloveLevel: GloveLevel;
+  secretUnlocked: boolean;
+  tysonUnlocked: boolean;
+}
+
 export const CHARACTER_DEFAULT_RING: Record<CharacterId, RingId> = {
   mma: 'mmaGym',
   bodybuilder: 'bodybuilderArena',
@@ -16,6 +25,7 @@ export interface Box9State {
   freeCamera: boolean;
   character: CharacterId;
   selectionStarted: boolean;
+  progress: ProgressionState;
 }
 
 export type Box9StateListener = (state: Box9State) => void;
@@ -30,7 +40,17 @@ const defaultState: Box9State = {
   ring: CHARACTER_DEFAULT_RING.mma,
   freeCamera: false,
   character: 'mma',
-  selectionStarted: false
+  selectionStarted: false,
+  progress: {
+    wins: {
+      mma: 0,
+      bodybuilder: 0,
+      tyson: 0
+    },
+    gloveLevel: 'entrenamiento',
+    secretUnlocked: false,
+    tysonUnlocked: false
+  }
 };
 
 export function createBox9Store(initialState: Box9State = defaultState): Box9Store {
