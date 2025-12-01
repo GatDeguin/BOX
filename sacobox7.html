@@ -447,6 +447,11 @@
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
         const MODEL_URL = 'Tyson.fbx';
+        const TEXTURE_URL = 'gltf_embedded_0.jpeg';
+
+        const tysonTexture = new THREE.TextureLoader().load(TEXTURE_URL);
+        tysonTexture.colorSpace = THREE.SRGBColorSpace;
+        tysonTexture.flipY = false;
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
@@ -717,6 +722,12 @@
                             obj.castShadow = true;
                             obj.frustumCulled = false;
                             obj.material = obj.material.clone();
+                            const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+                            materials.forEach((mat) => {
+                                if (!mat) return;
+                                mat.map = tysonTexture;
+                                mat.needsUpdate = true;
+                            });
                             obj.material.color.offsetHSL(0.02, 0.05, 0.08);
                         }
                         if (obj.isSkinnedMesh) skeleton = obj.skeleton;
@@ -774,6 +785,12 @@
                             obj.castShadow = true;
                             obj.receiveShadow = true;
                             obj.material = obj.material.clone();
+                            const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+                            materials.forEach((mat) => {
+                                if (!mat) return;
+                                mat.map = tysonTexture;
+                                mat.needsUpdate = true;
+                            });
                             obj.material.color.offsetHSL(-0.08, -0.05, -0.05);
                         }
                     });
