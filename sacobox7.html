@@ -793,12 +793,12 @@
 
                     opponentMixer = new THREE.AnimationMixer(opponentRoot);
                     const animationFiles = [
-                        'animaciones/Boxing.fbx',
-                        'animaciones/Hook.fbx',
-                        'animaciones/Lead Jab.fbx',
-                        'animaciones/Head Hit.fbx',
-                        'animaciones/Walking.fbx',
-                        'animaciones/Fall Over.fbx',
+                        'animaciones/ataque/Boxing.fbx',
+                        'animaciones/ataque/Hook.fbx',
+                        'animaciones/ataque/Lead Jab.fbx',
+                        'animaciones/daño/Head Hit.fbx',
+                        'animaciones/movimiento/Walking.fbx',
+                        'animaciones/daño/Fall Over.fbx',
                     ];
                     animationFiles.forEach((file, idx) => {
                         const url = new URL(`./${file}`, import.meta.url).href;
