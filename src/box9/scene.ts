@@ -124,6 +124,7 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
 };
 
 const ALL_RINGS: RingId[] = ['classic', 'neon', 'rooftop'];
+const ALL_FIGHTERS: CharacterId[] = ['striker', 'brawler', 'counter'];
 
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
   classic: { effectProfile: 'gimnasio', selectionLight: { color: '#7a9bff', intensity: 1.4 } },
@@ -340,6 +341,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     })
     .catch(() => {});
 
+  preloadFighters(state.character);
+
   return context;
 }
 
@@ -367,6 +370,12 @@ function registerSceneEvents(): Record<string, EventListener> {
     'box9:freecam-change': (event: Event) => {
       const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
       toggleFreeCamera(detail?.enabled);
+    },
+    'box9:selection-ended': () => {
+      if (!context) return;
+      context.selectionTarget = null;
+      context.selectionLight?.position.set(0, 4, 4);
+      context.selectionLight?.target.position.set(0, 1.5, 0);
     },
     'box9:animation-toggle': (event: Event) => {
       const detail = (event as CustomEvent<{ active?: boolean }>).detail;
@@ -515,6 +524,7 @@ export function activateSelection(initialCharacter?: CharacterId): void {
 
 export function confirmCharacterSelection(character: CharacterId): void {
   playPoseAnimation(character);
+  window.dispatchEvent(new CustomEvent('box9:character-confirmed', { detail: { character } }));
 }
 
 export function toggleFreeCamera(enabled?: boolean): void {
@@ -581,6 +591,13 @@ function preloadRings(excludeRing?: RingId) {
   });
 }
 
+function preloadFighters(excludeCharacter?: CharacterId) {
+  const targets = ALL_FIGHTERS.filter((character) => character !== excludeCharacter);
+  targets.forEach((character) => {
+    assetManager.loadFighter(character).catch(() => {});
+  });
+}
+
 function replaceRing(ring: RingId) {
   const requestId = ++activeRingRequest;
   loadRing(ring)
@@ -600,6 +617,8 @@ function replaceFighter(character: CharacterId) {
       attachFighterModel(model, character);
     })
     .catch(() => {});
+
+  preloadFighters(character);
 }
 
 function attachRingModel(model: Object3D) {
