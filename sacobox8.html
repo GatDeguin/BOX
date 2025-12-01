@@ -2808,10 +2808,19 @@
             bagBody.shapeOrientations[0].setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
             world.addBody(bagBody);
             bagVisualOffset.set(bagShapeOffset.x, bagShapeOffset.y, bagShapeOffset.z);
-            world.addConstraint(new CANNON.PointToPointConstraint(
-                last,    new CANNON.Vec3(0, -0.125, 0),
-                bagBody, new CANNON.Vec3(0, bagAttachmentOffset, 0)
-            ));
+            const swingConstraint = new CANNON.ConeTwistConstraint(
+                last,
+                bagBody,
+                {
+                    pivotA: new CANNON.Vec3(0, -0.125, 0),
+                    pivotB: new CANNON.Vec3(0, bagAttachmentOffset, 0),
+                    axisA: new CANNON.Vec3(0, 1, 0),
+                    axisB: new CANNON.Vec3(0, 1, 0),
+                    angle: THREE.MathUtils.degToRad(30),
+                    twistAngle: THREE.MathUtils.degToRad(15)
+                }
+            );
+            world.addConstraint(swingConstraint);
         }
 
         // --- DEFORMACIÓN ---
