@@ -13,7 +13,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
-import { applyEffects, registerEffectsContext } from './effects';
+import { EffectProfileName, applyEffects, registerEffectsContext } from './effects';
 
 export interface SceneFlowOptions {
   backgroundColor?: string | number;
@@ -43,6 +43,7 @@ interface SceneFlowContext {
   resizeHandler: (() => void) | null;
   clock: Clock;
   selectionLight: SpotLight | null;
+  eventHandlers: Record<string, EventListener>;
 }
 
 interface SelectionTarget {
@@ -76,7 +77,26 @@ const DEFAULT_OPTIONS: Required<Pick<SceneFlowOptions, 'backgroundColor' | 'focu
   maxBlur: 0.01
 };
 
+const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
+  intro: 'neon',
+  selection: 'gimnasio',
+  free: 'neon'
+};
+
 let context: SceneFlowContext | null = null;
+
+function applyPhaseEffects(phase: ScenePhase) {
+  const profile = PHASE_EFFECTS[phase];
+  applyEffects(profile);
+}
+
+function ensureAnimationLoop() {
+  if (!context) return;
+  if (context.animationFrame !== null) return;
+
+  context.clock.start();
+  context.animationFrame = requestAnimationFrame(animate);
+}
 
 function createRenderer(container: HTMLElement, backgroundColor: string | number): WebGLRenderer {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false });
@@ -163,6 +183,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   scene.add(selectionLight);
   scene.add(selectionLight.target);
 
+  const eventHandlers = registerSceneEvents();
+
   context = {
     container,
     renderer,
@@ -179,11 +201,12 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     animationFrame: null,
     resizeHandler,
     clock: new Clock(),
-    selectionLight
+    selectionLight,
+    eventHandlers
   };
 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
-  applyEffects('neon');
+  applyPhaseEffects('intro');
 
   return context;
 }
@@ -193,6 +216,28 @@ function setActiveCamera(camera: PerspectiveCamera) {
   context.activeCamera = camera;
   context.renderPass.camera = camera;
   context.bokehPass.camera = camera;
+}
+
+function registerSceneEvents(): Record<string, EventListener> {
+  const handlers: Record<string, EventListener> = {
+    'box9:start-selection': () => activateSelection(),
+    'box9:character-selected': (event: Event) => {
+      const detail = (event as CustomEvent<{ character?: CharacterId }>).detail;
+      if (detail?.character) {
+        activateSelection(detail.character);
+      }
+    },
+    'box9:freecam-change': (event: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
+      toggleFreeCamera(detail?.enabled);
+    }
+  };
+
+  Object.entries(handlers).forEach(([name, handler]) => {
+    window.addEventListener(name, handler);
+  });
+
+  return handlers;
 }
 
 function handleResize() {
@@ -246,17 +291,17 @@ export function startIntro(container: HTMLElement, options: SceneFlowOptions = {
   const ctx = ensureContext(container, options);
   ctx.phase = 'intro';
   setActiveCamera(ctx.travelingCamera);
-
-  if (ctx.animationFrame === null) {
-    ctx.clock.start();
-    ctx.animationFrame = requestAnimationFrame(animate);
-  }
+  applyPhaseEffects('intro');
+  ensureAnimationLoop();
 }
 
 export function enterSelection(): void {
   if (!context) return;
   context.phase = 'selection';
   setActiveCamera(context.travelingCamera);
+  applyPhaseEffects('selection');
+
+  ensureAnimationLoop();
   if (!context.selectionTarget) {
     context.selectionTarget = {
       camera: SELECTION_FOCUS.striker.camera.clone(),
@@ -269,7 +314,30 @@ export function enterSelection(): void {
 export function enableFreeCam(): void {
   if (!context) return;
   context.phase = 'free';
+  applyPhaseEffects('free');
   setActiveCamera(context.freeCamera);
+  ensureAnimationLoop();
+}
+
+export function activateSelection(initialCharacter?: CharacterId): void {
+  enterSelection();
+  if (initialCharacter) {
+    focusOnFighter(initialCharacter);
+  }
+}
+
+export function confirmCharacterSelection(character: CharacterId): void {
+  playPoseAnimation(character);
+}
+
+export function toggleFreeCamera(enabled?: boolean): void {
+  if (!context) return;
+  const enable = enabled ?? context.phase !== 'free';
+  if (enable) {
+    enableFreeCam();
+  } else {
+    enterSelection();
+  }
 }
 
 export function focusOnFighter(character: CharacterId): void {
@@ -304,6 +372,10 @@ export function destroy(): void {
   if (context.resizeHandler) {
     window.removeEventListener('resize', context.resizeHandler);
   }
+
+  Object.entries(context.eventHandlers).forEach(([name, handler]) => {
+    window.removeEventListener(name, handler);
+  });
 
   context.composer.dispose();
   context.renderer.dispose();

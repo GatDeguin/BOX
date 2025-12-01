@@ -1,4 +1,4 @@
-import { enterSelection, enableFreeCam, startIntro } from './scene';
+import { startIntro } from './scene';
 import { box9Store } from './state';
 import { initBox9UI } from './ui';
 
@@ -12,16 +12,6 @@ function bootstrap() {
 
   startIntro(canvasContainer);
   initBox9UI(uiRoot, box9Store);
-
-  box9Store.subscribe((state) => {
-    if (state.selectionStarted) {
-      enterSelection();
-    }
-
-    if (state.freeCamera) {
-      enableFreeCam();
-    }
-  });
 }
 
 if (document.readyState === 'loading') {
