@@ -336,7 +336,15 @@
             }
         };
 
-        const audioConfig = { enabled: true, volume: 0.8 };
+        const audioConfig = {
+            enabled: true,
+            volume: 0.8,
+            reverb: {
+                enabled: true,
+                decay: 1.4,
+                mix: 0.35
+            }
+        };
 
         // Posición base del boxeador respecto al saco (ajústalo si querés)
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
@@ -446,7 +454,7 @@
         let impactFlashStrength = 0;
 
         // Audio
-        let audioContext, masterGain;
+        let audioContext, masterGain, reverbNode, reverbWetGain, reverbDryGain;
         let audioInitialized = false;
         const audioBuffers = new Map();
         const audioFiles = {
@@ -2523,9 +2531,85 @@
             audioContext = new AudioContext();
             masterGain = audioContext.createGain();
             masterGain.gain.value = audioConfig.volume;
+            setupReverb();
             masterGain.connect(audioContext.destination);
             loadAllAudio();
         }
+
+        function createImpulseResponse(context, decaySeconds) {
+            const decay = Math.max(0.1, decaySeconds || 1);
+            const sampleRate = context.sampleRate;
+            const length = Math.floor(sampleRate * decay);
+            const impulse = context.createBuffer(2, length, sampleRate);
+
+            for (let channel = 0; channel < impulse.numberOfChannels; channel++) {
+                const channelData = impulse.getChannelData(channel);
+                for (let i = 0; i < length; i++) {
+                    const t = i / length;
+                    channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.5);
+                }
+            }
+
+            return impulse;
+        }
+
+        function setupReverb() {
+            if (!audioContext || !masterGain || !audioConfig.reverb?.enabled) return;
+
+            reverbNode = audioContext.createConvolver();
+            reverbWetGain = audioContext.createGain();
+            reverbDryGain = audioContext.createGain();
+
+            reverbNode.buffer = createImpulseResponse(audioContext, audioConfig.reverb.decay);
+
+            updateReverbMix(audioConfig.reverb.mix);
+
+            reverbNode.connect(reverbWetGain);
+            reverbWetGain.connect(masterGain);
+            reverbDryGain.connect(masterGain);
+        }
+
+        function updateReverbMix(mix) {
+            if (!reverbWetGain || !reverbDryGain) return;
+            const clamped = Math.min(1, Math.max(0, mix ?? 0));
+            reverbWetGain.gain.value = clamped;
+            reverbDryGain.gain.value = 1 - clamped;
+        }
+
+        function updateReverbDecay(decaySeconds) {
+            if (!audioContext || !reverbNode) return;
+            reverbNode.buffer = createImpulseResponse(audioContext, decaySeconds);
+        }
+
+        function setReverbDecay(decaySeconds) {
+            if (!audioConfig.reverb) return;
+            const decay = Math.max(0.1, decaySeconds);
+            audioConfig.reverb.decay = decay;
+            updateReverbDecay(decay);
+        }
+
+        function setReverbMix(mix) {
+            if (!audioConfig.reverb) return;
+            const clamped = Math.min(1, Math.max(0, mix));
+            audioConfig.reverb.mix = clamped;
+            updateReverbMix(clamped);
+        }
+
+        function connectToAudioGraph(gainNode) {
+            if (!masterGain) return;
+            if (audioConfig.reverb?.enabled && reverbNode && reverbWetGain && reverbDryGain) {
+                gainNode.connect(reverbNode);
+                gainNode.connect(reverbDryGain);
+            } else {
+                gainNode.connect(masterGain);
+            }
+        }
+
+        window.gymReverbSettings = {
+            setDecay: setReverbDecay,
+            setMix: setReverbMix,
+            getSettings: () => ({ ...audioConfig.reverb })
+        };
 
         async function loadAudioBuffer(url) {
             const response = await fetch(url);
@@ -2568,7 +2652,7 @@
             gainNode.gain.value = volume;
 
             source.connect(gainNode);
-            gainNode.connect(masterGain);
+            connectToAudioGraph(gainNode);
 
             const totalSlices = Math.max(1, Math.floor(slices));
             const segmentDuration = buffer.duration / totalSlices;
