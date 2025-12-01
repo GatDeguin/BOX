@@ -760,7 +760,14 @@
                     scene.add(opponentRoot);
 
                     opponentMixer = new THREE.AnimationMixer(opponentRoot);
-                    const animationFiles = ['Boxing.fbx', 'Hook.fbx', 'Lead Jab.fbx', 'Head Hit.fbx', 'Walking.fbx', 'Fall Over.fbx'];
+                    const animationFiles = [
+                        'Boxing.fbx',
+                        'Hook.fbx',
+                        'Lead Jab.fbx',
+                        'Head Hit.fbx',
+                        'Walking.fbx',
+                        'Fall Over.fbx',
+                    ];
                     animationFiles.forEach((file, idx) => {
                         loader.load(
                             file,
