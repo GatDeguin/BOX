@@ -342,7 +342,7 @@
 
         // Modos de cámara
         const defaultCameraPosition = new THREE.Vector3(0, 1.75, 2.2);
-        const thirdPersonCameraOffset = new THREE.Vector3(0.0, 1.35, -3.1);
+        const thirdPersonCameraOffset = new THREE.Vector3(0.0, 1.35, -4.5);
         const thirdPersonTargetOffset = new THREE.Vector3(0.0, 0.15, -0.4);
         let thirdPersonActive = false;
 
@@ -1287,8 +1287,8 @@
             controls.dampingFactor = 0.08;
             controls.target.copy(targetBase);
             controls.maxPolarAngle = Math.PI / 2 - 0.05;
-            controls.minDistance = 1.0;
-            controls.maxDistance = 4.0;
+            controls.minDistance = 0.6;
+            controls.maxDistance = 8.0;
             controls.enablePan = false;
         }
 
