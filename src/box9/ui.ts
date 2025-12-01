@@ -385,7 +385,7 @@ function createHud(
     const progress = normalizeProgress(state.progress);
     ringValue.textContent = ringOptions[state.ring];
     cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
-    gloveValue.textContent = getGloveLabel(progress.gloveLevel);
+    gloveValue.textContent = getGloveLabel(progress.activeGlove);
 
     const fighter = getFighterDetails(state.character);
     fighterName.textContent = fighter.name;
@@ -396,14 +396,14 @@ function createHud(
 
     setActiveChip(state.character);
 
-    winsMMA.textContent = `MMA: ${progress.wins.mma} vict.`;
-    winsBodybuilder.textContent = `Bodybuilder: ${progress.wins.bodybuilder} vict.`;
-    winsTyson.textContent = `Tyson: ${progress.wins.tyson} vict.`;
+    winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder}`;
+    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder}`;
+    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson}`;
     progressNote.textContent = nextMilestone(progress);
 
     chipList.querySelectorAll<HTMLElement>('.box9-chip').forEach((chip) => {
       const id = chip.dataset.character as CharacterId;
-      const locked = id === 'tyson' && !progress.tysonUnlocked;
+      const locked = id === 'tyson' && !progress.unlocks.tyson;
       chip.classList.toggle('disabled', locked);
       chip.title = locked ? 'Desbloquéalo ganando las peleas base.' : '';
     });

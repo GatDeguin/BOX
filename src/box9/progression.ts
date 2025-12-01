@@ -1,91 +1,102 @@
-import { Box9Store, CharacterId, GloveLevel, ProgressionState, box9Store } from './state';
+import { Box9Store, CharacterId, GloveLevel, ProgressionState, WinLedger, box9Store } from './state';
 
-const INITIAL_WINS: Record<CharacterId, number> = {
-  mma: 0,
-  bodybuilder: 0,
-  tyson: 0
+const INITIAL_WINS: WinLedger = {
+  entrenamiento: { mma: 0, bodybuilder: 0, tyson: 0 },
+  amateur: { mma: 0, bodybuilder: 0, tyson: 0 },
+  pro: { mma: 0, bodybuilder: 0, tyson: 0 },
+  secreto: { mma: 0, bodybuilder: 0, tyson: 0 }
 };
 
 const GLOVE_LABELS: Record<GloveLevel, string> = {
   entrenamiento: 'Guantes de entrenamiento',
+  amateur: 'Guantes amateur',
   pro: 'Guantes Pro',
   secreto: 'Guantes secretos'
 };
 
-function cloneWins(wins: Record<CharacterId, number>): Record<CharacterId, number> {
+function cloneWins(wins: WinLedger): WinLedger {
   return {
-    mma: wins.mma ?? 0,
-    bodybuilder: wins.bodybuilder ?? 0,
-    tyson: wins.tyson ?? 0
+    entrenamiento: { ...wins.entrenamiento },
+    amateur: { ...wins.amateur },
+    pro: { ...wins.pro },
+    secreto: { ...wins.secreto }
   };
 }
 
-function deriveTysonUnlock(wins: Record<CharacterId, number>): boolean {
-  return wins.mma > 0 && wins.bodybuilder > 0;
+function deriveUnlocks(wins: WinLedger) {
+  const amateur = wins.entrenamiento.mma > 0 && wins.entrenamiento.bodybuilder > 0;
+  const tyson = amateur && wins.amateur.mma > 0 && wins.amateur.bodybuilder > 0;
+  const pro = tyson && wins.amateur.tyson > 0;
+  const secreto = pro && wins.pro.mma > 0 && wins.pro.bodybuilder > 0 && wins.pro.tyson > 0;
+
+  return { amateur, tyson, pro, secreto } as const;
 }
 
-function deriveSecretUnlock(wins: Record<CharacterId, number>): boolean {
-  return wins.tyson > 0;
-}
-
-function deriveGloveLevel(progress: ProgressionState): GloveLevel {
-  if (progress.secretUnlocked) return 'secreto';
-  if (progress.tysonUnlocked) return 'pro';
-  return 'entrenamiento';
+function deriveActiveGlove(current: GloveLevel, unlocks: ProgressionState['unlocks']): GloveLevel {
+  if (unlocks.secreto) return 'secreto';
+  if (unlocks.pro) return 'pro';
+  if (unlocks.amateur) return 'amateur';
+  return current ?? 'entrenamiento';
 }
 
 export function normalizeProgress(progress?: ProgressionState): ProgressionState {
   const wins = cloneWins(progress?.wins ?? INITIAL_WINS);
-  const tysonUnlocked = progress?.tysonUnlocked ?? deriveTysonUnlock(wins);
-  const secretUnlocked = progress?.secretUnlocked ?? deriveSecretUnlock(wins);
-  const gloveLevel = deriveGloveLevel({ wins, tysonUnlocked, secretUnlocked, gloveLevel: progress?.gloveLevel ?? 'entrenamiento' });
+  const unlocks = deriveUnlocks(wins);
+  const activeGlove = deriveActiveGlove(progress?.activeGlove ?? 'entrenamiento', unlocks);
 
   return {
     wins,
-    tysonUnlocked: tysonUnlocked || deriveTysonUnlock(wins),
-    secretUnlocked: secretUnlocked || deriveSecretUnlock(wins),
-    gloveLevel
+    unlocks,
+    activeGlove
   };
 }
 
 export function canFightCharacter(character: CharacterId, progress: ProgressionState): boolean {
   if (character === 'tyson') {
-    return progress.tysonUnlocked;
+    return progress.unlocks.tyson;
   }
   return true;
 }
 
 export function getFightLockReason(character: CharacterId, progress: ProgressionState): string | null {
-  if (character === 'tyson' && !progress.tysonUnlocked) {
+  if (character === 'tyson' && !progress.unlocks.tyson) {
     const remaining = [] as string[];
-    if (progress.wins.mma <= 0) remaining.push('derrotar al peleador MMA');
-    if (progress.wins.bodybuilder <= 0) remaining.push('derrotar al Bodybuilder');
-    if (remaining.length === 0) return 'Necesitas completar el circuito base para desbloquear a Tyson.';
-    return `Debes ${remaining.join(' y ')} antes de retar a Tyson.`;
+    if (progress.wins.entrenamiento.mma <= 0 || progress.wins.entrenamiento.bodybuilder <= 0) {
+      remaining.push('completar las victorias base (guantes de entrenamiento)');
+    }
+    if (progress.wins.amateur.mma <= 0) remaining.push('derrotar a MMA con guantes amateur');
+    if (progress.wins.amateur.bodybuilder <= 0) remaining.push('derrotar al Bodybuilder con guantes amateur');
+    return `Para retar a Tyson debes ${remaining.join(' y ')}.`;
   }
   return null;
 }
 
 export function nextMilestone(progress: ProgressionState): string {
-  if (!progress.tysonUnlocked) {
-    return 'Gana contra MMA y Bodybuilder para liberar la ruta a Tyson.';
+  if (!progress.unlocks.amateur) {
+    return 'Gana una vez a MMA y Bodybuilder con guantes de entrenamiento para obtener los guantes amateur.';
   }
-  if (!progress.secretUnlocked) {
-    return 'Vence a Tyson para activar los guantes secretos.';
+  if (!progress.unlocks.tyson) {
+    return 'Repite las victorias con guantes amateur para abrir el desafío contra Tyson.';
   }
-  return 'Ruta secreta desbloqueada: guantes secretos activos.';
+  if (!progress.unlocks.pro) {
+    return 'Vence a Tyson con guantes amateur para obtener los guantes PRO.';
+  }
+  if (!progress.unlocks.secreto) {
+    return 'Gana de nuevo a todos usando los guantes PRO para revelar los guantes secretos.';
+  }
+  return 'Ruta secreta completada: guantes negros y dorados equipados.';
 }
 
 export function recordFightWin(store: Box9Store, opponent: CharacterId): ProgressionState {
   const current = normalizeProgress(store.getState().progress);
   const wins = cloneWins(current.wins);
-  wins[opponent] = (wins[opponent] ?? 0) + 1;
+  const ledger = wins[current.activeGlove];
+  ledger[opponent] = (ledger[opponent] ?? 0) + 1;
 
-  const tysonUnlocked = current.tysonUnlocked || deriveTysonUnlock(wins);
-  const secretUnlocked = current.secretUnlocked || deriveSecretUnlock(wins);
-  const gloveLevel = deriveGloveLevel({ wins, tysonUnlocked, secretUnlocked, gloveLevel: current.gloveLevel });
+  const unlocks = deriveUnlocks(wins);
+  const activeGlove = deriveActiveGlove(current.activeGlove, unlocks);
 
-  const next = { wins, tysonUnlocked, secretUnlocked, gloveLevel };
+  const next = { wins, unlocks, activeGlove };
   store.setState({ progress: next });
   return next;
 }
