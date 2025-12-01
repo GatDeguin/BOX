@@ -459,6 +459,8 @@
         let poseInstance = null;
         let cameraMP = null;
         let capturing = false;
+        let activeStream = null;
+        let shouldResumeCapture = false;
         let lastPoseLandmarks = null;
         let smoothedLandmarks = null;
         let mocapStarted = false;
@@ -940,12 +942,19 @@
         }
 
         async function startCapture() {
+            if (capturing) return;
+
             if (!videoElement) {
                 showCameraError('No se encontró el elemento de video para iniciar la cámara.');
                 return;
             }
             if (!poseInstance) initPose();
             if (!poseInstance) return;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showCameraError('Tu navegador no soporta captura de cámara.');
+                return;
+            }
 
             const constraints = {
                 audio: false,
@@ -962,6 +971,7 @@
                 capturing = true;
 
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
+                activeStream = stream;
                 videoElement.srcObject = stream;
                 await videoElement.play();
 
@@ -988,13 +998,41 @@
                 capturing = false;
 
                 stopMediaStream(stream);
-                if (videoElement.srcObject) {
+                if (videoElement && videoElement.srcObject) {
                     stopMediaStream(videoElement.srcObject);
                     videoElement.srcObject = null;
                 }
+                activeStream = null;
 
                 const message = err && err.message ? err.message : 'No se pudo iniciar la cámara.';
                 showCameraError(`No se pudo iniciar la cámara: ${message}`);
+            }
+        }
+
+        function stopCapture(reason = '') {
+            capturing = false;
+
+            if (cameraMP) {
+                try {
+                    cameraMP.stop();
+                } catch (err) {
+                    console.warn('No se pudo detener la cámara de MediaPipe', err);
+                }
+                cameraMP = null;
+            }
+
+            if (videoElement && videoElement.srcObject) {
+                stopMediaStream(videoElement.srcObject);
+                videoElement.srcObject = null;
+            }
+
+            if (activeStream) {
+                stopMediaStream(activeStream);
+                activeStream = null;
+            }
+
+            if (reason) {
+                console.info(`Captura detenida: ${reason}`);
             }
         }
 
@@ -1017,6 +1055,22 @@
                 }
             };
             window.addEventListener('click', onFirstClick, { once: true });
+        }
+
+        function setupLifecycleHandlers() {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && capturing) {
+                    shouldResumeCapture = true;
+                    stopCapture('pestaña oculta');
+                } else if (!document.hidden && mocapStarted && shouldResumeCapture) {
+                    shouldResumeCapture = false;
+                    startCapture();
+                }
+            });
+
+            const stopForNavigation = () => stopCapture('navegación o cierre');
+            window.addEventListener('pagehide', stopForNavigation);
+            window.addEventListener('beforeunload', stopForNavigation);
         }
 
         // Seguimiento de manos para detectar golpes
@@ -1129,6 +1183,7 @@
             loadTysonModel();
             loadOpponentModel();
             setupMocap();
+            setupLifecycleHandlers();
             startRoundAudio();
 
             window.addEventListener('resize', onWindowResize);
