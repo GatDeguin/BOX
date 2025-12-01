@@ -793,14 +793,36 @@
 
                     opponentMixer = new THREE.AnimationMixer(opponentRoot);
                     const animationFiles = [
-                        'animaciones/ataque/Boxing.fbx',
-                        'animaciones/ataque/Hook.fbx',
-                        'animaciones/ataque/Lead Jab.fbx',
-                        'animaciones/daño/Head Hit.fbx',
-                        'animaciones/movimiento/Walking.fbx',
-                        'animaciones/daño/Fall Over.fbx',
+                        { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
+                        { file: 'animaciones/ataque/Hook.fbx', loop: 'once' },
+                        { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
+                        { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once' },
+                        { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
+                        { file: 'animaciones/ataque/Pointing Forward.fbx', loop: 'once' },
+                        { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' },
+                        { file: 'animaciones/defensa/Dodging.fbx', loop: 'repeat' },
+                        { file: 'animaciones/defensa/Left Block.fbx', loop: 'repeat' },
+                        { file: 'animaciones/movimiento/Walking.fbx', loop: 'repeat' },
+                        { file: 'animaciones/movimiento/Walk back.fbx', loop: 'repeat' },
+                        { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
+                        { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Head Hit.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Light Hit To Head.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Medium Hit To Head.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Big Kidney Hit.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Taking Punch.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Receive Uppercut To The Face.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Convulsing.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/Dying.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Fall Over.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Fall Flat.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Knocked Down.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Livershot Knockdown.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Shoulder Hit And Fall.fbx', loop: 'once' },
+                        { file: 'animaciones/daño/caida/Laying.fbx', loop: 'repeat' },
+                        { file: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
                     ];
-                    animationFiles.forEach((file, idx) => {
+                    animationFiles.forEach(({ file, loop }) => {
                         const url = new URL(`./${file}`, import.meta.url).href;
                         loader.load(
                             url,
@@ -809,7 +831,9 @@
                                 const clip = animAsset.animations[0];
                                 clip.name = file;
                                 const action = opponentMixer.clipAction(clip);
-                                action.clampWhenFinished = true;
+                                const isLoop = loop === 'repeat';
+                                action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+                                action.clampWhenFinished = !isLoop;
                                 opponentActions.push({ name: file, action });
                                 if (!opponentCurrent) {
                                     opponentCurrent = action;

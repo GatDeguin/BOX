@@ -378,10 +378,37 @@
     const MODEL_URL = 'modelos/Tyson.fbx';
     const TEXTURE_URL = 'texturas/gltf_embedded_0.jpeg';
     const DEFAULT_ANIMATIONS = [
-      {
-        name: 'Idle to Fight (preset)',
-        url: 'animaciones/descanso/Action Idle To Fight Idle.fbx',
-      },
+      { name: 'Idle to Fight (preset)', url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
+      { name: 'Arm Stretching', url: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
+      { name: 'Situp To Idle', url: 'animaciones/descanso/Situp To Idle.fbx', loop: 'once' },
+      { name: 'Getting Up (rest)', url: 'animaciones/descanso/Getting Up.fbx', loop: 'once' },
+      { name: 'Reaction', url: 'animaciones/descanso/Reaction.fbx', loop: 'once' },
+      { name: 'Walking', url: 'animaciones/movimiento/Walking.fbx', loop: 'repeat' },
+      { name: 'Walk Back', url: 'animaciones/movimiento/Walk back.fbx', loop: 'repeat' },
+      { name: 'Boxing Combo', url: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
+      { name: 'Lead Jab', url: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
+      { name: 'Hook', url: 'animaciones/ataque/Hook.fbx', loop: 'once' },
+      { name: 'Jab Cross', url: 'animaciones/ataque/Jab Cross.fbx', loop: 'once' },
+      { name: 'Illegal Elbow Punch', url: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
+      { name: 'Pointing Forward', url: 'animaciones/ataque/Pointing Forward.fbx', loop: 'once' },
+      { name: 'Punching Bag', url: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' },
+      { name: 'Dodging', url: 'animaciones/defensa/Dodging.fbx', loop: 'repeat' },
+      { name: 'Left Block', url: 'animaciones/defensa/Left Block.fbx', loop: 'repeat' },
+      { name: 'Head Hit', url: 'animaciones/daño/Head Hit.fbx', loop: 'once' },
+      { name: 'Light Hit To Head', url: 'animaciones/daño/Light Hit To Head.fbx', loop: 'once' },
+      { name: 'Medium Hit To Head', url: 'animaciones/daño/Medium Hit To Head.fbx', loop: 'once' },
+      { name: 'Big Kidney Hit', url: 'animaciones/daño/Big Kidney Hit.fbx', loop: 'once' },
+      { name: 'Taking Punch', url: 'animaciones/daño/Taking Punch.fbx', loop: 'once' },
+      { name: 'Receive Uppercut To The Face', url: 'animaciones/daño/Receive Uppercut To The Face.fbx', loop: 'once' },
+      { name: 'Convulsing', url: 'animaciones/daño/Convulsing.fbx', loop: 'once' },
+      { name: 'Dying', url: 'animaciones/daño/Dying.fbx', loop: 'once' },
+      { name: 'Fall Flat', url: 'animaciones/daño/caida/Fall Flat.fbx', loop: 'once' },
+      { name: 'Fall Over', url: 'animaciones/daño/caida/Fall Over.fbx', loop: 'once' },
+      { name: 'Knocked Down', url: 'animaciones/daño/caida/Knocked Down.fbx', loop: 'once' },
+      { name: 'Livershot Knockdown', url: 'animaciones/daño/caida/Livershot Knockdown.fbx', loop: 'once' },
+      { name: 'Shoulder Hit And Fall', url: 'animaciones/daño/caida/Shoulder Hit And Fall.fbx', loop: 'once' },
+      { name: 'Laying', url: 'animaciones/daño/caida/Laying.fbx', loop: 'repeat' },
+      { name: 'Getting Up (fall)', url: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
     ];
 
     const POSE_LM = {
@@ -744,9 +771,11 @@
           }
 
           if (pendingClips.length) {
-            pendingClips.forEach(({ clip, name }) => {
+            pendingClips.forEach(({ clip, name, loop }) => {
               const action = mixer.clipAction(clip);
-              action.loop = THREE.LoopRepeat;
+              const shouldLoop = loop !== 'once';
+              action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+              action.clampWhenFinished = !shouldLoop;
               actions[name] = action;
               addAnimationOption(name);
             });
@@ -770,7 +799,7 @@
       );
     }
 
-    function loadAnimationFBXFromURL(url, displayName) {
+    function loadAnimationFBXFromURL(url, displayName, loopMode = 'repeat') {
       const loader = new FBXLoader();
       loader.load(
         url,
@@ -789,10 +818,13 @@
 
             if (!modelRoot || !mixer) {
               // Guardamos la animación para engancharla cuando el modelo esté listo.
-              pendingClips.push({ clip, name });
+              pendingClips.push({ clip, name, loop: loopMode });
             } else {
               const action = mixer.clipAction(clip);
-              action.loop = THREE.LoopRepeat;
+              const shouldLoop = loopMode !== 'once';
+              action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+              action.clampWhenFinished = !shouldLoop;
+              action.enabled = true;
               actions[name] = action;
               addAnimationOption(name);
             }
@@ -831,7 +863,7 @@
 
     // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
     DEFAULT_ANIMATIONS.forEach((entry) => {
-      loadAnimationFBXFromURL(entry.url, entry.name);
+      loadAnimationFBXFromURL(entry.url, entry.name, entry.loop);
     });
 
     function onWindowResize() {
