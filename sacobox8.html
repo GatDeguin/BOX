@@ -352,9 +352,7 @@
             ]
         };
 
-        let restBreathTimer = null;
-        let restBreathingActive = false;
-        const animationAudioTimers = [];
+        let animationDirector = null;
 
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
@@ -570,10 +568,6 @@
         let skeleton = null;
         const bonesByName = {};
         let mixer = null;
-        const loadedAnimations = [];
-        let animationQueue = [];
-        let activeAction = null;
-        let autoComboTimer = null;
         const tysonTexture = new THREE.TextureLoader().load(TYSON_TEXTURE_URL);
         tysonTexture.colorSpace = THREE.SRGBColorSpace;
         tysonTexture.flipY = false;
@@ -862,124 +856,31 @@
             'animaciones/damage/'
         ];
 
+        const ANIMATION_LIBRARY = [
+            { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat', category: 'attack' },
+            { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once', category: 'attack' },
+            { file: 'animaciones/ataque/Hook.fbx', loop: 'once', category: 'attack' },
+            { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once', category: 'attack' },
+            { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once', category: 'attack' },
+            { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat', category: 'attack' },
+            { file: 'animaciones/defensa/Dodging.fbx', loop: 'once', category: 'defense' },
+            { file: 'animaciones/defensa/Left Block.fbx', loop: 'once', category: 'defense' },
+            { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat', category: 'rest' },
+            { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once', category: 'rest' },
+            { file: 'animaciones/descanso/Pointing Forward.fbx', loop: 'once', category: 'rest' }
+        ];
+
+        const ANIMATION_RULES = {
+            crossFade: { in: 0.2, out: 0.25 },
+            autoDelayMs: () => 500 + Math.random() * 800,
+            rest: {
+                initialDelayMs: () => 2000 + Math.random() * 2500,
+                cadenceMs: () => 6000 + Math.random() * 4500
+            }
+        };
+
         function isAnimationAllowed(file = '') {
             return !BLOCKED_ANIMATION_SUBSTRINGS.some((pattern) => file.includes(pattern));
-        }
-
-        function loadTysonAnimations() {
-            if (!tysonRoot) return;
-            const loader = new FBXLoader();
-
-            const attackClips = [
-                { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat' },
-                { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once' },
-                { file: 'animaciones/ataque/Hook.fbx', loop: 'once' },
-                { file: 'animaciones/ataque/Jab Cross.fbx', loop: 'once' },
-                { file: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: 'once' },
-                { file: 'animaciones/ataque/Punching Bag.fbx', loop: 'repeat' }
-            ];
-
-            const defenseClips = [
-                { file: 'animaciones/defensa/Dodging.fbx', loop: 'once' },
-                { file: 'animaciones/defensa/Left Block.fbx', loop: 'once' }
-            ];
-
-            const restClips = [
-                { file: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
-                { file: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
-                { file: 'animaciones/descanso/Pointing Forward.fbx', loop: 'once' }
-            ];
-
-            const files = [
-                ...attackClips.map((clip) => ({ ...clip, category: 'attack' })),
-                ...defenseClips.map((clip) => ({ ...clip, category: 'defense' })),
-                ...restClips.map((clip) => ({ ...clip, category: 'rest' }))
-            ].filter(({ file }) => {
-                const allowed = isAnimationAllowed(file);
-                if (!allowed) console.warn('Animación bloqueada por configuración:', file);
-                return allowed;
-            });
-
-            let loaded = 0;
-            files.forEach(({ file, loop, category }) => {
-                loader.load(
-                    file,
-                    (anim) => {
-                        if (anim.animations && anim.animations.length > 0 && mixer) {
-                            const clip = anim.animations[0];
-                            const action = mixer.clipAction(clip);
-                            const isLoop = loop === 'repeat';
-                            action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
-                            action.clampWhenFinished = !isLoop;
-                            action.enabled = true;
-                            loadedAnimations.push({ name: file, action, category });
-                        }
-                        loaded++;
-                        if (loaded === files.length) {
-                            refillAnimationQueue();
-                            startAnimationPlaylist();
-                        }
-                    },
-                    undefined,
-                    (err) => {
-                        console.error('No se pudo cargar animación', file, err);
-                        loaded++;
-                        if (loaded === files.length) {
-                            refillAnimationQueue();
-                            startAnimationPlaylist();
-                        }
-                    }
-                );
-            });
-        }
-
-        function refillAnimationQueue() {
-            const filtered = loadedAnimations.filter(({ action }) => action !== activeAction);
-            const pool = filtered.length > 0 ? filtered : loadedAnimations.slice();
-            animationQueue = shuffleArray(pool.slice());
-
-            if (animationQueue.length > 1 && animationQueue[0].action === activeAction) {
-                const swapIndex = animationQueue.findIndex(({ action }) => action !== activeAction);
-                if (swapIndex > 0) {
-                    const [next] = animationQueue.splice(swapIndex, 1);
-                    animationQueue.unshift(next);
-                }
-            }
-        }
-
-        function startAnimationPlaylist() {
-            if (!AUTO_ANIMATION_ENABLED || loadedAnimations.length === 0) return;
-            initAudioContext();
-            playNextAnimation();
-        }
-
-        function playNextAnimation() {
-            if (!mixer || loadedAnimations.length === 0) return;
-            if (animationQueue.length === 0) refillAnimationQueue();
-
-            const pick = animationQueue.shift();
-            if (activeAction && activeAction !== pick.action) {
-                activeAction.fadeOut(0.25);
-            }
-            pick.action.reset();
-            pick.action.fadeIn(0.2);
-            pick.action.play();
-            activeAction = pick.action;
-
-            clearAnimationAudioCues();
-            const category = pick.category || getClipCategory(pick.name);
-            handleBreathingForClip(pick.name);
-            if (category === 'attack') {
-                scheduleAttackAudio(pick.action, pick.name);
-            } else if (category === 'defense') {
-                scheduleDefenseAudio(pick.action);
-            }
-
-            if (autoComboTimer) clearTimeout(autoComboTimer);
-            const duration = (pick.action.getClip()?.duration || 3) * 1000;
-            autoComboTimer = setTimeout(() => {
-                playNextAnimation();
-            }, duration + 500 + Math.random() * 800);
         }
 
         function getClipCategory(name = '') {
@@ -988,71 +889,6 @@
             if (name.includes('animaciones/defensa/')) return 'defense';
             if (name.includes('animaciones/descanso/')) return 'rest';
             return null;
-        }
-
-        function handleBreathingForClip(name = '') {
-            const isRestClip = getClipCategory(name) === 'rest';
-            if (isRestClip) {
-                restBreathingActive = true;
-                resetRestBreathingTimers();
-                const initialDelay = 2000 + Math.random() * 2500;
-                scheduleRestBreath(initialDelay);
-            } else {
-                restBreathingActive = false;
-                resetRestBreathingTimers();
-            }
-        }
-
-        function scheduleRestBreath(delayMs) {
-            resetRestBreathingTimers();
-            restBreathTimer = setTimeout(() => {
-                if (!restBreathingActive) return;
-                if (audioInitialized) playBreath();
-                const jitter = 6000 + Math.random() * 4500;
-                scheduleRestBreath(jitter);
-            }, delayMs);
-        }
-
-        function resetRestBreathingTimers() {
-            if (restBreathTimer) {
-                clearTimeout(restBreathTimer);
-                restBreathTimer = null;
-            }
-        }
-
-        function scheduleAttackAudio(action, clipName = '') {
-            const clip = action?.getClip?.();
-            if (!clip || !(typeof clipName === 'string' && clipName.includes('animaciones/ataque/'))) return;
-
-            const cueTimes = extractImpactCueTimes(clip);
-            const shoutCueIndex = Math.random() > 0.4 ? Math.floor(Math.random() * cueTimes.length) : -1;
-
-            cueTimes.forEach((timeSec, idx) => {
-                const delay = Math.max(0, timeSec * 1000);
-                const timerId = setTimeout(() => {
-                    if (!audioInitialized) return;
-                    playImpactSound(visualConfig.bag.punchForce);
-                    if (idx === shoutCueIndex) playShout();
-                }, delay);
-                animationAudioTimers.push(timerId);
-            });
-        }
-
-        function scheduleDefenseAudio(action) {
-            const clip = action?.getClip?.();
-            if (!clip) return;
-
-            const cueTimes = extractImpactCueTimes(clip);
-            const pickTime = cueTimes.length ? cueTimes[0] : clip.duration * 0.45;
-            const delay = Math.max(0, pickTime * 1000);
-
-            const timerId = setTimeout(() => {
-                if (!audioInitialized) return;
-                playImpactSound(visualConfig.bag.punchForce * 0.6);
-                if (Math.random() > 0.6) playBreath();
-            }, delay);
-
-            animationAudioTimers.push(timerId);
         }
 
         function extractImpactCueTimes(clip) {
@@ -1083,11 +919,198 @@
             return spaced;
         }
 
-        function clearAnimationAudioCues() {
-            while (animationAudioTimers.length) {
-                const timer = animationAudioTimers.pop();
-                clearTimeout(timer);
+        class AnimationSoundDirector {
+            constructor({ mixer }) {
+                this.mixer = mixer;
+                this.loader = new FBXLoader();
+                this.actions = [];
+                this.queue = [];
+                this.activeAction = null;
+                this.autoComboTimer = null;
+                this.audioTimers = [];
+                this.restBreathing = false;
+                this.restTimer = null;
             }
+
+            async loadLibrary(definitions = ANIMATION_LIBRARY) {
+                const allowed = definitions.filter(({ file }) => {
+                    const ok = isAnimationAllowed(file);
+                    if (!ok) console.warn('Animación bloqueada por configuración:', file);
+                    return ok;
+                });
+
+                const tasks = allowed.map((def) => this.loadClip(def));
+                await Promise.all(tasks);
+                this.prepareQueue();
+            }
+
+            loadClip(definition) {
+                return new Promise((resolve) => {
+                    this.loader.load(
+                        definition.file,
+                        (anim) => {
+                            if (anim.animations && anim.animations.length > 0 && this.mixer) {
+                                const clip = anim.animations[0];
+                                const action = this.mixer.clipAction(clip);
+                                const isLoop = definition.loop === 'repeat';
+                                action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+                                action.clampWhenFinished = !isLoop;
+                                action.enabled = true;
+                                this.actions.push({ ...definition, action });
+                            }
+                            resolve();
+                        },
+                        undefined,
+                        (err) => {
+                            console.error('No se pudo cargar animación', definition.file, err);
+                            resolve();
+                        }
+                    );
+                });
+            }
+
+            startAutoPlaylist() {
+                if (!AUTO_ANIMATION_ENABLED || this.actions.length === 0) return;
+                initAudioContext();
+                this.playNext();
+            }
+
+            prepareQueue() {
+                const pool = this.actions.filter(({ action }) => action !== this.activeAction);
+                const source = pool.length > 0 ? pool : this.actions.slice();
+                this.queue = shuffleArray(source.slice());
+
+                if (this.queue.length > 1 && this.queue[0].action === this.activeAction) {
+                    const swapIndex = this.queue.findIndex(({ action }) => action !== this.activeAction);
+                    if (swapIndex > 0) {
+                        const [next] = this.queue.splice(swapIndex, 1);
+                        this.queue.unshift(next);
+                    }
+                }
+            }
+
+            playNext() {
+                if (!this.mixer || this.actions.length === 0) return;
+                if (this.queue.length === 0) this.prepareQueue();
+                const next = this.queue.shift();
+                if (!next) return;
+
+                this.stopAutoAdvance();
+                this.clearAudioCues();
+                this.stopRestBreathing();
+
+                if (this.activeAction && this.activeAction !== next.action) {
+                    this.activeAction.fadeOut(ANIMATION_RULES.crossFade.out);
+                }
+
+                next.action.reset();
+                next.action.fadeIn(ANIMATION_RULES.crossFade.in);
+                next.action.play();
+                this.activeAction = next.action;
+
+                this.handleAudioFor(next);
+                this.scheduleAutoAdvance(next);
+            }
+
+            handleAudioFor(entry) {
+                const category = entry.category || getClipCategory(entry.name);
+                this.handleRestBreathing(category);
+
+                if (category === 'attack') {
+                    this.scheduleAttackAudio(entry);
+                } else if (category === 'defense') {
+                    this.scheduleDefenseAudio(entry);
+                }
+            }
+
+            scheduleAutoAdvance(entry) {
+                const duration = (entry.action.getClip()?.duration || 3) * 1000;
+                this.autoComboTimer = setTimeout(() => this.playNext(), duration + ANIMATION_RULES.autoDelayMs());
+            }
+
+            stopAutoAdvance() {
+                if (this.autoComboTimer) {
+                    clearTimeout(this.autoComboTimer);
+                    this.autoComboTimer = null;
+                }
+            }
+
+            scheduleAttackAudio(entry) {
+                const clip = entry.action?.getClip?.();
+                if (!clip || !(typeof entry.name === 'string' && entry.name.includes('animaciones/ataque/'))) return;
+
+                const cueTimes = extractImpactCueTimes(clip);
+                const shoutCueIndex = Math.random() > 0.4 ? Math.floor(Math.random() * cueTimes.length) : -1;
+
+                cueTimes.forEach((timeSec, idx) => {
+                    this.queueAudioCue(timeSec * 1000, () => {
+                        if (!audioInitialized) return;
+                        playImpactSound(visualConfig.bag.punchForce);
+                        if (idx === shoutCueIndex) playShout();
+                    });
+                });
+            }
+
+            scheduleDefenseAudio(entry) {
+                const clip = entry.action?.getClip?.();
+                if (!clip) return;
+
+                const cueTimes = extractImpactCueTimes(clip);
+                const pickTime = cueTimes.length ? cueTimes[0] : clip.duration * 0.45;
+
+                this.queueAudioCue(pickTime * 1000, () => {
+                    if (!audioInitialized) return;
+                    playImpactSound(visualConfig.bag.punchForce * 0.6);
+                    if (Math.random() > 0.6) playBreath();
+                });
+            }
+
+            handleRestBreathing(category) {
+                if (category === 'rest') {
+                    this.restBreathing = true;
+                    this.scheduleRestBreath(ANIMATION_RULES.rest.initialDelayMs());
+                } else {
+                    this.stopRestBreathing();
+                }
+            }
+
+            scheduleRestBreath(delayMs) {
+                this.stopRestBreathing();
+                this.restBreathing = true;
+                this.restTimer = setTimeout(() => {
+                    if (!this.restBreathing) return;
+                    if (audioInitialized) playBreath();
+                    this.scheduleRestBreath(ANIMATION_RULES.rest.cadenceMs());
+                }, delayMs);
+            }
+
+            stopRestBreathing() {
+                this.restBreathing = false;
+                if (this.restTimer) {
+                    clearTimeout(this.restTimer);
+                    this.restTimer = null;
+                }
+            }
+
+            queueAudioCue(delayMs, cb) {
+                const timerId = setTimeout(cb, Math.max(0, delayMs));
+                this.audioTimers.push(timerId);
+            }
+
+            clearAudioCues() {
+                while (this.audioTimers.length) {
+                    clearTimeout(this.audioTimers.pop());
+                }
+            }
+        }
+
+        function loadTysonAnimations() {
+            if (!tysonRoot) return;
+
+            animationDirector = new AnimationSoundDirector({ mixer });
+            animationDirector.loadLibrary().then(() => {
+                animationDirector.startAutoPlaylist();
+            });
         }
 
         function keepTysonFeetOnFloor() {
