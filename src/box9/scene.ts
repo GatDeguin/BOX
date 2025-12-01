@@ -1,6 +1,8 @@
 import {
   Color,
   Clock,
+  Mesh,
+  Object3D,
   PerspectiveCamera,
   Scene,
   SpotLight,
@@ -8,7 +10,8 @@ import {
   Vector3,
   WebGLRenderer
 } from 'three';
-import { CharacterId } from './state';
+import { AssetHooks, AssetManager } from './assets';
+import { box9Store, CharacterId, RingId } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
@@ -44,6 +47,8 @@ interface SceneFlowContext {
   clock: Clock;
   selectionLight: SpotLight | null;
   eventHandlers: Record<string, EventListener>;
+  ringModel: Object3D | null;
+  fighterModel: Object3D | null;
 }
 
 interface SelectionTarget {
@@ -84,6 +89,18 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
 };
 
 let context: SceneFlowContext | null = null;
+const assetHookListeners = new Set<AssetHooks>();
+const assetManager = new AssetManager({
+  onProgress: (url, ratio) => {
+    assetHookListeners.forEach((hooks) => hooks.onProgress?.(url, ratio));
+  },
+  onError: (url, error) => {
+    assetHookListeners.forEach((hooks) => hooks.onError?.(url, error));
+  }
+});
+
+let activeRingRequest = 0;
+let activeFighterRequest = 0;
 
 function applyPhaseEffects(phase: ScenePhase) {
   const profile = PHASE_EFFECTS[phase];
@@ -212,11 +229,17 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     resizeHandler,
     clock: new Clock(),
     selectionLight,
-    eventHandlers
+    eventHandlers,
+    ringModel: null,
+    fighterModel: null
   };
 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
   applyPhaseEffects('intro');
+
+  const state = box9Store.getState();
+  loadRing(state.ring).then((ring) => attachRingModel(ring));
+  loadFighter(state.character).then((fighter) => attachFighterModel(fighter, state.character));
 
   return context;
 }
@@ -229,14 +252,19 @@ function setActiveCamera(camera: PerspectiveCamera) {
 }
 
 function registerSceneEvents(): Record<string, EventListener> {
+  const handleCharacterSelected = (event: Event) => {
+    const detail = (event as CustomEvent<{ character?: CharacterId }>).detail;
+    if (detail?.character) {
+      activateSelection(detail.character);
+      replaceFighter(detail.character);
+    } else {
+      replaceFighter(box9Store.getState().character);
+    }
+  };
+
   const handlers: Record<string, EventListener> = {
     'box9:start-selection': () => activateSelection(),
-    'box9:character-selected': (event: Event) => {
-      const detail = (event as CustomEvent<{ character?: CharacterId }>).detail;
-      if (detail?.character) {
-        activateSelection(detail.character);
-      }
-    },
+    'box9:character-selected': handleCharacterSelected,
     'box9:freecam-change': (event: Event) => {
       const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
       toggleFreeCamera(detail?.enabled);
@@ -248,6 +276,10 @@ function registerSceneEvents(): Record<string, EventListener> {
       } else {
         stopAnimationLoop();
       }
+    },
+    'box9:ring-change': () => {
+      const state = box9Store.getState();
+      replaceRing(state.ring);
     }
   };
 
@@ -380,6 +412,86 @@ export function playPoseAnimation(character: CharacterId): void {
   context.selectionLight.intensity = 1.75;
 }
 
+export function loadRing(ring: RingId, hooks?: AssetHooks): Promise<Object3D> {
+  const unregister = hooks ? registerAssetHooks(hooks) : null;
+  return assetManager.loadRing(ring).finally(() => unregister?.());
+}
+
+export function loadFighter(character: CharacterId, hooks?: AssetHooks): Promise<Object3D> {
+  const unregister = hooks ? registerAssetHooks(hooks) : null;
+  return assetManager.loadFighter(character).finally(() => unregister?.());
+}
+
+function registerAssetHooks(hooks: AssetHooks) {
+  assetHookListeners.add(hooks);
+  return () => assetHookListeners.delete(hooks);
+}
+
+function replaceRing(ring: RingId) {
+  const requestId = ++activeRingRequest;
+  loadRing(ring)
+    .then((model) => {
+      if (requestId !== activeRingRequest) return;
+      attachRingModel(model);
+    })
+    .catch(() => {});
+}
+
+function replaceFighter(character: CharacterId) {
+  const requestId = ++activeFighterRequest;
+  loadFighter(character)
+    .then((model) => {
+      if (requestId !== activeFighterRequest) return;
+      attachFighterModel(model, character);
+    })
+    .catch(() => {});
+}
+
+function attachRingModel(model: Object3D) {
+  if (!context) return;
+  disposeAndRemove(context.ringModel);
+  positionRing(model);
+  context.scene.add(model);
+  context.ringModel = model;
+}
+
+function attachFighterModel(model: Object3D, character: CharacterId) {
+  if (!context) return;
+  disposeAndRemove(context.fighterModel);
+  positionFighter(model, character);
+  context.scene.add(model);
+  context.fighterModel = model;
+}
+
+function positionRing(model: Object3D) {
+  model.position.set(0, 0, 0);
+}
+
+function positionFighter(model: Object3D, character: CharacterId) {
+  const target = SELECTION_FOCUS[character];
+  model.position.set(target.lookAt.x, 0, target.lookAt.z);
+}
+
+function disposeAndRemove(object: Object3D | null) {
+  if (!context || !object) return;
+  context.scene.remove(object);
+  disposeObject(object);
+}
+
+function disposeObject(object: Object3D) {
+  object.traverse((child) => {
+    const mesh = child as Mesh;
+    if (mesh.isMesh) {
+      mesh.geometry?.dispose();
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((material) => material.dispose?.());
+      } else {
+        mesh.material?.dispose?.();
+      }
+    }
+  });
+}
+
 export function destroy(): void {
   if (!context) return;
 
@@ -394,6 +506,9 @@ export function destroy(): void {
   Object.entries(context.eventHandlers).forEach(([name, handler]) => {
     window.removeEventListener(name, handler);
   });
+
+  disposeAndRemove(context.ringModel);
+  disposeAndRemove(context.fighterModel);
 
   context.composer.dispose();
   context.renderer.dispose();
