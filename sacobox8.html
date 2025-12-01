@@ -863,6 +863,8 @@
             'animaciones/damage/'
         ];
 
+        const BLOCKED_ANIMATION_NAMES = ['taking punch'];
+
         const ANIMATION_LIBRARY = [
             { file: 'animaciones/ataque/Boxing.fbx', loop: 'repeat', category: 'attack' },
             { file: 'animaciones/ataque/Lead Jab.fbx', loop: 'once', category: 'attack' },
@@ -958,6 +960,17 @@
                         (anim) => {
                             if (anim.animations && anim.animations.length > 0 && this.mixer) {
                                 const clip = anim.animations[0];
+                                const clipId = (definition.file || clip.name || '').toLowerCase();
+                                const isNameBlocked = BLOCKED_ANIMATION_NAMES.some((pattern) =>
+                                    clipId.includes(pattern)
+                                );
+
+                                if (isNameBlocked) {
+                                    console.warn('Animación bloqueada por nombre:', definition.file);
+                                    resolve();
+                                    return;
+                                }
+
                                 const action = this.mixer.clipAction(clip);
                                 const isLoop = definition.loop === 'repeat';
                                 action.loop = isLoop ? THREE.LoopRepeat : THREE.LoopOnce;
