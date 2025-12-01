@@ -267,6 +267,9 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     emitSceneEvent('start-selection');
   });
 
+  const helpPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-help]'));
+  const cardPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-card]'));
+
   const { backdrop, ringSelect, freeCamToggle } = createModal(
     () => {
       backdrop.style.display = 'none';
@@ -297,13 +300,41 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
   );
 
+  let lastSelectionStarted = store.getState().selectionStarted;
+
   store.subscribe((state) => {
     overlay.style.display = state.selectionStarted ? 'none' : 'flex';
     hud.style.display = state.selectionStarted ? 'flex' : 'none';
     updateHud();
+
+    if (state.selectionStarted !== lastSelectionStarted) {
+      emitSceneEvent('animation-toggle', { active: state.selectionStarted });
+      lastSelectionStarted = state.selectionStarted;
+    }
+
+    helpPanels.forEach((panel) => {
+      panel.style.display = state.selectionStarted ? 'none' : '';
+      panel.toggleAttribute('aria-hidden', state.selectionStarted);
+    });
+
+    cardPanels.forEach((panel) => {
+      panel.style.display = state.selectionStarted ? '' : 'none';
+      panel.toggleAttribute('aria-hidden', !state.selectionStarted);
+    });
   });
 
   container.append(overlay, hud, backdrop);
   root.appendChild(container);
-  initSelectionControls(store);
+  initSelectionControls(store, {
+    onStartSelection: (character) => {
+      emitSceneEvent('start-selection', { character });
+    },
+    onConfirmSelection: (character) => {
+      emitSceneEvent('character-selected', { character });
+      emitSceneEvent('animation-toggle', { active: false });
+    },
+    onIdle: (character) => {
+      emitSceneEvent('character-selected', { character });
+    }
+  });
 }

@@ -19,7 +19,16 @@ export function getFighterDetails(id: CharacterId): FighterDetails {
   return fighters.find((fighter) => fighter.id === id) ?? fighters[0];
 }
 
-export function initSelectionControls(store: Box9Store = box9Store) {
+export interface SelectionCallbacks {
+  onStartSelection?: (character: CharacterId) => void;
+  onConfirmSelection?: (character: CharacterId) => void;
+  onIdle?: (character: CharacterId) => void;
+}
+
+export function initSelectionControls(
+  store: Box9Store = box9Store,
+  callbacks: SelectionCallbacks = {}
+) {
   let currentIndex = fighters.findIndex((fighter) => fighter.id === store.getState().character);
   if (currentIndex === -1) currentIndex = 0;
 
@@ -38,8 +47,10 @@ export function initSelectionControls(store: Box9Store = box9Store) {
     store.setState({ character: id });
     if (animation === 'pose') {
       confirmCharacterSelection(id);
+      callbacks.onConfirmSelection?.(id);
     } else {
       playIdleAnimation(id);
+      callbacks.onIdle?.(id);
     }
   };
 
@@ -52,10 +63,19 @@ export function initSelectionControls(store: Box9Store = box9Store) {
   const confirm = () => {
     const fighter = fighters[currentIndex];
     applySelection(fighter.id, 'pose');
+    store.setState({ selectionStarted: false });
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
-    if (!store.getState().selectionStarted) return;
+    const state = store.getState();
+
+    if (!state.selectionStarted && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      beginSelection();
+      return;
+    }
+
+    if (!state.selectionStarted) return;
 
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
@@ -79,6 +99,12 @@ export function initSelectionControls(store: Box9Store = box9Store) {
       const right = pad.axes[0] > 0.4 || pad.buttons[15]?.pressed;
       const confirmPressed = pad.buttons[0]?.pressed || pad.buttons[9]?.pressed;
 
+      if (!store.getState().selectionStarted && confirmPressed) {
+        beginSelection();
+        lastGamepadConfirm = now;
+        return;
+      }
+
       if (left && now - lastGamepadMove > 220) {
         cycle(-1);
         lastGamepadMove = now;
@@ -98,12 +124,19 @@ export function initSelectionControls(store: Box9Store = box9Store) {
     }
   };
 
-  const handleStartSelection = () => {
-    activateSelection();
-    applySelection(fighters[currentIndex].id, 'idle');
+  const beginSelection = () => {
+    const character = fighters[currentIndex].id;
+    store.setState({ selectionStarted: true, character });
+    activateSelection(character);
+    callbacks.onStartSelection?.(character);
+    applySelection(character, 'idle');
     if (gamepadLoop === null) {
       gamepadLoop = requestAnimationFrame(pollGamepad);
     }
+  };
+
+  const handleStartSelection = () => {
+    beginSelection();
   };
 
   const handleChipSelection = (event: Event) => {

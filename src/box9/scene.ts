@@ -98,6 +98,16 @@ function ensureAnimationLoop() {
   context.animationFrame = requestAnimationFrame(animate);
 }
 
+function stopAnimationLoop() {
+  if (!context) return;
+  if (context.animationFrame !== null) {
+    cancelAnimationFrame(context.animationFrame);
+    context.animationFrame = null;
+  }
+
+  context.clock.stop();
+}
+
 function createRenderer(container: HTMLElement, backgroundColor: string | number): WebGLRenderer {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -230,6 +240,14 @@ function registerSceneEvents(): Record<string, EventListener> {
     'box9:freecam-change': (event: Event) => {
       const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
       toggleFreeCamera(detail?.enabled);
+    },
+    'box9:animation-toggle': (event: Event) => {
+      const detail = (event as CustomEvent<{ active?: boolean }>).detail;
+      if (detail?.active) {
+        ensureAnimationLoop();
+      } else {
+        stopAnimationLoop();
+      }
     }
   };
 
