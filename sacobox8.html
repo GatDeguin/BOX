@@ -329,11 +329,26 @@
         let audioInitialized = false;
         const audioBuffers = new Map();
         const audioFiles = {
-            impacts: ['sonidos/golpe_1.mp3', 'sonidos/golpe_2.mp3'],
+            impacts: [
+                'sonidos/golpe_1.mp3',
+                'sonidos/golpe_2.mp3',
+                'sonidos/golpe_3.mp3',
+                'sonidos/golpe_4.mp3',
+                'sonidos/golpe_5.mp3',
+                'sonidos/golpe_7.mp3',
+                'sonidos/golpe_8.mp3',
+                'sonidos/golpe_9.mp3',
+                'sonidos/golpe_10.mp3'
+            ],
             bell: 'sonidos/campana.mp3',
+            countdown: 'sonidos/cuenta_atras.wav',
             breath: 'sonidos/respira.wav',
             crowd: 'sonidos/publico_enojado.wav',
-            shout: 'sonidos/grito_1.wav'
+            shouts: [
+                'sonidos/grito_1.wav',
+                'sonidos/grito_2.wav',
+                'sonidos/grito_3.wav'
+            ]
         };
 
         // Head bob
@@ -898,10 +913,11 @@
         function startAnimationPlaylist() {
             if (!AUTO_ANIMATION_ENABLED || loadedAnimations.length === 0) return;
             initAudioContext();
-            setTimeout(() => playBell(), 250);
-            setTimeout(() => playBreath(), 500);
-            setTimeout(() => playCrowd(), 800);
-            setTimeout(() => playShout(), 1200);
+            setTimeout(() => playCountdown(), 150);
+            setTimeout(() => playBell(), 650);
+            setTimeout(() => playBreath(), 1100);
+            setTimeout(() => playCrowd(), 1400);
+            setTimeout(() => playShout(), 1800);
             playNextAnimation();
             startBreathCycle();
         }
@@ -2061,9 +2077,10 @@
             const entries = [];
             audioFiles.impacts.forEach((file) => entries.push(['impact:' + file, file]));
             entries.push(['bell', audioFiles.bell]);
+            entries.push(['countdown', audioFiles.countdown]);
             entries.push(['breath', audioFiles.breath]);
             entries.push(['crowd', audioFiles.crowd]);
-            entries.push(['shout', audioFiles.shout]);
+            audioFiles.shouts.forEach((file, idx) => entries.push([`shout:${idx}`, file]));
 
             for (const [key, file] of entries) {
                 try {
@@ -2104,9 +2121,17 @@
         }
 
         function playBell() { playBuffer('bell', { volume: 0.9 }); }
+        function playCountdown() { playBuffer('countdown', { volume: 0.85 }); }
         function playBreath() { playBuffer('breath', { volume: 0.35 + Math.random() * 0.15 }); }
         function playCrowd() { playBuffer('crowd', { volume: 0.6 }); }
-        function playShout() { playBuffer('shout', { volume: 0.65 + Math.random() * 0.2 }); }
+        function playShout() {
+            const shoutKeys = audioFiles.shouts
+                .map((_, idx) => `shout:${idx}`)
+                .filter((key) => audioBuffers.has(key));
+            if (shoutKeys.length === 0) return;
+            const pick = shoutKeys[Math.floor(Math.random() * shoutKeys.length)];
+            playBuffer(pick, { volume: 0.65 + Math.random() * 0.2 });
+        }
 
         function setupMuteButton() {
             const muteBtn = document.getElementById('muteBtn');
