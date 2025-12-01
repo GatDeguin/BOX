@@ -113,7 +113,8 @@ export class AssetManager {
     const loaderType = this.getLoaderType(url);
     const defaults = loaderType === 'fbx' ? DEFAULT_FBX_OPTIONS : DEFAULT_GLTF_OPTIONS;
     normalizeAsset(clonedScene, { ...defaults, ...options });
-    return { scene: clonedScene, animations: asset.animations };
+    const animations = asset.animations.map((clip) => clip.clone());
+    return { scene: clonedScene, animations };
   }
 
   private cloneAsset(asset: Object3D): Object3D {

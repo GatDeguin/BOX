@@ -590,7 +590,11 @@ function disposeObject(object: Object3D) {
 
 function resetFighterAnimation() {
   if (!context) return;
+  Object.values(context.fighterActions).forEach((action) => action?.stop());
   context.fighterMixer?.stopAllAction();
+  if (context.fighterModel) {
+    context.fighterMixer?.uncacheRoot(context.fighterModel);
+  }
   context.fighterMixer = null;
   context.fighterActions = {};
   context.activeFighterAction = null;
