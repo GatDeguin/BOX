@@ -65,6 +65,11 @@ interface SelectionTarget {
   highlight: Vector3;
 }
 
+interface FighterAnchor {
+  position: Vector3;
+  rotation: Vector3;
+}
+
 const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
   striker: {
     camera: new Vector3(-3.5, 2.8, 8),
@@ -80,6 +85,21 @@ const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
     camera: new Vector3(3.5, 2.8, 8),
     lookAt: new Vector3(1.5, 1.8, 0),
     highlight: new Vector3(1.5, 2.5, 0)
+  }
+};
+
+const FIGHTER_ANCHORS: Record<CharacterId, FighterAnchor> = {
+  striker: {
+    position: new Vector3(-1.6, 0, 0.8),
+    rotation: new Vector3(0, Math.PI / 10, 0)
+  },
+  brawler: {
+    position: new Vector3(0, 0, 0.9),
+    rotation: new Vector3(0, 0, 0)
+  },
+  counter: {
+    position: new Vector3(1.6, 0, 0.8),
+    rotation: new Vector3(0, -Math.PI / 10, 0)
   }
 };
 
@@ -471,6 +491,7 @@ export function toggleFreeCamera(enabled?: boolean): void {
 
 export function focusOnFighter(character: CharacterId): void {
   if (!context) return;
+  applyFighterAnchor(character);
   const target = SELECTION_FOCUS[character];
   context.selectionTarget = {
     camera: target.camera.clone(),
@@ -552,7 +573,7 @@ function attachFighterModel(asset: LoadedAsset, character: CharacterId) {
   resetFighterAnimation();
   disposeAndRemove(context.fighterModel);
   const { scene, animations } = asset;
-  positionFighter(scene, character);
+  applyAnchorToModel(scene, character);
   context.scene.add(scene);
   context.fighterModel = scene;
   setupFighterAnimation(scene, animations);
@@ -563,9 +584,16 @@ function positionRing(model: Object3D) {
   model.position.set(0, 0, 0);
 }
 
-function positionFighter(model: Object3D, character: CharacterId) {
-  const target = SELECTION_FOCUS[character];
-  model.position.set(target.lookAt.x, 0, target.lookAt.z);
+function applyFighterAnchor(character: CharacterId) {
+  if (!context?.fighterModel) return;
+  applyAnchorToModel(context.fighterModel, character);
+}
+
+function applyAnchorToModel(model: Object3D, character: CharacterId) {
+  const anchor = FIGHTER_ANCHORS[character];
+  if (!anchor) return;
+  model.position.copy(anchor.position);
+  model.rotation.set(anchor.rotation.x, anchor.rotation.y, anchor.rotation.z);
 }
 
 function disposeAndRemove(object: Object3D | null) {
