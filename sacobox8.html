@@ -329,11 +329,11 @@
         let audioInitialized = false;
         const audioBuffers = new Map();
         const audioFiles = {
-            impacts: ['golpe_1.mp3', 'golpe_2.mp3'],
-            bell: 'campana.mp3',
-            breath: 'respira.wav',
-            crowd: 'publico_enojado.wav',
-            shout: 'grito_1.wav'
+            impacts: ['sonidos/golpe_1.mp3', 'sonidos/golpe_2.mp3'],
+            bell: 'sonidos/campana.mp3',
+            breath: 'sonidos/respira.wav',
+            crowd: 'sonidos/publico_enojado.wav',
+            shout: 'sonidos/grito_1.wav'
         };
 
         // Head bob
@@ -478,8 +478,8 @@
         // ============================
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
-        const MODEL_URL = 'Tyson.fbx';
-        const TYSON_TEXTURE_URL = 'gltf_embedded_0.jpeg';
+        const MODEL_URL = 'modelos/Tyson.fbx';
+        const TYSON_TEXTURE_URL = 'texturas/gltf_embedded_0.jpeg';
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
@@ -840,12 +840,12 @@
             if (!tysonRoot) return;
             const loader = new FBXLoader();
             const files = [
-                'Punching Bag.fbx',
-                'Boxing.fbx',
-                'Lead Jab.fbx',
-                'Hook.fbx',
-                'Arm Stretching.fbx',
-                'Walking.fbx'
+                'modelos/Punching Bag.fbx',
+                'animaciones/Boxing.fbx',
+                'animaciones/Lead Jab.fbx',
+                'animaciones/Hook.fbx',
+                'animaciones/Arm Stretching.fbx',
+                'animaciones/Walking.fbx'
             ];
 
             let loaded = 0;

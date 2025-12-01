@@ -291,12 +291,12 @@
 
         const audioConfig = { enabled: true, volume: 0.8 };
         const audioElements = {
-            bell: new Audio('campana.mp3'),
-            crowd: new Audio('publico_enojado.wav'),
-            breathe: new Audio('respira.wav'),
-            hit1: new Audio('golpe_1.mp3'),
-            hit2: new Audio('golpe_2.mp3'),
-            shout: new Audio('grito_1.wav')
+            bell: new Audio('sonidos/campana.mp3'),
+            crowd: new Audio('sonidos/publico_enojado.wav'),
+            breathe: new Audio('sonidos/respira.wav'),
+            hit1: new Audio('sonidos/golpe_1.mp3'),
+            hit2: new Audio('sonidos/golpe_2.mp3'),
+            shout: new Audio('sonidos/grito_1.wav')
         };
         Object.values(audioElements).forEach(a => { a.volume = audioConfig.volume; a.loop = false; });
 
@@ -446,8 +446,8 @@
         // ============================
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
-        const MODEL_URL = new URL('./Tyson.fbx', import.meta.url).href;
-        const RING_URL = new URL('./Ring 3.glb', import.meta.url).href;
+        const MODEL_URL = new URL('./modelos/Tyson.fbx', import.meta.url).href;
+        const RING_URL = new URL('./modelos/Ring 3.glb', import.meta.url).href;
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
@@ -793,12 +793,12 @@
 
                     opponentMixer = new THREE.AnimationMixer(opponentRoot);
                     const animationFiles = [
-                        'Boxing.fbx',
-                        'Hook.fbx',
-                        'Lead Jab.fbx',
-                        'Head Hit.fbx',
-                        'Walking.fbx',
-                        'Fall Over.fbx',
+                        'animaciones/Boxing.fbx',
+                        'animaciones/Hook.fbx',
+                        'animaciones/Lead Jab.fbx',
+                        'animaciones/Head Hit.fbx',
+                        'animaciones/Walking.fbx',
+                        'animaciones/Fall Over.fbx',
                     ];
                     animationFiles.forEach((file, idx) => {
                         const url = new URL(`./${file}`, import.meta.url).href;
