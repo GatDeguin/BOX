@@ -1,5 +1,5 @@
 export type RingId = 'classic' | 'neon' | 'rooftop';
-export type CharacterId = 'striker' | 'brawler' | 'counter';
+export type CharacterId = 'mma' | 'bodybuilder' | 'tyson';
 
 export interface Box9State {
   ring: RingId;
@@ -19,7 +19,7 @@ export interface Box9Store {
 const defaultState: Box9State = {
   ring: 'classic',
   freeCamera: false,
-  character: 'striker',
+  character: 'mma',
   selectionStarted: false
 };
 

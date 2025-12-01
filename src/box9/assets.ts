@@ -37,10 +37,9 @@ const RING_ASSETS: Record<RingId | 'default', AssetOptions & { path: string }> =
   default: { path: 'modelos/Ring.glb' }
 };
 
-const FIGHTER_ASSETS: Record<CharacterId | 'tyson' | 'dummy' | 'bag', AssetOptions & { path: string }> = {
-  striker: { path: 'modelos/Tyson.fbx', rotation: new Euler(0, Math.PI, 0) },
-  brawler: { path: 'modelos/Dummy.glb' },
-  counter: { path: 'modelos/Punching Bag.fbx', rotation: new Euler(-Math.PI / 2, 0, 0) },
+const FIGHTER_ASSETS: Record<CharacterId | 'dummy' | 'bag', AssetOptions & { path: string }> = {
+  mma: { path: 'modelos/MMA.glb' },
+  bodybuilder: { path: 'modelos/BodyBuilder.glb' },
   tyson: { path: 'modelos/Tyson.fbx', rotation: new Euler(0, Math.PI, 0) },
   dummy: { path: 'modelos/Dummy.glb' },
   bag: { path: 'modelos/Punching Bag.fbx', rotation: new Euler(-Math.PI / 2, 0, 0) }
@@ -84,7 +83,7 @@ export class AssetManager {
   }
 
   async loadFighter(fighterId: CharacterId | string | number): Promise<LoadedAsset> {
-    const key = String(fighterId) as CharacterId | 'tyson';
+    const key = String(fighterId) as CharacterId;
     const config = FIGHTER_ASSETS[key] ?? FIGHTER_ASSETS.tyson;
     const baseOptions = config.path.toLowerCase().endsWith('.fbx')
       ? DEFAULT_FBX_OPTIONS

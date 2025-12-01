@@ -7,12 +7,34 @@ export interface FighterDetails {
   weight: string;
   reach: string;
   speed: string;
+  personality: string;
 }
 
 const fighters: FighterDetails[] = [
-  { id: 'striker', name: 'Striker', weight: '78 kg', reach: '188 cm', speed: 'Explosiva' },
-  { id: 'brawler', name: 'Brawler', weight: '90 kg', reach: '182 cm', speed: 'Implacable' },
-  { id: 'counter', name: 'Counter', weight: '82 kg', reach: '192 cm', speed: 'Precisa' }
+  {
+    id: 'mma',
+    name: 'MMA',
+    weight: '84 kg',
+    reach: '193 cm',
+    speed: 'Versátil',
+    personality: 'Competidor táctico, mezcla derribos con boxeo limpio y lee cada distancia.'
+  },
+  {
+    id: 'bodybuilder',
+    name: 'Bodybuilder',
+    weight: '102 kg',
+    reach: '185 cm',
+    speed: 'Potente',
+    personality: 'Fuerza bruta y presencia dominante, avanza firme buscando golpes demoledores.'
+  },
+  {
+    id: 'tyson',
+    name: 'Tyson',
+    weight: '97 kg',
+    reach: '180 cm',
+    speed: 'Explosiva',
+    personality: 'Agresividad pura, combina desplazamientos bajos con ganchos veloces al mentón.'
+  }
 ];
 
 export function getFighterDetails(id: CharacterId): FighterDetails {
