@@ -184,6 +184,13 @@ function createHud(
   chipList.className = 'box9-row';
   chipList.style.flexWrap = 'wrap';
 
+  const setActiveChip = (selectedCharacter: CharacterId) => {
+    const chips = chipList.querySelectorAll<HTMLElement>('.box9-chip');
+    chips.forEach((chip) => {
+      chip.classList.toggle('active', chip.dataset.character === selectedCharacter);
+    });
+  };
+
   Object.entries(characterOptions).forEach(([id, label]) => {
     const chip = document.createElement('div');
     chip.className = 'box9-chip';
@@ -191,7 +198,11 @@ function createHud(
     chipText.className = 'box9-chip-label';
     chipText.textContent = label;
     chip.appendChild(chipText);
-    chip.addEventListener('click', () => onSelectCharacter(id as CharacterId));
+    chip.addEventListener('click', () => {
+      const character = id as CharacterId;
+      setActiveChip(character);
+      onSelectCharacter(character);
+    });
     chip.dataset.character = id;
     chipList.appendChild(chip);
   });
@@ -243,14 +254,7 @@ function createHud(
     reachValue.textContent = fighter.reach;
     speedValue.textContent = fighter.speed;
 
-    const chips = chipList.querySelectorAll<HTMLElement>('.box9-chip');
-    chips.forEach((chip) => {
-      if (chip.dataset.character === state.character) {
-        chip.classList.add('active');
-      } else {
-        chip.classList.remove('active');
-      }
-    });
+    setActiveChip(state.character);
   };
 
   return { hud, update, ringValue, cameraValue, freeCamButton };
