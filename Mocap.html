@@ -336,7 +336,7 @@
         <div class="control-bar">
           <div class="control-group">
             <span class="hint">
-              Dejá <code>modelos/Tyson.fbx</code>, <code>texturas/gltf_embedded_0.jpeg</code> y tus .fbx de animación dentro de <code>animaciones/</code>.
+              Dejá <code>modelos/Tyson.fbx</code>, <code>texturas/gltf_embedded_0.jpeg</code> y tus .fbx de animación dentro de <code>animaciones/</code> (ahora organizadas en <code>ataque</code>, <code>descanso</code>, <code>movimiento</code> y <code>daño</code>).
             </span>
           </div>
           <div class="control-group">
@@ -380,7 +380,7 @@
     const DEFAULT_ANIMATIONS = [
       {
         name: 'Idle to Fight (preset)',
-        url: 'Action Idle To Fight Idle.fbx',
+        url: 'animaciones/descanso/Action Idle To Fight Idle.fbx',
       },
     ];
 
@@ -829,7 +829,7 @@
 
     loadModel(MODEL_URL);
 
-    // Cargar animaciones por defecto (por ejemplo: Action Idle To Fight Idle.fbx)
+    // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
     DEFAULT_ANIMATIONS.forEach((entry) => {
       loadAnimationFBXFromURL(entry.url, entry.name);
     });
