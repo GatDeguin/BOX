@@ -52,6 +52,12 @@
             right: 16px;
             z-index: 20;
         }
+        #viewBtn {
+            position: absolute;
+            top: 16px;
+            right: 110px;
+            z-index: 20;
+        }
         #presetBtn {
             position: absolute;
             top: 16px;
@@ -126,6 +132,11 @@
     <!-- Botón de mute -->
     <button id="muteBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
         🔊 ON
+    </button>
+
+    <!-- Botón de vista en 3ra persona -->
+    <button id="viewBtn" class="text-xs px-3 py-1 rounded-full bg-black/70 text-white border border-white/30 shadow-lg">
+        🎯 POV
     </button>
 
     <div id="canvas-container"></div>
@@ -322,6 +333,13 @@
 
         // Head bob
         const baseTarget = new THREE.Vector3(-0.6, 1.7, 0);
+        const targetBase = baseTarget.clone();
+
+        // Modos de cámara
+        const defaultCameraPosition = new THREE.Vector3(0, 1.75, 2.2);
+        const thirdPersonCameraOffset = new THREE.Vector3(0.0, 1.35, -3.1);
+        const thirdPersonTargetOffset = new THREE.Vector3(0.0, 0.15, -0.4);
+        let thirdPersonActive = false;
 
         // Reutilización de vectores para deformación
         const tempV = new THREE.Vector3();
@@ -958,6 +976,7 @@
 
             setupMuteButton();
             setupPresetButton();
+            setupViewButton();
 
             // Tyson + webcam
             loadTysonModel();
@@ -1032,14 +1051,14 @@
 
         function initCamera() {
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 1.75, 2.2); 
+            camera.position.copy(defaultCameraPosition);
         }
 
         function initControls() {
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.08;
-            controls.target.copy(baseTarget);
+            controls.target.copy(targetBase);
             controls.maxPolarAngle = Math.PI / 2 - 0.05;
             controls.minDistance = 1.0;
             controls.maxDistance = 4.0;
@@ -1835,6 +1854,33 @@
             });
         }
 
+        function applyViewMode() {
+            if (!controls || !camera) return;
+
+            if (thirdPersonActive) {
+                camera.position.copy(baseTarget).add(thirdPersonCameraOffset);
+                targetBase.copy(baseTarget).add(thirdPersonTargetOffset);
+            } else {
+                camera.position.copy(defaultCameraPosition);
+                targetBase.copy(baseTarget);
+            }
+
+            controls.target.copy(targetBase);
+        }
+
+        function setupViewButton() {
+            const viewBtn = document.getElementById('viewBtn');
+            if (!viewBtn) return;
+
+            applyViewMode();
+
+            viewBtn.addEventListener('click', () => {
+                thirdPersonActive = !thirdPersonActive;
+                applyViewMode();
+                viewBtn.textContent = thirdPersonActive ? '👁️ 3ra Persona' : '🎯 POV';
+            });
+        }
+
         // --- INTERACCIÓN (click sobre saco: solo si DEBUG_MOUSE_PUNCH = true) ---
         function onPointerDown(e) {
             if (!DEBUG_MOUSE_PUNCH) return;
@@ -1937,9 +1983,9 @@
             const bobY = Math.sin(elapsed * 1.8) * bobAmount;
             const swayX = Math.sin(elapsed * 1.2) * swayAmount;
             controls.target.set(
-                baseTarget.x + swayX,
-                baseTarget.y + bobY,
-                baseTarget.z
+                targetBase.x + swayX,
+                targetBase.y + bobY,
+                targetBase.z
             );
 
             controls.update();
