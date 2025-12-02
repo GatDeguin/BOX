@@ -4452,7 +4452,11 @@
                 const spot = new THREE.SpotLight(lightingPresets[currentPreset].ringSpotColor, lightBases.ringSpot, 24, Math.PI / 5.0, 0.7, 1.45);
                 spot.position.copy(cfg.pos);
                 spot.target.position.copy(cfg.target);
-                spot.castShadow = !isMobile;
+                // Mantener estas luces sin sombras evita que el shader supere
+                // el límite de MAX_TEXTURE_IMAGE_UNITS en dispositivos con
+                // hardware WebGL más limitado (se sumaban demasiados shadow
+                // maps junto a las texturas del escenario).
+                spot.castShadow = false;
                 spot.shadow.mapSize.set(1024, 1024);
                 spot.shadow.bias = -0.00012;
                 spot.penumbra = 0.85;
