@@ -2587,17 +2587,19 @@
             });
 
             const posterA = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.8), posterMat);
-            posterA.position.set(-3.5, 2.1, -4.99);
+            posterA.position.set(5.85, 2.1, -1.8);
+            posterA.rotation.y = -Math.PI / 2;
             scene.add(posterA);
 
             const posterB = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), posterMat);
-            posterB.position.set(2.8, 1.6, -4.99);
+            posterB.position.set(5.85, 1.6, 1.2);
+            posterB.rotation.y = -Math.PI / 2;
             scene.add(posterB);
 
             const windowWidth = 8.6;
             const windowHeight = 0.6;
             const windowY = 4.15;
-            const windowZ = -4.99;
+            const windowX = 5.9;
             const windowGroup = new THREE.Group();
             const windowPane = new THREE.Mesh(
                 new THREE.PlaneGeometry(windowWidth, windowHeight),
@@ -2627,7 +2629,8 @@
             windowGlow.renderOrder = 1;
             windowGroup.add(windowGlow);
             windowGroup.add(windowPane);
-            windowGroup.position.set(-0.2, windowY, windowZ);
+            windowGroup.position.set(windowX, windowY, 0);
+            windowGroup.rotation.y = -Math.PI / 2;
             scene.add(windowGroup);
 
             const windowRayGeo = new THREE.PlaneGeometry(windowWidth * 1.05, 3.6);
@@ -2680,8 +2683,8 @@
                 blending: THREE.AdditiveBlending
             });
             windowGodrayMesh = new THREE.Mesh(windowRayGeo, windowRayMat);
-            windowGodrayMesh.position.set(windowGroup.position.x, windowY - 0.1, windowZ + 0.18);
-            windowGodrayMesh.rotation.x = -Math.PI / 2.9;
+            windowGodrayMesh.position.set(windowX - 0.18, windowY - 0.1, windowGroup.position.z);
+            windowGodrayMesh.rotation.set(-Math.PI / 2.9, -Math.PI / 2, 0);
             scene.add(windowGodrayMesh);
 
             doorLight = new THREE.RectAreaLight(0x4488ff, lightBases.door, 2, 3);
@@ -2752,6 +2755,12 @@
             sideWall.position.set(-6, wallH/2, 0);
             sideWall.receiveShadow = true;
             scene.add(sideWall);
+
+            const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(12, wallH), wallMat);
+            rightWall.rotation.y = -Math.PI/2;
+            rightWall.position.set(6, wallH/2, 0);
+            rightWall.receiveShadow = true;
+            scene.add(rightWall);
 
             const posterGeo = new THREE.PlaneGeometry(1.2, 1.8);
             const sidePosterMat = new THREE.MeshStandardMaterial({ map: tex.poster, roughness: 0.8 });
