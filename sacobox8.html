@@ -621,12 +621,12 @@
                 color: 0x4a3b32,
                 roughness: 0.4,
                 metalness: 0.1,
-                deformationAmount: 0.45,
-                bulgeAmount: 0.25,
-                elasticity: 0.15,
-                damping: 0.85,
-                maxVertexSpeed: 2.5,
-                noiseFactor: 0.03,
+                deformationAmount: 0.8,
+                bulgeAmount: 0.35,
+                elasticity: 0.22,
+                damping: 0.82,
+                maxVertexSpeed: 3.5,
+                noiseFactor: 0.045,
                 punchForce: 80,
                 mass: 60,
                 linearDamping: 0.6,
@@ -699,9 +699,9 @@
             minFixedTimeStep: 1 / 75,
             maxFixedTimeStep: 1 / 45,
             minSubSteps: 2,
-            maxSubSteps: 8,
-            stepTimeBudgetMs: 3.5,
-            stepTimeComfortMs: 1.6,
+            maxSubSteps: 6,
+            stepTimeBudgetMs: 3.0,
+            stepTimeComfortMs: 1.4,
             smoothing: 0.9
         };
         let fixedTimeStep = physicsTuning.baseFixedTimeStep;
@@ -713,7 +713,7 @@
 
         const BAG_GEOMETRY_DETAIL = MOBILE_SIMPLE_MODE
             ? { radialSegments: 28, heightSegments: 12 }
-            : { radialSegments: 64, heightSegments: 32 };
+            : { radialSegments: 48, heightSegments: 24 };
 
         function applyMobileSimplifications() {
             if (!MOBILE_SIMPLE_MODE) return;
@@ -727,8 +727,8 @@
             smoothedStepTime = physicsTuning.stepTimeComfortMs;
 
             visualConfig.bag.mass = 52;
-            visualConfig.bag.deformationAmount = 0.3;
-            visualConfig.bag.bulgeAmount = 0.18;
+            visualConfig.bag.deformationAmount = 0.6;
+            visualConfig.bag.bulgeAmount = 0.32;
             visualConfig.bag.punchForce = 60;
             visualConfig.bag.linearDamping = 0.7;
             visualConfig.bag.angularDamping = 0.9;
@@ -2804,14 +2804,14 @@
                         const punchData = computePunchImpulse(vel, worldPos, isLeft);
                         if (punchData) {
                             const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                            deform(worldPos, normalDir, dt);
-
-                            if (!audioInitialized) initAudioContext();
                             const normalizedImpact = THREE.MathUtils.clamp(
                                 punchData.impulseMagnitude / visualConfig.bag.punchForce,
                                 0.15,
                                 1.5
                             );
+                            deform(worldPos, normalDir, dt, normalizedImpact);
+
+                            if (!audioInitialized) initAudioContext();
                             const impactForce = visualConfig.bag.punchForce * normalizedImpact;
                             playImpactSound(impactForce);
                             playHeavyImpactSound(impactForce);
@@ -3979,14 +3979,20 @@
                 bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
 
                 const normalDir = new THREE.Vector3(contactNormal.x, contactNormal.y, contactNormal.z);
-                deform(new THREE.Vector3(contactPoint.x, contactPoint.y, contactPoint.z), normalDir, lastVisualStep);
-
-                if (!audioInitialized) initAudioContext();
                 const normalizedImpact = THREE.MathUtils.clamp(
                     punchData.impulseMagnitude / visualConfig.bag.punchForce,
                     0.15,
                     1.5
                 );
+
+                deform(
+                    new THREE.Vector3(contactPoint.x, contactPoint.y, contactPoint.z),
+                    normalDir,
+                    lastVisualStep,
+                    normalizedImpact
+                );
+
+                if (!audioInitialized) initAudioContext();
                 const impactForce = visualConfig.bag.punchForce * normalizedImpact;
                 playImpactSound(impactForce);
                 playHeavyImpactSound(impactForce);
@@ -4140,24 +4146,36 @@
         }
 
         // --- DEFORMACIÓN ---
-        function deform(point, dir, dt) {
+        function deform(point, dir, dt, intensity = 1) {
             if(!bagMesh) return;
             const visualStep = dt || lastVisualStep || fixedVisualStep;
             const lp = bagMesh.worldToLocal(point.clone());
             const pos = bagMesh.geometry.attributes.position;
             const rot = bagMesh.quaternion.clone().invert();
             const ld = dir.clone().applyQuaternion(rot).normalize();
-            
+
+            const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.35, 2.0);
+            const innerRadius = 0.65;
+            const outerRadius = 1.05;
+            const innerRadiusSq = innerRadius * innerRadius;
+            const outerRadiusSq = outerRadius * outerRadius;
+            const pushScale = visualConfig.bag.deformationAmount * visualStep * (0.8 + clampedIntensity * 0.55);
+            const bulgeScale = visualConfig.bag.bulgeAmount * visualStep * (0.6 + clampedIntensity * 0.5);
+
             for(let i=0; i<pos.count; i++) {
-                const v = new THREE.Vector3().fromBufferAttribute(pos, i);
-                const d = v.distanceTo(lp);
-                if(d < 0.5) {
-                    const f = (1 - d/0.5);
-                    vertexVelocities[i].add(ld.clone().multiplyScalar(f * visualConfig.bag.deformationAmount * visualStep));
-                } else if(d < 0.9) {
-                    const t = (d-0.5)/(0.4);
-                    const f = Math.sin(t*Math.PI) * visualConfig.bag.bulgeAmount * 0.3;
-                    vertexVelocities[i].add(ld.clone().negate().multiplyScalar(f * visualStep));
+                tempV.fromBufferAttribute(pos, i);
+                tempDisp.copy(tempV).sub(lp);
+                const d2 = tempDisp.lengthSq();
+
+                if(d2 < innerRadiusSq) {
+                    const d = Math.sqrt(d2);
+                    const f = 1 - d / innerRadius;
+                    vertexVelocities[i].addScaledVector(ld, f * pushScale);
+                } else if(d2 < outerRadiusSq) {
+                    const d = Math.sqrt(d2);
+                    const t = (d - innerRadius) / (outerRadius - innerRadius);
+                    const f = Math.sin(t * Math.PI) * bulgeScale;
+                    vertexVelocities[i].addScaledVector(ld, -f);
                 }
             }
         }
@@ -4455,7 +4473,12 @@
 
             bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
             const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-            deform(hitPoint, normalDir, lastVisualStep);
+            const normalizedImpact = THREE.MathUtils.clamp(
+                punchData.impulseMagnitude / visualConfig.bag.punchForce,
+                0.15,
+                1.5
+            );
+            deform(hitPoint, normalDir, lastVisualStep, normalizedImpact);
 
             const impactForce = Math.max(baseForce, punchData.impulseMagnitude);
             playImpactSound(impactForce);
@@ -4492,7 +4515,12 @@
                     if (punchData) {
                         bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
                         const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                        deform(hit.point, normalDir, lastVisualStep);
+                        const normalizedImpact = THREE.MathUtils.clamp(
+                            punchData.impulseMagnitude / visualConfig.bag.punchForce,
+                            0.15,
+                            1.5
+                        );
+                        deform(hit.point, normalDir, lastVisualStep, normalizedImpact);
                         const impactForce = Math.max(targetImpulse, punchData.impulseMagnitude);
                         playImpactSound(impactForce);
 
