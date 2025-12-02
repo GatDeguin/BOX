@@ -1456,6 +1456,7 @@
                 this.cues = [];
                 this.restBreathing = false;
                 this.actionTimeState = null;
+                this.lastStuckWarning = { action: null, time: 0 };
             }
 
             async loadLibrary(definitions = ANIMATION_LIBRARY) {
@@ -1814,7 +1815,15 @@
                 const nearEnd = hasDuration && this.activeAction.time >= duration - 1e-3;
 
                 if (!hasDuration || nearEnd) {
-                    console.warn('Detección de animación trabada, saltando a la siguiente.');
+                    const now = performance.now?.() || Date.now();
+                    const sameAction = this.lastStuckWarning.action === this.activeAction;
+                    const elapsed = now - this.lastStuckWarning.time;
+
+                    if (!sameAction || elapsed > 1500) {
+                        console.warn('Detección de animación trabada, saltando a la siguiente.');
+                        this.lastStuckWarning = { action: this.activeAction, time: now };
+                    }
+
                     this.playNext();
                 }
             }
