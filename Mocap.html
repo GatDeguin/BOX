@@ -731,6 +731,15 @@
     let activeAction = null;
     let skeleton = null;
     const bonesByName = {};
+    const MIXAMO_PREFIX_RE = /^mixamorig\d*[:_ ]?/i;
+    const ARMATURE_PREFIX_RE = /^armature\d*[:_ ]?/i;
+
+    function normalizeBoneName(name = '') {
+      return name
+        .replace(MIXAMO_PREFIX_RE, '')
+        .replace(ARMATURE_PREFIX_RE, '')
+        .trim();
+    }
     let modelRoot = null;
     let currentTextures = [];
     const textureLoader = new THREE.TextureLoader();
@@ -846,24 +855,21 @@
               applyTexturesToMaterial(obj.material, textureSet);
             }
             if (obj.isSkinnedMesh) skeleton = obj.skeleton;
-              if (obj.isBone) {
-                const original = obj.name;
-                bonesByName[original] = obj;
+            if (obj.isBone || obj.type === 'Bone') {
+              const original = obj.name || '';
+              const cleaned = normalizeBoneName(original);
 
-                // Algunos modelos (ej. MMA / BodyBuilder GLB) usan prefijos
-                // tipo "mixamorig1:Bone"; normalizamos para que el retarget
-                // encuentre los huesos esperados (Hips, Spine, etc.).
-                const cleaned = original
-                  .replace(/^mixamorig\d*[:_ ]?/i, '')
-                  .replace(/^mixamorig\d*/i, '');
+              bonesByName[original] = obj;
+              bonesByName[original.toLowerCase()] = obj;
 
-                if (cleaned && cleaned !== original) {
-                  bonesByName[cleaned] = obj;
-                  bonesByName[cleaned.toLowerCase()] = obj;
-                }
-
-                bonesByName[original.toLowerCase()] = obj;
+              // Alias sin prefijos ni separadores para retarget y animaciones.
+              if (cleaned && cleaned !== original) {
+                bonesByName[cleaned] = obj;
+                bonesByName[cleaned.toLowerCase()] = obj;
+                bonesByName[`mixamorig${cleaned}`] = obj;
+                bonesByName[`mixamorig${cleaned}`.toLowerCase()] = obj;
               }
+            }
           });
 
           scene.add(modelRoot);
@@ -914,7 +920,8 @@
 
     function attachAnimationEntry(entry) {
       if (!mixer || !entry?.clip) return;
-      const action = mixer.clipAction(entry.clip);
+      const clip = remapClipToCurrentSkeleton(entry.clip);
+      const action = mixer.clipAction(clip);
       const shouldLoop = entry.loop !== 'once';
       action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
       action.clampWhenFinished = !shouldLoop;
@@ -1069,11 +1076,35 @@
     }
 
     function getBone(name) {
+      const key = name || '';
+      const cleaned = normalizeBoneName(key);
       return (
-        bonesByName[name] ||
-        bonesByName[name.toLowerCase()] ||
-        bonesByName['mixamorig' + name]
+        bonesByName[key] ||
+        bonesByName[key.toLowerCase()] ||
+        bonesByName[cleaned] ||
+        bonesByName[cleaned.toLowerCase()] ||
+        bonesByName['mixamorig' + cleaned] ||
+        bonesByName['mixamorig' + cleaned.toLowerCase()]
       );
+    }
+
+    function remapClipToCurrentSkeleton(clip) {
+      if (!clip?.tracks?.length) return clip;
+
+      clip.tracks = clip.tracks.map((track) => {
+        const [rawNode, ...rest] = track.name.split('.');
+        if (!rawNode || rest.length === 0) return track;
+
+        const property = rest.join('.');
+        const target = getBone(rawNode);
+
+        if (target && target.name) {
+          track.name = `${target.name}.${property}`;
+        }
+        return track;
+      });
+
+      return clip;
     }
 
     // --- Bind info: dirección del hueso + quat mundo en pose de reposo ---
