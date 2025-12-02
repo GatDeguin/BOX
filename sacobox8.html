@@ -3751,7 +3751,7 @@
                 scene.add(annex);
             }
 
-            const mainFloorGeo = new THREE.PlaneGeometry(40, 18);
+            const mainFloorGeo = new THREE.PlaneGeometry(40, 28);
             const ringFloorGeo = new THREE.PlaneGeometry(12, 12);
             const floorMat = new THREE.MeshStandardMaterial({
                 map: tex.floor.c, roughnessMap: tex.floor.r, metalness: 0.1, color: 0xaaaaaa
@@ -4006,7 +4006,7 @@
             dbMesh.position.set(2, 0.1, 2.5); dbMesh.rotation.y=Math.random(); dbMesh.castShadow=true;
             scene.add(dbMesh);
 
-            const trainingWallZ = 7.0;
+            const trainingWallZ = 12.0;
             const trainingWallWidth = 14;
 
             const trainingMat = new THREE.Mesh(
