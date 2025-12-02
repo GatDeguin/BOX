@@ -2085,7 +2085,9 @@
       const side = pinky.clone().sub(wrist).normalize();
       if (forward.lengthSq() < 1e-6 || side.lengthSq() < 1e-6) return null;
 
-      const up = new THREE.Vector3().crossVectors(side, forward).normalize();
+      // Usamos un sistema de ejes con sentido consistente (regla de la mano derecha)
+      // para que la orientación del guante coincida con la mano del personaje.
+      const up = new THREE.Vector3().crossVectors(forward, side).normalize();
       if (up.lengthSq() < 1e-6) up.set(0, 1, 0);
 
       const basis = new THREE.Matrix4().makeBasis(side, up, forward);
