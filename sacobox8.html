@@ -3565,7 +3565,7 @@
             world.addBody(floorBody);
 
             const wallH = 5;
-            const featureWallOffset = 10;
+            const featureWallOffset = 15;
             const featureWallX = 6 + featureWallOffset;
             const wL = new THREE.Mesh(new THREE.PlaneGeometry(3, wallH), wallMat);
             wL.position.set(-3.9, wallH/2, -5); wL.receiveShadow=true; scene.add(wL);
@@ -4367,6 +4367,9 @@
                 }
 
                 body.position.set(worldPos.x, worldPos.y, worldPos.z);
+                body.angularVelocity.set(0, 0, 0);
+                body.aabbNeedsUpdate = true;
+                body.updateAABB();
 
                 if (lastPosKey === 'left') {
                     lastLeftFistPos = worldPos;
