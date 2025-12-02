@@ -2144,6 +2144,8 @@
                 this.actionTimeState = null;
                 this.lastStuckWarning = { action: null, time: 0 };
                 this.lastProgressTimestamp = 0;
+                this.entryStartTimestamp = 0;
+                this.entryExpectedDurationMs = 0;
                 this.walkStepCount = 0;
                 this.walkLoopAtLastCheck = 0;
                 this.walkStartTimestamp = 0;
@@ -2235,6 +2237,10 @@
                 this.activeEntry = next;
                 this.resetCueState();
                 this.lastProgressTimestamp = performance.now?.() || Date.now();
+                this.entryStartTimestamp = this.lastProgressTimestamp;
+                const clipDurationMs = (next.action.getClip?.()?.duration || 0) * 1000;
+                const bufferMs = Math.max((ANIMATION_RULES.autoDelayMs?.() || 0) * 1.5, 800);
+                this.entryExpectedDurationMs = clipDurationMs + bufferMs;
                 currentAnimationEntry = next;
                 currentAnimationCategory = next.category || getClipCategory(next.name);
                 this.onEntryStarted(next);
@@ -2629,9 +2635,6 @@
             ensureNotStuck() {
                 if (!AUTO_ANIMATION_ENABLED || !this.activeAction || !this.activeEntry) return;
 
-                const isRunning = this.activeAction.isRunning?.() !== false;
-                if (isRunning) return;
-
                 const clip = this.activeAction.getClip?.();
                 const duration = clip?.duration ?? 0;
                 const hasDuration = duration > 0;
@@ -2643,8 +2646,18 @@
                 const cooldownMs = 1500;
                 const stalledFor = now - this.lastProgressTimestamp;
                 const progressStalled = stalledFor > 800;
+                const elapsedSinceStart = now - (this.entryStartTimestamp || now);
+                const overExpectedDuration =
+                    this.entryExpectedDurationMs > 0 && elapsedSinceStart > this.entryExpectedDurationMs;
 
                 if (nearEnd) {
+                    this.playNext();
+                    return;
+                }
+
+                if (overExpectedDuration) {
+                    console.warn('Animación excedió el tiempo esperado, avanzando.');
+                    this.lastStuckWarning = { action: this.activeAction, time: now };
                     this.playNext();
                     return;
                 }
