@@ -762,6 +762,9 @@
             ? { radialSegments: 28, heightSegments: 12 }
             : { radialSegments: 48, heightSegments: 24 };
 
+        const BAG_LIGHT_OFFSET = new THREE.Vector3(0, 1.35, 0.65);
+        const BAG_LIGHT_BASE_POSITION = new THREE.Vector3(0, 2, 0);
+
         function applyMobileSimplifications() {
             if (!MOBILE_SIMPLE_MODE) return;
 
@@ -803,7 +806,8 @@
         let volumetricMesh;
         let doorGodrayMesh;
         let windowGodrayMesh;
-        let keyLight, fillLight, ringLight, rimLight, ambientLight;
+        let keyLight, fillLight, bagLight, ringLight, rimLight, ambientLight;
+        let bagLightTarget;
         let cinemaBackLight;
         let ringSpotLights = [];
         let ringReflectorFixtures = [];
@@ -818,6 +822,7 @@
         const lightBases = {
             key: 8.8,
             fill: 1.5,
+            bag: 2.4,
             rim: 1.1,
             ring: 2.1,
             ringSpot: 4.2,
@@ -838,6 +843,8 @@
                 ringBase: 2.35,
                 ringSpotColor: 0xffe2b0,
                 ringSpotBase: 4.85,
+                bagLightColor: 0xffb17a,
+                bagLightBase: 2.4,
                 cinemaBackColor: 0x1a2846,
                 cinemaBackBase: 0.22,
                 doorColor: 0x4488ff,
@@ -868,6 +875,8 @@
                 ringBase: 1.85,
                 ringSpotColor: 0xffdcb0,
                 ringSpotBase: 4.05,
+                bagLightColor: 0xffc58f,
+                bagLightBase: 2.1,
                 cinemaBackColor: 0x2c1b10,
                 cinemaBackBase: 0.18,
                 doorColor: 0xffa85a,
@@ -1234,6 +1243,7 @@
         function applyLightingColorsToScene(preset) {
             if (keyLight) keyLight.color.setHex(preset.keyColor);
             if (fillLight) fillLight.color.setHex(preset.fillColor);
+            if (bagLight) bagLight.color.setHex(preset.bagLightColor || preset.keyColor);
             if (rimLight) rimLight.color.setHex(preset.rimColor);
             if (ringLight) ringLight.color.setHex(preset.ringColor);
             if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
@@ -1428,6 +1438,8 @@
         // Reutilización de vectores para deformación
         const tempV = new THREE.Vector3();
         const tempDisp = new THREE.Vector3();
+        const bagLightAnchor = new THREE.Vector3();
+        const bagLightTargetPos = new THREE.Vector3();
 
         function getSpriteTexture() {
             if (spriteTexture) return spriteTexture;
@@ -4085,10 +4097,21 @@
             scene.add(keyLight.target);
 
             fillLight = new THREE.PointLight(0x6c7cff, lightBases.fill);
-            const bagBasePosition = new THREE.Vector3(0, 2, 0);
-            const fillTarget = bagMesh ? bagMesh.position : bagBasePosition;
+            const fillTarget = bagMesh ? bagMesh.position : BAG_LIGHT_BASE_POSITION;
             fillLight.position.copy(fillTarget).add(new THREE.Vector3(2.8, 0.4, 2.8));
             scene.add(fillLight);
+
+            bagLight = new THREE.SpotLight(preset.bagLightColor || preset.keyColor, lightBases.bag, 10, Math.PI / 4.2, 0.6, 1.35);
+            bagLight.castShadow = !isMobile;
+            bagLight.shadow.mapSize.set(768, 768);
+            bagLight.shadow.bias = -0.00012;
+            bagLight.shadow.radius = 3.5;
+            bagLightTarget = new THREE.Object3D();
+            scene.add(bagLightTarget);
+            bagLight.target = bagLightTarget;
+            const bagAnchor = bagMesh ? bagMesh.position : BAG_LIGHT_BASE_POSITION;
+            bagLight.position.copy(bagAnchor).add(BAG_LIGHT_OFFSET);
+            scene.add(bagLight);
 
             ringLight = new THREE.PointLight(0xffdd88, lightBases.ring, 16, 1.5);
             ringLight.position.set(RING_POSITION.x, RING_CEILING_HEIGHT - 1.0, RING_POSITION.z + 0.15);
@@ -4192,6 +4215,7 @@
 
             lightBases.key = preset.keyBase;
             lightBases.fill = preset.fillBase;
+            lightBases.bag = preset.bagLightBase ?? lightBases.bag;
             lightBases.rim = preset.rimBase;
             lightBases.ring = preset.ringBase;
             lightBases.cinemaBack = preset.cinemaBackBase;
@@ -4213,6 +4237,7 @@
             }
 
             if (cinemaBackLight) cinemaBackLight.intensity = preset.cinemaBackBase;
+            if (bagLight) bagLight.intensity = lightBases.bag;
             if (ringSpotLights.length) {
                 ringSpotLights.forEach(s => {
                     s.intensity = preset.ringSpotBase;
@@ -4288,6 +4313,15 @@
                 fillLight.intensity = Math.max(0.0, lightBases.fill * f);
             }
 
+            if (bagLight) {
+                const slow = noiseGen.noise2D(elapsed * 0.8, 3.3) * 0.5 + 0.5;
+                const fast = noiseGen.noise2D(elapsed * 3.1, 6.7) * 0.5 + 0.5;
+                const flick = 1.0 + (slow - 0.5) * 0.35 + (fast - 0.5) * 0.25;
+                const activity = 1.0 + punchActivity * 0.5;
+                const flashBoost = 1.0 + flashPhase * 0.65 * (0.5 + 0.5 * impactFlashStrength);
+                bagLight.intensity = Math.max(0.0, lightBases.bag * flick * activity * flashBoost);
+            }
+
             if (ambientLight) {
                 const n = noiseGen.noise2D(elapsed * 0.35, 9.1) * 0.5 + 0.5;
                 const flick = 1.0 + (n - 0.5) * 0.2;
@@ -4348,6 +4382,17 @@
                     }
                 });
             }
+        }
+
+        function updateBagLightAnchor() {
+            if (!bagLight || !bagLightTarget) return;
+
+            const anchor = bagMesh ? bagMesh.position : BAG_LIGHT_BASE_POSITION;
+            bagLightAnchor.copy(anchor).add(BAG_LIGHT_OFFSET);
+            bagLight.position.lerp(bagLightAnchor, 0.6);
+
+            bagLightTargetPos.copy(anchor);
+            bagLightTarget.position.lerp(bagLightTargetPos, 0.65);
         }
 
         function updateFog(dt, elapsed) {
@@ -5054,6 +5099,8 @@
                 o.m.position.copy(o.b.position);
                 o.m.quaternion.copy(o.b.quaternion);
             });
+
+            updateBagLightAnchor();
 
             const distanceToBag = enforceTysonDistanceToBag();
             orientTysonTowardBag();
