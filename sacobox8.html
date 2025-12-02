@@ -522,8 +522,8 @@
             </div>
             <div class="control-row">
                 <span class="label">Ambiente</span>
-                <input id="ambientIntensity" type="range" min="0" max="2" step="0.01" value="0.62" />
-                <span class="value" id="ambientIntensityVal">0.62</span>
+                <input id="ambientIntensity" type="range" min="0" max="3" step="0.01" value="0.85" />
+                <span class="value" id="ambientIntensityVal">0.85</span>
             </div>
             <div class="control-row">
                 <span class="section-label">Luces - Color</span>
@@ -570,8 +570,8 @@
             </div>
             <div class="control-row">
                 <span class="label">Ambiente cielo</span>
-                <input id="ambientSkyColor" type="color" class="color-input" value="#222233" />
-                <span class="value" id="ambientSkyColorVal">#222233</span>
+                <input id="ambientSkyColor" type="color" class="color-input" value="#3a3f60" />
+                <span class="value" id="ambientSkyColorVal">#3a3f60</span>
             </div>
             <div class="control-row">
                 <span class="label">Ambiente suelo</span>
@@ -844,9 +844,9 @@
                 doorBase: 19.5,
                 fluorescentColor: 0xf0f6ff,
                 fluorescentBase: 8.0,
-                ambientSky: 0x222233,
+                ambientSky: 0x3a3f60,
                 ambientGround: 0x000000,
-                ambientBase: 0.62,
+                ambientBase: 0.85,
                 fogColor: 0x020203,
                 fogDensity: 0.06,
                 background: 0x020203,
@@ -874,9 +874,9 @@
                 doorBase: 12.0,
                 fluorescentColor: 0xfff2da,
                 fluorescentBase: 5.2,
-                ambientSky: 0xffcba4,
+                ambientSky: 0xffd6b8,
                 ambientGround: 0x110800,
-                ambientBase: 0.65,
+                ambientBase: 0.9,
                 fogColor: 0x130b06,
                 fogDensity: 0.048,
                 background: 0x130b06,
@@ -4067,7 +4067,8 @@
         }
 
         function initLights() {
-            ambientLight = new THREE.HemisphereLight(0x222233, 0x000000, 0.52);
+            const preset = lightingPresets[currentPreset];
+            ambientLight = new THREE.HemisphereLight(preset.ambientSky, preset.ambientGround, preset.ambientBase);
             scene.add(ambientLight);
 
             keyLight = new THREE.SpotLight(0xffaa77, lightBases.key);
