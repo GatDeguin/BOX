@@ -627,7 +627,7 @@
                 damping: 0.82,
                 maxVertexSpeed: 3.5,
                 noiseFactor: 0.045,
-                punchForce: 80,
+                punchForce: 84,
                 mass: 60,
                 linearDamping: 0.6,
                 angularDamping: 0.8
@@ -639,12 +639,12 @@
 
         const punchConfig = {
             left: {
-                effectiveMass: 4.5,
-                contactArea: 1.0
+                effectiveMass: 4.2,
+                contactArea: 1.15
             },
             right: {
-                effectiveMass: 5.5,
-                contactArea: 1.0
+                effectiveMass: 5.2,
+                contactArea: 1.15
             }
         };
 
@@ -662,6 +662,7 @@
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
         const BOXER_BASE_Z = 2.0;   // delante/detrás   (0 = mismo plano del saco)
         const MIN_BAG_DISTANCE = 1.25;
+        const FIST_FORWARD_OFFSET = 0.12;
 
         const tysonBasePosition = new THREE.Vector3(BOXER_BASE_X, 0, BOXER_BASE_Z);
         const tysonTargetPosition = tysonBasePosition.clone();
@@ -733,8 +734,8 @@
             visualConfig.bag.linearDamping = 0.7;
             visualConfig.bag.angularDamping = 0.9;
 
-            punchConfig.left.contactArea = 0.9;
-            punchConfig.right.contactArea = 0.9;
+            punchConfig.left.contactArea = 1.0;
+            punchConfig.right.contactArea = 1.0;
             DEBUG_MOUSE_PUNCH = true;
 
             const debugPanel = document.getElementById('debugPanel');
@@ -3916,7 +3917,7 @@
                 mass: 1.0,
                 type: CANNON.Body.KINEMATIC,
                 position: new CANNON.Vec3(),
-                shape: new CANNON.Sphere(0.08),
+                shape: new CANNON.Sphere(0.11),
                 material: fistMaterial,
                 collisionFilterGroup: collisionGroups.fist,
                 collisionFilterMask: collisionGroups.bag
@@ -3947,6 +3948,7 @@
                 const bone = getBone(boneName);
                 if (!bone) return;
                 const worldPos = new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld);
+                worldPos.z -= FIST_FORWARD_OFFSET;
 
                 const lastPos = lastPosKey === 'left' ? lastLeftFistPos : lastRightFistPos;
                 if (lastPos) {
