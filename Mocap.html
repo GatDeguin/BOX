@@ -512,6 +512,85 @@
       };
     }
 
+    function lerpWorldLandmark(prev, curr, factor) {
+      if (!prev) return curr;
+      return {
+        x: lerp(prev.x, curr.x, factor),
+        y: lerp(prev.y, curr.y, factor),
+        z: lerp(prev.z ?? 0, curr.z ?? 0, factor),
+        visibility: lerp(prev.visibility ?? 1, curr.visibility ?? 1, factor),
+      };
+    }
+
+    function worldLmToVec(lm) {
+      if (!lm) return null;
+      return new THREE.Vector3(lm.x, lm.y, lm.z ?? 0);
+    }
+
+    function captureCalibration(worldLandmarks) {
+      if (!worldLandmarks) return null;
+
+      const lmLS = worldLandmarks[POSE_LM.LEFT_SHOULDER];
+      const lmRS = worldLandmarks[POSE_LM.RIGHT_SHOULDER];
+      const lmLH = worldLandmarks[POSE_LM.LEFT_HIP];
+      const lmRH = worldLandmarks[POSE_LM.RIGHT_HIP];
+      const lmLA = worldLandmarks[POSE_LM.LEFT_ANKLE];
+      const lmRA = worldLandmarks[POSE_LM.RIGHT_ANKLE];
+
+      if (!lmLS || !lmRS || !lmLH || !lmRH) return null;
+
+      const vLS = worldLmToVec(lmLS);
+      const vRS = worldLmToVec(lmRS);
+      const vLH = worldLmToVec(lmLH);
+      const vRH = worldLmToVec(lmRH);
+
+      const shoulderMid = vLS.clone().add(vRS).multiplyScalar(0.5);
+      const hipMid = vLH.clone().add(vRH).multiplyScalar(0.5);
+
+      const torsoLength = shoulderMid.distanceTo(hipMid);
+      const ankleAvgY = ((lmLA?.y ?? 0) + (lmRA?.y ?? 0)) / 2;
+      const legLength = Math.abs(hipMid.y - ankleAvgY);
+
+      const TARGET_TORSO_SIZE = 1.0; // Escala de referencia en unidades de escena
+      const baseScale = torsoLength > 1e-4 ? TARGET_TORSO_SIZE / torsoLength : 1;
+
+      return {
+        hipMid,
+        torsoLength,
+        legLength,
+        floorY: ankleAvgY,
+        baseScale,
+      };
+    }
+
+    function getTorsoLength(worldLandmarks) {
+      if (!worldLandmarks) return null;
+      const lmLS = worldLandmarks[POSE_LM.LEFT_SHOULDER];
+      const lmRS = worldLandmarks[POSE_LM.RIGHT_SHOULDER];
+      const lmLH = worldLandmarks[POSE_LM.LEFT_HIP];
+      const lmRH = worldLandmarks[POSE_LM.RIGHT_HIP];
+      if (!lmLS || !lmRS || !lmLH || !lmRH) return null;
+
+      const vLS = worldLmToVec(lmLS);
+      const vRS = worldLmToVec(lmRS);
+      const vLH = worldLmToVec(lmLH);
+      const vRH = worldLmToVec(lmRH);
+
+      const shoulderMid = vLS.clone().add(vRS).multiplyScalar(0.5);
+      const hipMid = vLH.clone().add(vRH).multiplyScalar(0.5);
+      return shoulderMid.distanceTo(hipMid);
+    }
+
+    function getCalibrationScale(worldLandmarks) {
+      if (!calibrationRef) return 1;
+
+      const currentTorso = getTorsoLength(worldLandmarks);
+      if (!currentTorso || currentTorso < 1e-6) return calibrationRef.baseScale;
+
+      const ratio = calibrationRef.torsoLength / currentTorso;
+      return calibrationRef.baseScale * ratio;
+    }
+
     // ==============================
     // 2. MediaPipe Pose + Cámara
     // ==============================
@@ -533,6 +612,10 @@
     let capturing = false;
     let lastPoseLandmarks = null;
     let smoothedLandmarks = null;
+    let lastWorldLandmarks = null;
+    let smoothedWorldLandmarks = null;
+    let calibrationRef = null;
+    let smoothedDepth = null;
     let poseInstance = null;
 
     // Flag para cortar el retarget y dejar que las animaciones FBX manden.
@@ -577,6 +660,20 @@
           return lerpLandmark(prev, lm, 0.4);
         });
         lastPoseLandmarks = smoothedLandmarks;
+
+        if (results.poseWorldLandmarks) {
+          const worldLM = results.poseWorldLandmarks;
+          smoothedWorldLandmarks = worldLM.map((lm, i) => {
+            const prev = lastWorldLandmarks ? lastWorldLandmarks[i] : null;
+            return lerpWorldLandmark(prev, lm, 0.35);
+          });
+          lastWorldLandmarks = smoothedWorldLandmarks;
+
+          if (!calibrationRef) {
+            calibrationRef = captureCalibration(smoothedWorldLandmarks);
+            smoothedDepth = calibrationRef?.hipMid ? -(calibrationRef.hipMid.z ?? 0) * calibrationRef.baseScale : null;
+          }
+        }
 
         window.drawConnectors(canvasCtx, smoothedLandmarks, window.POSE_CONNECTIONS, {
           color: '#22c55e',
@@ -1129,12 +1226,31 @@
     const tmpVecB = new THREE.Vector3();
     const tmpDir  = new THREE.Vector3();
 
-    function lmToVec3(lm) {
+    function lmToVec3(lm, worldLm = null, scaleOverride = null) {
       if (!lm) return null;
+
+      // Usamos landmarks en mundo para estabilidad de escala/profundidad cuando estén disponibles.
+      if (worldLm) {
+        const scale = scaleOverride ?? getCalibrationScale(smoothedWorldLandmarks);
+        const rawZ = -(worldLm.z ?? 0) * scale;
+        const shouldSmoothDepth =
+          smoothedWorldLandmarks &&
+          (worldLm === smoothedWorldLandmarks[POSE_LM.LEFT_HIP] ||
+           worldLm === smoothedWorldLandmarks[POSE_LM.RIGHT_HIP] ||
+           worldLm === smoothedWorldLandmarks[POSE_LM.NOSE]);
+
+        const depthValue = shouldSmoothDepth
+          ? (smoothedDepth = smoothedDepth == null ? rawZ : lerp(smoothedDepth, rawZ, 0.08))
+          : rawZ;
+
+        return new THREE.Vector3(worldLm.x * scale, worldLm.y * scale, depthValue);
+      }
+
+      const scale = scaleOverride ?? 1;
       // Invertimos Z: hacia la cámara en MediaPipe = hacia delante en 3D
-      const x = (lm.x - 0.5) * 2;
-      const y = (lm.y - 0.5) * -2;
-      const z = -(lm.z ?? 0) * 2;
+      const x = (lm.x - 0.5) * 2 * scale;
+      const y = (lm.y - 0.5) * -2 * scale;
+      const z = -(lm.z ?? 0) * 2 * scale;
       return new THREE.Vector3(x, y, z);
     }
 
@@ -1257,7 +1373,7 @@
       bone.quaternion.slerp(targetLocal, slerp);
     }
 
-    function orientBoneFromLandmarks(boneName, lmStartIdx, lmEndIdx, slerp = 0.35) {
+    function orientBoneFromLandmarks(boneName, lmStartIdx, lmEndIdx, slerp = 0.35, scaleOverride = null) {
       const bone = getBone(boneName);
       if (!skeleton || !bone || !smoothedLandmarks) return;
 
@@ -1269,8 +1385,11 @@
       const info = BIND[boneName];
       if (!info) return;
 
-      const vStart = lmToVec3(lmStart);
-      const vEnd   = lmToVec3(lmEnd);
+      const wStart = smoothedWorldLandmarks?.[lmStartIdx];
+      const wEnd   = smoothedWorldLandmarks?.[lmEndIdx];
+
+      const vStart = lmToVec3(lmStart, wStart, scaleOverride);
+      const vEnd   = lmToVec3(lmEnd, wEnd, scaleOverride);
       const dir    = vEnd.clone().sub(vStart).normalize();
       if (dir.lengthSq() < 1e-6) return;
 
@@ -1285,6 +1404,9 @@
       if (!retargetEnabled) return; // Si está en modo animación FBX, no tocamos los huesos.
       if (!landmarks || !skeleton) return;
 
+      const worldLandmarks = smoothedWorldLandmarks;
+      const scale = getCalibrationScale(worldLandmarks);
+
       const lmLS   = landmarks[POSE_LM.LEFT_SHOULDER];
       const lmRS   = landmarks[POSE_LM.RIGHT_SHOULDER];
       const lmLH   = landmarks[POSE_LM.LEFT_HIP];
@@ -1294,10 +1416,10 @@
       const hips = getBone('Hips') || getBone('hips');
 
       if (hips && lmLS && lmRS && lmLH && lmRH) {
-        const vLS = lmToVec3(lmLS);
-        const vRS = lmToVec3(lmRS);
-        const vLH = lmToVec3(lmLH);
-        const vRH = lmToVec3(lmRH);
+        const vLS = lmToVec3(lmLS, worldLandmarks?.[POSE_LM.LEFT_SHOULDER], scale);
+        const vRS = lmToVec3(lmRS, worldLandmarks?.[POSE_LM.RIGHT_SHOULDER], scale);
+        const vLH = lmToVec3(lmLH, worldLandmarks?.[POSE_LM.LEFT_HIP], scale);
+        const vRH = lmToVec3(lmRH, worldLandmarks?.[POSE_LM.RIGHT_HIP], scale);
 
         const vShoulderMid = tmpVecA.copy(vLS).add(vRS).multiplyScalar(0.5);
         const vHipMid      = tmpVecB.copy(vLH).add(vRH).multiplyScalar(0.5);
@@ -1313,8 +1435,13 @@
           hips.quaternion.slerp(targetLocal, 0.25);
         }
 
-        // Altura de las caderas (traslación simple)
-        hips.position.lerp(new THREE.Vector3(0, vHipMid.y * 0.4 + 1.0, 0), 0.15);
+        // Altura de las caderas (ancladas a suelo con calibración de escala)
+        const floorOffset = calibrationRef ? -calibrationRef.floorY * scale : 0;
+        const legLength = calibrationRef?.legLength ? calibrationRef.legLength * scale : Math.abs(vHipMid.y);
+        const hipDepth = vHipMid.z;
+        smoothedDepth = smoothedDepth == null ? hipDepth : lerp(smoothedDepth, hipDepth, 0.08);
+        const targetHipPos = new THREE.Vector3(0, floorOffset + legLength, smoothedDepth);
+        hips.position.lerp(targetHipPos, 0.15);
 
         // Torso completo
         orientBoneFromDirection('Spine',  torsoDir, 0.35);
@@ -1323,7 +1450,7 @@
 
         // Cabeza / cuello desde hombros → nariz
         if (lmNose) {
-          const vNose   = lmToVec3(lmNose);
+          const vNose   = lmToVec3(lmNose, worldLandmarks?.[POSE_LM.NOSE], scale);
           const headDir = vNose.clone().sub(vShoulderMid).normalize();
 
           orientBoneFromDirection('Neck', headDir, 0.45);
@@ -1332,16 +1459,16 @@
       }
 
       // Brazos
-      orientBoneFromLandmarks('LeftArm',     POSE_LM.LEFT_SHOULDER,  POSE_LM.LEFT_ELBOW);
-      orientBoneFromLandmarks('LeftForeArm', POSE_LM.LEFT_ELBOW,     POSE_LM.LEFT_WRIST);
-      orientBoneFromLandmarks('RightArm',    POSE_LM.RIGHT_SHOULDER, POSE_LM.RIGHT_ELBOW);
-      orientBoneFromLandmarks('RightForeArm',POSE_LM.RIGHT_ELBOW,    POSE_LM.RIGHT_WRIST);
+      orientBoneFromLandmarks('LeftArm',     POSE_LM.LEFT_SHOULDER,  POSE_LM.LEFT_ELBOW, 0.35, scale);
+      orientBoneFromLandmarks('LeftForeArm', POSE_LM.LEFT_ELBOW,     POSE_LM.LEFT_WRIST, 0.35, scale);
+      orientBoneFromLandmarks('RightArm',    POSE_LM.RIGHT_SHOULDER, POSE_LM.RIGHT_ELBOW,0.35, scale);
+      orientBoneFromLandmarks('RightForeArm',POSE_LM.RIGHT_ELBOW,    POSE_LM.RIGHT_WRIST,0.35, scale);
 
       // Piernas
-      orientBoneFromLandmarks('LeftUpLeg',   POSE_LM.LEFT_HIP,       POSE_LM.LEFT_KNEE);
-      orientBoneFromLandmarks('LeftLeg',     POSE_LM.LEFT_KNEE,      POSE_LM.LEFT_ANKLE);
-      orientBoneFromLandmarks('RightUpLeg',  POSE_LM.RIGHT_HIP,      POSE_LM.RIGHT_KNEE);
-      orientBoneFromLandmarks('RightLeg',    POSE_LM.RIGHT_KNEE,     POSE_LM.RIGHT_ANKLE);
+      orientBoneFromLandmarks('LeftUpLeg',   POSE_LM.LEFT_HIP,       POSE_LM.LEFT_KNEE,  0.35, scale);
+      orientBoneFromLandmarks('LeftLeg',     POSE_LM.LEFT_KNEE,      POSE_LM.LEFT_ANKLE, 0.35, scale);
+      orientBoneFromLandmarks('RightUpLeg',  POSE_LM.RIGHT_HIP,      POSE_LM.RIGHT_KNEE, 0.35, scale);
+      orientBoneFromLandmarks('RightLeg',    POSE_LM.RIGHT_KNEE,     POSE_LM.RIGHT_ANKLE,0.35, scale);
     }
 
     // ==============================
