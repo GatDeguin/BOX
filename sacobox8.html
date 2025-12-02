@@ -695,6 +695,7 @@
 
         const RING_MODEL_URL = 'modelos/Ring 2.glb';
         const RING_POSITION = new THREE.Vector3(20.1, 0, 2.0);
+        const RING_CEILING_HEIGHT = 5.6;
 
         const gltfLoader = new GLTFLoader();
 
@@ -3321,9 +3322,146 @@
         function createEnvironment(tex) {
             const staticMat = new CANNON.Material('floor-wall');
             const ceilingMat = new CANNON.Material('ceiling');
-            const wallMat = new THREE.MeshStandardMaterial({ 
-                map: tex.wall, roughness: 0.9, color: 0x444444 
+            const wallMat = new THREE.MeshStandardMaterial({
+                map: tex.wall, roughness: 0.9, color: 0x444444
             });
+
+            function createRingAnnex(tex, floorGeo, floorMat, wallMat) {
+                const annex = new THREE.Group();
+                annex.position.copy(RING_POSITION);
+
+                const floor = new THREE.Mesh(floorGeo, floorMat);
+                floor.rotation.x = -Math.PI / 2;
+                floor.receiveShadow = true;
+                annex.add(floor);
+
+                const wallH = 5.2;
+                const longWall = new THREE.PlaneGeometry(12, wallH);
+                const sideWall = new THREE.PlaneGeometry(12, wallH);
+
+                const backWall = new THREE.Mesh(longWall, wallMat);
+                backWall.position.set(0, wallH / 2, -6);
+                backWall.receiveShadow = true;
+                annex.add(backWall);
+
+                const frontWall = new THREE.Mesh(longWall, wallMat);
+                frontWall.rotation.y = Math.PI;
+                frontWall.position.set(0, wallH / 2, 6);
+                frontWall.receiveShadow = true;
+                annex.add(frontWall);
+
+                const leftWall = new THREE.Mesh(sideWall, wallMat);
+                leftWall.rotation.y = Math.PI / 2;
+                leftWall.position.set(-6, wallH / 2, 0);
+                leftWall.receiveShadow = true;
+                annex.add(leftWall);
+
+                const rightWall = new THREE.Mesh(sideWall, wallMat);
+                rightWall.rotation.y = -Math.PI / 2;
+                rightWall.position.set(6, wallH / 2, 0);
+                rightWall.receiveShadow = true;
+                annex.add(rightWall);
+
+                const ceiling = new THREE.Mesh(
+                    new THREE.PlaneGeometry(12.5, 12.5),
+                    new THREE.MeshStandardMaterial({
+                        map: tex.wall,
+                        roughness: 0.92,
+                        color: 0x3a3a3a,
+                        side: THREE.DoubleSide
+                    })
+                );
+                ceiling.rotation.x = Math.PI / 2;
+                ceiling.position.set(0, RING_CEILING_HEIGHT, 0);
+                ceiling.receiveShadow = true;
+                annex.add(ceiling);
+
+                const trussMat = new THREE.MeshStandardMaterial({ color: 0x202020, metalness: 0.82, roughness: 0.32 });
+                const beamGeoLong = new THREE.BoxGeometry(12.5, 0.1, 0.18);
+                const beamGeoShort = new THREE.BoxGeometry(0.18, 0.1, 12.5);
+                const beams = [
+                    new THREE.Mesh(beamGeoLong, trussMat),
+                    new THREE.Mesh(beamGeoLong, trussMat),
+                    new THREE.Mesh(beamGeoShort, trussMat),
+                    new THREE.Mesh(beamGeoShort, trussMat)
+                ];
+                beams[0].position.set(0, RING_CEILING_HEIGHT - 0.05, -3);
+                beams[1].position.set(0, RING_CEILING_HEIGHT - 0.05, 3);
+                beams[2].position.set(-3, RING_CEILING_HEIGHT - 0.05, 0);
+                beams[3].position.set(3, RING_CEILING_HEIGHT - 0.05, 0);
+                beams.forEach(b => { b.receiveShadow = true; b.castShadow = true; annex.add(b); });
+
+                const rig = new THREE.Group();
+                rig.position.set(0, RING_CEILING_HEIGHT - 0.25, 0);
+
+                const rigBarGeo = new THREE.BoxGeometry(7.5, 0.08, 0.12);
+                const rigCrossGeo = new THREE.BoxGeometry(0.12, 0.08, 7.5);
+                const rigBarA = new THREE.Mesh(rigBarGeo, trussMat);
+                const rigBarB = new THREE.Mesh(rigBarGeo, trussMat);
+                const rigCrossA = new THREE.Mesh(rigCrossGeo, trussMat);
+                const rigCrossB = new THREE.Mesh(rigCrossGeo, trussMat);
+                rigBarA.position.set(0, 0, -1.8);
+                rigBarB.position.set(0, 0, 1.8);
+                rigCrossA.position.set(-1.8, 0, 0);
+                rigCrossB.position.set(1.8, 0, 0);
+                [rigBarA, rigBarB, rigCrossA, rigCrossB].forEach(mesh => { mesh.castShadow = true; rig.add(mesh); });
+
+                const rigTargetsParent = new THREE.Object3D();
+                rigTargetsParent.position.set(0, 0, 0);
+                annex.add(rigTargetsParent);
+
+                const overheadOffsets = [
+                    new THREE.Vector3(-2.4, 0.16, -2.4),
+                    new THREE.Vector3(2.4, 0.16, -2.4),
+                    new THREE.Vector3(-2.4, 0.16, 2.4),
+                    new THREE.Vector3(2.4, 0.16, 2.4)
+                ];
+
+                overheadOffsets.forEach((offset, idx) => {
+                    const target = new THREE.Object3D();
+                    target.position.set(0, 1.2, 0);
+                    rigTargetsParent.add(target);
+
+                    const spot = new THREE.SpotLight(
+                        lightingPresets[currentPreset].ringSpotColor,
+                        lightBases.ringSpot,
+                        28,
+                        Math.PI / 4.4,
+                        0.5,
+                        1.4
+                    );
+                    spot.position.copy(offset);
+                    spot.castShadow = !isMobile;
+                    spot.shadow.mapSize.set(1024, 1024);
+                    spot.shadow.bias = -0.00012;
+                    spot.decay = 1.5;
+                    spot.penumbra = 0.86;
+                    spot.target = target;
+                    spot.name = `ringRigSpot-${idx}`;
+
+                    ringSpotLights.push(spot);
+                    rig.add(spot);
+                });
+
+                const rigGlow = new THREE.Mesh(
+                    new THREE.CircleGeometry(1.2, 24),
+                    new THREE.MeshBasicMaterial({
+                        color: lightingPresets[currentPreset].ringColor,
+                        transparent: true,
+                        opacity: 0.35,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    })
+                );
+                rigGlow.rotation.x = -Math.PI / 2;
+                rigGlow.position.set(0, -0.05, 0);
+                rig.add(rigGlow);
+
+                ringReflectorFixtures.push(rig);
+                annex.add(rig);
+
+                scene.add(annex);
+            }
 
             const floorGeo = new THREE.PlaneGeometry(12, 12);
             const floorMat = new THREE.MeshStandardMaterial({ 
@@ -3580,6 +3718,8 @@
                 createDustParticles();
             }
 
+            createRingAnnex(tex, floorGeo, floorMat, wallMat);
+
             gltfLoader.load(
                 RING_MODEL_URL,
                 (gltf) => {
@@ -3747,8 +3887,8 @@
             fillLight.position.set(3.2, 2.1, 3.2);
             scene.add(fillLight);
 
-            ringLight = new THREE.PointLight(0xffdd88, lightBases.ring, 11, 2.1);
-            ringLight.position.set(RING_POSITION.x, RING_POSITION.y + 3.6, RING_POSITION.z + 0.15);
+            ringLight = new THREE.PointLight(0xffdd88, lightBases.ring, 16, 1.5);
+            ringLight.position.set(RING_POSITION.x, RING_CEILING_HEIGHT - 1.0, RING_POSITION.z + 0.15);
             scene.add(ringLight);
 
             rimLight = new THREE.SpotLight(0x6688ff, lightBases.rim, 8, Math.PI / 4, 0.5, 1);
