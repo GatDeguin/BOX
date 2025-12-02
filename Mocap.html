@@ -413,6 +413,7 @@
           <div class="control-group">
             <label class="hint" for="glove_select">Guantes:</label>
             <select id="glove_select" class="select"></select>
+            <button id="glove_attach_btn" type="button">Agregar guantes al personaje</button>
           </div>
           <div class="control-group">
             <label class="hint" for="animation_select">Animación FBX:</label>
@@ -683,6 +684,9 @@
     const GLOVE_OPTIONS = [...STATIC_GLOVE_OPTIONS];
     let ACTIVE_GLOVE_ID = GLOVE_OPTIONS[0]?.id || 'none';
 
+    const GLOVE_ATTACHMENT = { LANDMARKS: 'landmarks', MODEL: 'model' };
+    let gloveAttachmentMode = GLOVE_ATTACHMENT.LANDMARKS;
+
     const POSE_LM = {
       NOSE: 0,
       LEFT_EYE_INNER: 1,
@@ -828,6 +832,7 @@
     const ringSelect = document.getElementById('ring_select');
     const gloveSelect = document.getElementById('glove_select');
     const animFileInput = document.getElementById('anim_file_input');
+    const gloveAttachButton = document.getElementById('glove_attach_btn');
     const debugInputRefs = {
       character: {
         scale: document.getElementById('debug_character_scale'),
@@ -867,6 +872,17 @@
 
     // Flag para cortar el retarget y dejar que las animaciones FBX manden.
     let retargetEnabled = true;
+
+    function updateGloveAttachmentButton() {
+      if (!gloveAttachButton) return;
+      const usingModelHands = gloveAttachmentMode === GLOVE_ATTACHMENT.MODEL;
+      gloveAttachButton.textContent = usingModelHands
+        ? 'Guantes en el modelo'
+        : 'Agregar guantes al personaje';
+      gloveAttachButton.title = usingModelHands
+        ? 'Los guantes siguen los huesos del personaje cargado'
+        : 'Los guantes siguen la pose detectada en vivo';
+    }
 
     function setStatus(live, text) {
       if (live) statusIndicator.classList.add('live');
@@ -1846,6 +1862,20 @@
       });
     }
 
+    if (gloveAttachButton) {
+      updateGloveAttachmentButton();
+      gloveAttachButton.addEventListener('click', () => {
+        gloveAttachmentMode =
+          gloveAttachmentMode === GLOVE_ATTACHMENT.MODEL
+            ? GLOVE_ATTACHMENT.LANDMARKS
+            : GLOVE_ATTACHMENT.MODEL;
+        updateGloveAttachmentButton();
+
+        const scale = getCalibrationScale(smoothedWorldLandmarks);
+        updateGloveAnchors(lastPoseLandmarks, scale);
+      });
+    }
+
     if (animFileInput) {
       animFileInput.addEventListener('change', (event) => {
         const files = Array.from(event.target.files || []);
@@ -2064,6 +2094,30 @@
       return { position: wrist, quaternion: quat };
     }
 
+    function getHandBone(side = 'left') {
+      const candidates = side === 'left'
+        ? ['LeftHand', 'Left Wrist', 'LeftHandIndex1', 'LeftForeArm']
+        : ['RightHand', 'Right Wrist', 'RightHandIndex1', 'RightForeArm'];
+
+      for (const name of candidates) {
+        const bone = getBone(name);
+        if (bone) return bone;
+      }
+      return null;
+    }
+
+    function computeSkeletonHandTransform(side = 'left') {
+      const bone = getHandBone(side);
+      if (!bone) return null;
+
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      bone.getWorldPosition(position);
+      bone.getWorldQuaternion(quaternion);
+
+      return { position, quaternion };
+    }
+
     function applyGloveTransform(target, transform) {
       if (!target || !transform) return;
 
@@ -2077,22 +2131,45 @@
     }
 
     function updateGloveAnchors(landmarks, scaleOverride) {
-      if (!landmarks || (!gloveMeshes.left && !gloveMeshes.right)) return;
+      if ((!gloveMeshes.left && !gloveMeshes.right)) return;
 
-      const leftTransform = computeHandTransform(
-        landmarks,
-        POSE_LM.LEFT_WRIST,
-        POSE_LM.LEFT_INDEX,
-        POSE_LM.LEFT_PINKY,
-        scaleOverride
-      );
-      const rightTransform = computeHandTransform(
-        landmarks,
-        POSE_LM.RIGHT_WRIST,
-        POSE_LM.RIGHT_INDEX,
-        POSE_LM.RIGHT_PINKY,
-        scaleOverride
-      );
+      const useModelHands = gloveAttachmentMode === GLOVE_ATTACHMENT.MODEL;
+      const scale = scaleOverride;
+
+      const leftTransform = useModelHands
+        ? (computeSkeletonHandTransform('left') || (landmarks
+            ? computeHandTransform(
+                landmarks,
+                POSE_LM.LEFT_WRIST,
+                POSE_LM.LEFT_INDEX,
+                POSE_LM.LEFT_PINKY,
+                scale
+              )
+            : null))
+        : computeHandTransform(
+            landmarks,
+            POSE_LM.LEFT_WRIST,
+            POSE_LM.LEFT_INDEX,
+            POSE_LM.LEFT_PINKY,
+            scale
+          );
+      const rightTransform = useModelHands
+        ? (computeSkeletonHandTransform('right') || (landmarks
+            ? computeHandTransform(
+                landmarks,
+                POSE_LM.RIGHT_WRIST,
+                POSE_LM.RIGHT_INDEX,
+                POSE_LM.RIGHT_PINKY,
+                scale
+              )
+            : null))
+        : computeHandTransform(
+            landmarks,
+            POSE_LM.RIGHT_WRIST,
+            POSE_LM.RIGHT_INDEX,
+            POSE_LM.RIGHT_PINKY,
+            scale
+          );
 
       applyGloveTransform(gloveMeshes.left, leftTransform);
       applyGloveTransform(gloveMeshes.right, rightTransform);
