@@ -633,11 +633,11 @@
                 color: 0x4a3b32,
                 roughness: 0.4,
                 metalness: 0.1,
-                deformationAmount: 1.05,
-                bulgeAmount: 0.45,
-                elasticity: 0.22,
-                damping: 0.82,
-                maxVertexSpeed: 3.5,
+                deformationAmount: 1.28,
+                bulgeAmount: 0.55,
+                elasticity: 0.26,
+                damping: 0.8,
+                maxVertexSpeed: 4.2,
                 noiseFactor: 0.045,
                 punchForce: 84,
                 mass: 60,
@@ -673,7 +673,7 @@
         // Posición base del boxeador respecto al saco (ajústalo si querés)
         const BOXER_BASE_X = -0.5;  // izquierda/derecha (0 = alineado al saco)
         const BOXER_BASE_Z = 2.0;   // delante/detrás   (0 = mismo plano del saco)
-        const MIN_BAG_DISTANCE = 1.25;
+        const MIN_BAG_DISTANCE = 1.35;
         const FIST_FORWARD_OFFSET = 0.12;
 
         const tysonBasePosition = new THREE.Vector3(BOXER_BASE_X, 0, BOXER_BASE_Z);
@@ -741,8 +741,8 @@
             smoothedStepTime = physicsTuning.stepTimeComfortMs;
 
             visualConfig.bag.mass = 52;
-            visualConfig.bag.deformationAmount = 0.85;
-            visualConfig.bag.bulgeAmount = 0.42;
+            visualConfig.bag.deformationAmount = 1.05;
+            visualConfig.bag.bulgeAmount = 0.48;
             visualConfig.bag.punchForce = 60;
             visualConfig.bag.linearDamping = 0.7;
             visualConfig.bag.angularDamping = 0.9;
@@ -1901,8 +1901,12 @@
 
             let distance = tmpVecA.length();
             if (distance < MIN_BAG_DISTANCE) {
+                if (distance < 1e-4) {
+                    tmpVecA.set(0, 0, 1);
+                }
                 const safePos = bagPos.clone().add(tmpVecA.normalize().multiplyScalar(MIN_BAG_DISTANCE));
-                tysonTargetPosition.lerp(safePos, 0.6);
+                tysonTargetPosition.lerp(safePos, 0.75);
+                tysonRoot.position.lerp(safePos, 0.4);
                 distance = MIN_BAG_DISTANCE;
             }
 
