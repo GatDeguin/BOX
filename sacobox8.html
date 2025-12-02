@@ -3509,7 +3509,10 @@
                         1.4
                     );
                     spot.position.copy(offset);
-                    spot.castShadow = !isMobile;
+                    // Evitamos usar sombras en estos spots para no exceder el límite de texturas
+                    // del shader (MAX_TEXTURE_IMAGE_UNITS), ya que en conjunto con el resto de
+                    // focos generaba el error de validación de programa en WebGL.
+                    spot.castShadow = false;
                     spot.shadow.mapSize.set(1024, 1024);
                     spot.shadow.bias = -0.00012;
                     spot.decay = 1.5;
@@ -3925,7 +3928,9 @@
                 1.35
             );
             reflectorLight.position.set(0, 0.16, 0.05);
-            reflectorLight.castShadow = !isMobile;
+            // Mantener estos reflectores sin sombras reduce los shadow maps activos y
+            // evita superar el máximo de unidades de textura disponibles en fragment shader.
+            reflectorLight.castShadow = false;
             reflectorLight.shadow.mapSize.set(512, 512);
             reflectorLight.shadow.bias = -0.00012;
             reflectorLight.name = 'ringFixtureLight';
