@@ -846,17 +846,24 @@
               applyTexturesToMaterial(obj.material, textureSet);
             }
             if (obj.isSkinnedMesh) skeleton = obj.skeleton;
-            if (obj.isBone) {
-              bonesByName[obj.name] = obj;
-              const cleaned = obj.name
-                .replace(/^mixamorig[:_ ]?/i, '')
-                .replace(/^mixamorig/i, '');
-              if (cleaned && cleaned !== obj.name) {
-                bonesByName[cleaned] = obj;
-                bonesByName[cleaned.toLowerCase()] = obj;
+              if (obj.isBone) {
+                const original = obj.name;
+                bonesByName[original] = obj;
+
+                // Algunos modelos (ej. MMA / BodyBuilder GLB) usan prefijos
+                // tipo "mixamorig1:Bone"; normalizamos para que el retarget
+                // encuentre los huesos esperados (Hips, Spine, etc.).
+                const cleaned = original
+                  .replace(/^mixamorig\d*[:_ ]?/i, '')
+                  .replace(/^mixamorig\d*/i, '');
+
+                if (cleaned && cleaned !== original) {
+                  bonesByName[cleaned] = obj;
+                  bonesByName[cleaned.toLowerCase()] = obj;
+                }
+
+                bonesByName[original.toLowerCase()] = obj;
               }
-              bonesByName[obj.name.toLowerCase()] = obj;
-            }
           });
 
           scene.add(modelRoot);
