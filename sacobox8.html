@@ -2084,6 +2084,7 @@
                 this.restBreathing = false;
                 this.actionTimeState = null;
                 this.lastStuckWarning = { action: null, time: 0 };
+                this.lastProgressTimestamp = 0;
             }
 
             async loadLibrary(definitions = ANIMATION_LIBRARY) {
@@ -2168,6 +2169,7 @@
                 this.activeAction = next.action;
                 this.activeEntry = next;
                 this.resetCueState();
+                this.lastProgressTimestamp = performance.now?.() || Date.now();
                 currentAnimationEntry = next;
                 currentAnimationCategory = next.category || getClipCategory(next.name);
 
@@ -2364,6 +2366,7 @@
                         prevTime: this.activeAction.time,
                         loop: 0
                     };
+                    this.lastProgressTimestamp = performance.now?.() || Date.now();
                 } else {
                     this.actionTimeState = null;
                 }
@@ -2378,12 +2381,16 @@
                 const currentTime = this.activeAction.time;
                 if (!this.actionTimeState || this.actionTimeState.action !== this.activeAction) {
                     this.actionTimeState = { action: this.activeAction, time: currentTime, prevTime: currentTime, loop: 0 };
+                    this.lastProgressTimestamp = performance.now?.() || Date.now();
                     return;
                 }
 
                 const prevTime = this.actionTimeState.time;
                 const looped = currentTime + 1e-4 < prevTime;
                 const nextLoop = looped ? this.actionTimeState.loop + 1 : this.actionTimeState.loop;
+                if (Math.abs(currentTime - prevTime) > 1e-4) {
+                    this.lastProgressTimestamp = performance.now?.() || Date.now();
+                }
                 this.actionTimeState = { action: this.activeAction, time: currentTime, prevTime, loop: nextLoop };
             }
 
@@ -2444,23 +2451,27 @@
                 const hasDuration = duration > 0;
                 const nearEnd = hasDuration && this.activeAction.time >= duration - 1e-3;
 
-                if (!hasDuration || nearEnd) {
-                    const now = performance.now?.() || Date.now();
-                    const sameAction = this.lastStuckWarning.action === this.activeAction;
-                    const elapsed = now - this.lastStuckWarning.time;
-                    const cooldownMs = 1500;
+                const now = performance.now?.() || Date.now();
+                const sameAction = this.lastStuckWarning.action === this.activeAction;
+                const elapsed = now - this.lastStuckWarning.time;
+                const cooldownMs = 1500;
+                const stalledFor = now - this.lastProgressTimestamp;
+                const progressStalled = stalledFor > 800;
 
-                    if (sameAction && elapsed < cooldownMs) {
-                        return;
-                    }
-
-                    if (!sameAction || elapsed >= cooldownMs) {
-                        console.warn('Detección de animación trabada, saltando a la siguiente.');
-                    }
-
-                    this.lastStuckWarning = { action: this.activeAction, time: now };
+                if (nearEnd) {
                     this.playNext();
+                    return;
                 }
+
+                if (!hasDuration || !progressStalled) return;
+
+                if (sameAction && elapsed < cooldownMs) {
+                    return;
+                }
+
+                console.warn('Detección de animación trabada, saltando a la siguiente.');
+                this.lastStuckWarning = { action: this.activeAction, time: now };
+                this.playNext();
             }
         }
 
