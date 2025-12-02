@@ -2429,7 +2429,7 @@
                 }
             });
 
-            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap, staticMat, ceilingMat };
+            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap };
         }
 
         // --- ESCENA Y PROPS ---
@@ -2632,7 +2632,7 @@
             }
 
             createClock();
-            return { staticMat };
+            return { staticMat, ceilingMat };
         }
 
         function createClock() {
