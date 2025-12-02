@@ -579,6 +579,7 @@
 
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { BagSimulation } from './src/bag/BagSimulation.ts';
 
         const infoBanner = document.getElementById('info');
         if (infoBanner) {
@@ -757,14 +758,13 @@
             }
         }
 
+        let bagSimulation;
         let bagBody, bagMesh, fanMesh, clockHandHour, clockHandMin, clockHandSec;
         let leftFistBody, rightFistBody, fistMaterial;
         let bagVisualOffset = new THREE.Vector3();
         let chains = [];
         const mouse = new THREE.Vector2();
         const raycaster = new THREE.Raycaster();
-        const originalPositions = [];
-        const vertexVelocities = [];
         const clock = new THREE.Clock();
         let noiseGen;
 
@@ -3007,60 +3007,10 @@
         let lastRightHandPos = null;
         let lastLeftFistPos = null;
         let lastRightFistPos = null;
-        let leftPunchCooldown = 0;
-        let rightPunchCooldown = 0;
-
-        function getBagPointVelocity(contactPoint) {
-            const relativePoint = new CANNON.Vec3();
-            contactPoint.vsub(bagBody.position, relativePoint);
-
-            const angularComponent = new CANNON.Vec3();
-            bagBody.angularVelocity.cross(relativePoint, angularComponent);
-
-            const bagPointVelocity = new CANNON.Vec3();
-            bagBody.velocity.vadd(angularComponent, bagPointVelocity);
-            return bagPointVelocity;
-        }
-
-        function computeBagNormal(contactPoint) {
-            const normal = new CANNON.Vec3();
-            contactPoint.vsub(bagBody.position, normal);
-            const length = normal.length();
-            if (length > 1e-6) {
-                normal.scale(1 / length, normal);
-            } else {
-                normal.set(0, 1, 0);
-            }
-            return normal;
-        }
-
-        function computePunchImpulse(handVelocityVec3, contactPointVec3, isLeft) {
-            if (!bagBody) return null;
-
-            const handVelocity = new CANNON.Vec3(handVelocityVec3.x, handVelocityVec3.y, handVelocityVec3.z);
-            const contactPoint = new CANNON.Vec3(contactPointVec3.x, contactPointVec3.y, contactPointVec3.z);
-            const normal = computeBagNormal(contactPoint);
-            const bagPointVelocity = getBagPointVelocity(contactPoint);
-
-            const relativeVelocity = new CANNON.Vec3();
-            handVelocity.vsub(bagPointVelocity, relativeVelocity);
-
-            const normalSpeed = relativeVelocity.dot(normal);
-            if (normalSpeed <= 0) return null;
-
-            const handSettings = isLeft ? punchConfig.left : punchConfig.right;
-            const impulseMagnitude = normalSpeed * handSettings.effectiveMass * handSettings.contactArea;
-            const impulse = normal.scale(impulseMagnitude, new CANNON.Vec3());
-
-            return { impulse, contactPoint, normal, normalSpeed, impulseMagnitude };
-        }
 
         function updatePosePunch(dt) {
             if (leftFistBody && rightFistBody) return;
             if (!skeleton || !bagBody || !bagMesh) return;
-
-            leftPunchCooldown = Math.max(0, leftPunchCooldown - dt);
-            rightPunchCooldown = Math.max(0, rightPunchCooldown - dt);
 
             const bagPos = bagMesh.position.clone();
 
@@ -3078,32 +3028,19 @@
                     const dirToBag = bagPos.clone().sub(worldPos).normalize();
                     const forwardFactor = vel.dot(dirToBag);
 
-                    const cooldown = isLeft ? leftPunchCooldown : rightPunchCooldown;
-
                     // El boxeador mantiene una distancia mínima al saco (MIN_BAG_DISTANCE),
                     // por lo que el umbral de detección del golpe debe respetar ese rango.
                     const maxPunchDistance = MIN_BAG_DISTANCE + 0.2;
 
-                    if (speed > 1.5 && forwardFactor > 0.4 && distance < maxPunchDistance && cooldown <= 0) {
-                        const punchData = computePunchImpulse(vel, worldPos, isLeft);
-                        if (punchData) {
-                            const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                            const normalizedImpact = THREE.MathUtils.clamp(
-                                punchData.impulseMagnitude / visualConfig.bag.punchForce,
-                                0.15,
-                                1.5
-                            );
-                            deform(worldPos, normalDir, dt, normalizedImpact);
-
+                    if (speed > 1.5 && forwardFactor > 0.4 && distance < maxPunchDistance && bagSimulation) {
+                        const punchResult = bagSimulation.applyPunch(vel, worldPos, isLeft);
+                        if (punchResult) {
                             if (!audioInitialized) initAudioContext();
-                            const impactForce = visualConfig.bag.punchForce * normalizedImpact;
+                            const impactForce = visualConfig.bag.punchForce * punchResult.normalizedImpact;
                             playImpactSound(impactForce);
                             playHeavyImpactSound(impactForce);
 
-                            registerPunch(Math.min(1, punchData.normalSpeed / 6));
-
-                            if (isLeft) leftPunchCooldown = 0.25;
-                            else rightPunchCooldown = 0.25;
+                            registerPunch(Math.min(1, punchResult.punchData.normalSpeed / 6));
                         }
                     }
                 }
@@ -4314,8 +4251,39 @@
                 frictionEquationRelaxation: 3
             }));
 
-            createPunchingBag(tex.bag, { bagMaterial: bagMat, chainMaterial, ceilingMaterial: ceilingMat, staticMat });
+            bagSimulation = new BagSimulation({
+                world,
+                scene,
+                noise: noiseGen,
+                visualConfig,
+                punchConfig,
+                collisionGroups,
+                geometryDetail: BAG_GEOMETRY_DETAIL,
+                bagVisualOffset,
+                mobileSimpleMode: MOBILE_SIMPLE_MODE
+            });
+
+            bagSimulation.initialize(tex.bag, { bagMaterial: bagMat, chainMaterial, ceilingMaterial: ceilingMat, staticMat });
+            bagBody = bagSimulation.getBody();
+            bagMesh = bagSimulation.getMesh();
+            bagVisualOffset = bagSimulation.getVisualOffset();
+            chains = bagSimulation.getChains();
+
+            if (bagBody) {
+                bagBody.addEventListener('collide', handleBagCollision);
+            }
+
+            bagSimulation.reset();
             createFistColliders();
+        }
+
+        function applyBagPhysicsToBody() {
+            const body = bagSimulation ? bagSimulation.getBody() : null;
+            if (!body) return;
+            body.mass = visualConfig.bag.mass;
+            body.updateMassProperties();
+            body.linearDamping = visualConfig.bag.linearDamping;
+            body.angularDamping = visualConfig.bag.angularDamping;
         }
 
         function createFistColliders() {
@@ -4391,257 +4359,25 @@
             const isLeft = other === leftFistBody;
 
             const contactPoint = new CANNON.Vec3();
-            const contactNormal = new CANNON.Vec3();
 
             if (contact.bi === bagBody) {
                 contactPoint.copy(contact.ri).vadd(bagBody.position, contactPoint);
-                contactNormal.copy(contact.ni);
             } else if (contact.bj === bagBody) {
                 contactPoint.copy(contact.rj).vadd(bagBody.position, contactPoint);
-                contactNormal.copy(contact.ni).scale(-1);
             } else {
                 return;
             }
 
             const fistPointVelocity = getBodyPointVelocity(other, contactPoint);
-            const punchData = computePunchImpulse(fistPointVelocity, contactPoint, isLeft);
+            const punchResult = bagSimulation ? bagSimulation.applyPunch(fistPointVelocity, contactPoint, isLeft) : null;
 
-            if (punchData) {
-                bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
-
-                const normalDir = new THREE.Vector3(contactNormal.x, contactNormal.y, contactNormal.z);
-                const normalizedImpact = THREE.MathUtils.clamp(
-                    punchData.impulseMagnitude / visualConfig.bag.punchForce,
-                    0.15,
-                    1.5
-                );
-
-                deform(
-                    new THREE.Vector3(contactPoint.x, contactPoint.y, contactPoint.z),
-                    normalDir,
-                    lastVisualStep,
-                    normalizedImpact
-                );
-
+            if (punchResult) {
                 if (!audioInitialized) initAudioContext();
-                const impactForce = visualConfig.bag.punchForce * normalizedImpact;
+                const impactForce = visualConfig.bag.punchForce * punchResult.normalizedImpact;
                 playImpactSound(impactForce);
                 playHeavyImpactSound(impactForce);
 
-                registerPunch(Math.min(1, punchData.normalSpeed / 6));
-
-                if (isLeft) leftPunchCooldown = 0.25;
-                else rightPunchCooldown = 0.25;
-            }
-        }
-
-        function applyBagPhysicsToBody() {
-            if (!bagBody) return;
-            bagBody.mass = visualConfig.bag.mass;
-            bagBody.updateMassProperties();
-            bagBody.linearDamping = visualConfig.bag.linearDamping;
-            bagBody.angularDamping = visualConfig.bag.angularDamping;
-        }
-
-        function createPunchingBag(tex, materials) {
-            const { bagMaterial, chainMaterial, ceilingMaterial, staticMat } = materials;
-            const h = 1.5, r = 0.35;
-            let geo = new THREE.CylinderGeometry(
-                r,
-                r,
-                h,
-                BAG_GEOMETRY_DETAIL.radialSegments,
-                BAG_GEOMETRY_DETAIL.heightSegments
-            );
-            geo = geo.toNonIndexed();
-            const pos = geo.attributes.position;
-            
-            for(let i=0; i<pos.count; i++) {
-                const v = new THREE.Vector3().fromBufferAttribute(pos, i);
-                if(Math.abs(v.y) < h/2 - 0.1) {
-                    const n = noiseGen.noise2D(v.x*1.5, v.y*1.5 + v.z*1.5) * visualConfig.bag.noiseFactor;
-                    const bulgeY = Math.sin(v.y * 3) * 0.02;
-                    let dent = 0;
-                    if(v.z > 0.1 && Math.abs(v.y) < 0.3) {
-                        const d = noiseGen.noise2D(v.x*4, v.y*4);
-                        if(d > 0.5) dent = -0.02;
-                    }
-                    const scale = 1.0 + n + bulgeY + dent;
-                    v.x *= scale; v.z *= scale; 
-                    pos.setXYZ(i, v.x, v.y, v.z);
-                }
-            }
-            geo.computeVertexNormals();
-            
-            for(let i=0; i<pos.count; i++){
-                originalPositions.push(new THREE.Vector3().fromBufferAttribute(pos, i));
-                vertexVelocities.push(new THREE.Vector3());
-            }
-
-            const mat = new THREE.MeshStandardMaterial({
-                map: tex.c, normalMap: tex.n, roughnessMap: tex.r, 
-                color: visualConfig.bag.color,
-                roughness: visualConfig.bag.roughness, metalness: visualConfig.bag.metalness
-            });
-            bagMesh = new THREE.Mesh(geo, mat);
-            bagMesh.castShadow = true;
-            bagMesh.receiveShadow = true;
-            scene.add(bagMesh);
-
-            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, chainMaterial, {
-                friction: 0.38,
-                restitution: 0.04,
-                contactEquationStiffness: 32000,
-                contactEquationRelaxation: 7,
-                frictionEquationRelaxation: 6
-            }));
-
-            const ancBody = new CANNON.Body({
-                mass: 0,
-                position: new CANNON.Vec3(0, 4.25, 0),
-                material: ceilingMaterial,
-                collisionFilterGroup: collisionGroups.static,
-                collisionFilterMask: collisionGroups.chain | collisionGroups.bag
-            });
-            ancBody.addShape(new CANNON.Sphere(0.08));
-            world.addBody(ancBody);
-
-            const chainGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.25);
-            const chainMat = new THREE.MeshStandardMaterial({color:0x888888, metalness:1.0, roughness:0.2});
-            let last = ancBody;
-            const links = MOBILE_SIMPLE_MODE ? 2 : 3;
-            const linkLength = MOBILE_SIMPLE_MODE ? 0.22 : 0.25;
-            for(let i=0; i<links; i++){
-                const b = new CANNON.Body({
-                    mass: 2,
-                    position: new CANNON.Vec3(0, 4.25 - (i + 1) * linkLength, 0),
-                    shape: new CANNON.Sphere(0.05),
-                    material: chainMaterial,
-                    collisionFilterGroup: collisionGroups.chain,
-                    collisionFilterMask: collisionGroups.static | collisionGroups.chain | collisionGroups.bag,
-                    linearDamping: 0.35,
-                    angularDamping: 0.85,
-                    allowSleep: true
-                });
-                b.sleepSpeedLimit = 0.25;
-                b.sleepTimeLimit = 0.5;
-                world.addBody(b);
-                const constraint = new CANNON.DistanceConstraint(last, b, linkLength, 1e5);
-                constraint.collideConnected = true;
-                world.addConstraint(constraint);
-                const m = new THREE.Mesh(chainGeo, chainMat);
-                m.castShadow = true;
-                scene.add(m);
-                chains.push({m, b});
-                last = b;
-            }
-
-            const bagShapeOffset = new CANNON.Vec3(0, -0.1, 0);
-            const bagHookOffset = new CANNON.Vec3(0, h/2 + bagShapeOffset.y - 0.05, 0);
-            const bagAttachmentOffset = h/2 + bagShapeOffset.y + 0.05;
-
-            const bagCylinderShape = new CANNON.Cylinder(r, r, h, 16);
-            const bagHookShape = new CANNON.Sphere(0.12);
-
-            bagBody = new CANNON.Body({
-                mass: visualConfig.bag.mass,
-                material: bagMaterial,
-                position: new CANNON.Vec3(0, 2, 0),
-                collisionFilterGroup: collisionGroups.bag,
-                collisionFilterMask: collisionGroups.static | collisionGroups.chain | collisionGroups.fist,
-                linearDamping: visualConfig.bag.linearDamping,
-                angularDamping: visualConfig.bag.angularDamping,
-                allowSleep: true
-            });
-            bagBody.addShape(bagCylinderShape, bagShapeOffset);
-            bagBody.addShape(bagHookShape, bagHookOffset);
-            bagBody.sleepSpeedLimit = 0.2;
-            bagBody.sleepTimeLimit = 1.0;
-            bagBody.shapeOrientations[0].setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
-            world.addBody(bagBody);
-            bagBody.addEventListener('collide', handleBagCollision);
-            bagVisualOffset.set(bagShapeOffset.x, bagShapeOffset.y, bagShapeOffset.z);
-            const swingConstraint = new CANNON.ConeTwistConstraint(
-                last,
-                bagBody,
-                {
-                    pivotA: new CANNON.Vec3(0, -0.125, 0),
-                    pivotB: new CANNON.Vec3(0, bagAttachmentOffset, 0),
-                    axisA: new CANNON.Vec3(0, 1, 0),
-                    axisB: new CANNON.Vec3(0, 1, 0),
-                    angle: THREE.MathUtils.degToRad(30),
-                    twistAngle: THREE.MathUtils.degToRad(15)
-                }
-            );
-            world.addConstraint(swingConstraint);
-        }
-
-        // --- DEFORMACIÓN ---
-        function deform(point, dir, dt, intensity = 1) {
-            if(!bagMesh) return;
-            const visualStep = dt || lastVisualStep || fixedVisualStep;
-            const lp = bagMesh.worldToLocal(point.clone());
-            const pos = bagMesh.geometry.attributes.position;
-            const rot = bagMesh.quaternion.clone().invert();
-            const ld = dir.clone().applyQuaternion(rot).normalize();
-
-            const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.25, 2.5);
-            const innerRadius = 0.78;
-            const outerRadius = 1.18;
-            const innerRadiusSq = innerRadius * innerRadius;
-            const outerRadiusSq = outerRadius * outerRadius;
-            const pushScale = visualConfig.bag.deformationAmount * visualStep * (1.05 + clampedIntensity * 0.75);
-            const bulgeScale = visualConfig.bag.bulgeAmount * visualStep * (0.95 + clampedIntensity * 0.65);
-
-            for(let i=0; i<pos.count; i++) {
-                tempV.fromBufferAttribute(pos, i);
-                tempDisp.copy(tempV).sub(lp);
-                const d2 = tempDisp.lengthSq();
-
-                if(d2 < innerRadiusSq) {
-                    const d = Math.sqrt(d2);
-                    const f = 1 - d / innerRadius;
-                    vertexVelocities[i].addScaledVector(ld, f * pushScale);
-                } else if(d2 < outerRadiusSq) {
-                    const d = Math.sqrt(d2);
-                    const t = (d - innerRadius) / (outerRadius - innerRadius);
-                    const f = Math.sin(t * Math.PI) * bulgeScale;
-                    vertexVelocities[i].addScaledVector(ld, -f);
-                }
-            }
-        }
-
-        function updateMesh(dt) {
-            if(!bagMesh) return;
-            const visualStep = dt || lastVisualStep || fixedVisualStep;
-            const pos = bagMesh.geometry.attributes.position;
-            let moved = false;
-
-            for(let i=0; i<pos.count; i++) {
-                tempV.fromBufferAttribute(pos, i);
-                const o = originalPositions[i];
-                const vel = vertexVelocities[i];
-
-                tempDisp.subVectors(tempV, o);
-                const displacementLenSq = tempDisp.lengthSq();
-
-                const force = tempDisp.multiplyScalar(-visualConfig.bag.elasticity * visualStep);
-                vel.add(force);
-
-                const baseStep = Math.max(fixedVisualStep, 0.0001);
-                const dampingFactor = Math.pow(visualConfig.bag.damping, visualStep / baseStep);
-                vel.multiplyScalar(dampingFactor);
-                vel.clampLength(0, visualConfig.bag.maxVertexSpeed);
-
-                if(vel.lengthSq()>0.00001 || displacementLenSq>0.00001) {
-                    tempV.addScaledVector(vel, visualStep);
-                    pos.setXYZ(i, tempV.x, tempV.y, tempV.z);
-                    moved = true;
-                }
-            }
-            if(moved) {
-                pos.needsUpdate = true;
-                bagMesh.geometry.computeVertexNormals();
+                registerPunch(Math.min(1, punchResult.punchData.normalSpeed / 6));
             }
         }
 
@@ -4922,7 +4658,7 @@
         }
 
         function triggerQuickPunch(hand = 'right') {
-            if (!bagMesh || !bagBody) return;
+            if (!bagSimulation || !bagMesh) return;
 
             initAudioContext();
 
@@ -4931,22 +4667,13 @@
             const hitPoint = bagMesh.position.clone().add(new THREE.Vector3(0, 0.3, 0.32));
             const handSettings = punchConfig[hand] || punchConfig.right;
             const syntheticSpeed = baseForce / (handSettings.effectiveMass * handSettings.contactArea);
-            const punchData = computePunchImpulse(dir.multiplyScalar(syntheticSpeed), hitPoint, hand === 'left');
-            if (!punchData) return;
+            const punchResult = bagSimulation.applyPunch(dir.multiplyScalar(syntheticSpeed), hitPoint, hand === 'left');
+            if (!punchResult) return;
 
-            bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
-            const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-            const normalizedImpact = THREE.MathUtils.clamp(
-                punchData.impulseMagnitude / visualConfig.bag.punchForce,
-                0.15,
-                1.5
-            );
-            deform(hitPoint, normalDir, lastVisualStep, normalizedImpact);
-
-            const impactForce = Math.max(baseForce, punchData.impulseMagnitude);
+            const impactForce = Math.max(baseForce, punchResult.punchData.impulseMagnitude);
             playImpactSound(impactForce);
             playHeavyImpactSound(impactForce * 0.9);
-            registerPunch(Math.min(1, punchData.normalSpeed / 6));
+            registerPunch(Math.min(1, punchResult.punchData.normalSpeed / 6));
 
             shakeTime = shakeDuration;
             shakeStrength = 0.03 * (impactForce / visualConfig.bag.punchForce);
@@ -4961,7 +4688,7 @@
             mouse.y = -(e.clientY/window.innerHeight)*2+1;
             raycaster.setFromCamera(mouse, camera);
             
-            if(!bagMesh || !bagBody) return;
+            if(!bagMesh || !bagSimulation) return;
 
             const hits = raycaster.intersectObject(bagMesh);
             if(hits.length>0) {
@@ -4973,21 +4700,12 @@
                 const targetImpulse = visualConfig.bag.punchForce;
                 const syntheticSpeed = targetImpulse / (rightSettings.effectiveMass * rightSettings.contactArea);
                 const handVelocity = dir.clone().multiplyScalar(syntheticSpeed);
+                const punchResult = bagSimulation.applyPunch(handVelocity, hit.point, false);
+                if (punchResult) {
+                    const impactForce = Math.max(targetImpulse, punchResult.punchData.impulseMagnitude);
+                    playImpactSound(impactForce);
 
-                    const punchData = computePunchImpulse(handVelocity, hit.point, false);
-                    if (punchData) {
-                        bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
-                        const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                        const normalizedImpact = THREE.MathUtils.clamp(
-                            punchData.impulseMagnitude / visualConfig.bag.punchForce,
-                            0.15,
-                            1.5
-                        );
-                        deform(hit.point, normalDir, lastVisualStep, normalizedImpact);
-                        const impactForce = Math.max(targetImpulse, punchData.impulseMagnitude);
-                        playImpactSound(impactForce);
-
-                    registerPunch(Math.min(1, punchData.normalSpeed / 6));
+                    registerPunch(Math.min(1, punchResult.punchData.normalSpeed / 6));
 
                     shakeTime = shakeDuration;
                     shakeStrength = 0.03 * (impactForce / visualConfig.bag.punchForce);
@@ -5158,7 +4876,9 @@
                 shakeOffset.set(0, 0, 0);
             }
 
-            updateMesh(visualStep);
+            if (bagSimulation) {
+                bagSimulation.update(visualStep);
+            }
             updateFog(dtVis, elapsed);
 
             // Golpes desde manos del personaje
