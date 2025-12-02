@@ -379,7 +379,7 @@
     // ==============================
     // 1. Constantes / utils
     // ==============================
-    const MODEL_OPTIONS = [
+    const STATIC_MODEL_OPTIONS = [
       {
         id: 'tyson',
         name: 'Tyson (FBX)',
@@ -419,7 +419,8 @@
         },
       },
     ];
-    const DEFAULT_MODEL_ID = MODEL_OPTIONS[0].id;
+    let MODEL_OPTIONS = [...STATIC_MODEL_OPTIONS];
+    let DEFAULT_MODEL_ID = MODEL_OPTIONS[0]?.id || 'default-model';
     const DEFAULT_ANIMATIONS = [
       { name: 'Idle to Fight (preset)', url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
       { name: 'Arm Stretching', url: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
@@ -953,6 +954,54 @@
       modelSelect.value = DEFAULT_MODEL_ID;
     }
 
+    function slugifyId(input) {
+      return (input || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'modelo';
+    }
+
+    function buildModelOptionsFromManifest(manifest) {
+      if (!manifest || !Array.isArray(manifest.models)) return [];
+      return manifest.models
+        .map((entry) => {
+          if (!entry?.file) return null;
+          const id = slugifyId(entry.id || entry.file);
+          const name = entry.name || entry.file;
+          const url = `modelos/${entry.file}`;
+          return { id, name, url, textures: entry.textures || {} };
+        })
+        .filter(Boolean);
+    }
+
+    function mergeModelOptions(staticOptions, manifestOptions) {
+      const map = new Map();
+      [...staticOptions, ...manifestOptions].forEach((opt) => {
+        if (!opt?.id || !opt.url) return;
+        const key = opt.id.toLowerCase();
+        if (!map.has(key)) map.set(key, opt);
+      });
+      const merged = Array.from(map.values());
+      return merged.length ? merged : [...staticOptions];
+    }
+
+    async function loadModelManifest() {
+      try {
+        const res = await fetch('modelos/manifest.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const manifest = await res.json();
+        const manifestOptions = buildModelOptionsFromManifest(manifest);
+        MODEL_OPTIONS = mergeModelOptions(STATIC_MODEL_OPTIONS, manifestOptions);
+        DEFAULT_MODEL_ID = MODEL_OPTIONS[0]?.id || DEFAULT_MODEL_ID;
+      } catch (err) {
+        console.warn('No se pudo cargar manifest de modelos, usando valores por defecto:', err);
+        MODEL_OPTIONS = [...STATIC_MODEL_OPTIONS];
+      }
+    }
+
     function loadAnimationFBXFromURL(url, displayName, loopMode = 'repeat') {
       const loader = new FBXLoader();
       loader.load(
@@ -1002,14 +1051,19 @@
       activeAction = null;
     }
 
-    populateModelSelect();
-    const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
-    loadModel(initialModel);
+    async function bootstrapModelOptions() {
+      await loadModelManifest();
+      populateModelSelect();
+      const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
+      loadModel(initialModel);
 
-    // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
-    DEFAULT_ANIMATIONS.forEach((entry) => {
-      loadAnimationFBXFromURL(entry.url, entry.name, entry.loop);
-    });
+      // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
+      DEFAULT_ANIMATIONS.forEach((entry) => {
+        loadAnimationFBXFromURL(entry.url, entry.name, entry.loop);
+      });
+    }
+
+    bootstrapModelOptions();
 
     function onWindowResize() {
       const width = threeContainer.clientWidth || 640;
