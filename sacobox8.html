@@ -3346,7 +3346,9 @@
                     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
                 }
             });
-            floorColor.repeat.set(4,4); floorRough.repeat.set(4,4);
+            // Increase repeat so a larger floor keeps a consistent texel density
+            floorColor.repeat.set(14,6);
+            floorRough.repeat.set(14,6);
 
             const wallMap = createTex((ctx, w) => {
                 const img = ctx.createImageData(w, w);
@@ -3544,11 +3546,12 @@
                 scene.add(annex);
             }
 
-            const floorGeo = new THREE.PlaneGeometry(12, 12);
-            const floorMat = new THREE.MeshStandardMaterial({ 
+            const mainFloorGeo = new THREE.PlaneGeometry(40, 18);
+            const ringFloorGeo = new THREE.PlaneGeometry(12, 12);
+            const floorMat = new THREE.MeshStandardMaterial({
                 map: tex.floor.c, roughnessMap: tex.floor.r, metalness: 0.1, color: 0xaaaaaa
             });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
+            const floor = new THREE.Mesh(mainFloorGeo, floorMat);
             floor.rotation.x = -Math.PI/2;
             floor.receiveShadow = true;
             scene.add(floor);
@@ -3801,7 +3804,7 @@
                 createDustParticles();
             }
 
-            createRingAnnex(tex, floorGeo, floorMat, wallMat);
+            createRingAnnex(tex, ringFloorGeo, floorMat, wallMat);
 
             gltfLoader.load(
                 RING_MODEL_URL,
