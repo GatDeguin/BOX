@@ -2238,7 +2238,11 @@
 
                     const cooldown = isLeft ? leftPunchCooldown : rightPunchCooldown;
 
-                    if (speed > 1.5 && forwardFactor > 0.4 && distance < 0.8 && cooldown <= 0) {
+                    // El boxeador mantiene una distancia mínima al saco (MIN_BAG_DISTANCE),
+                    // por lo que el umbral de detección del golpe debe respetar ese rango.
+                    const maxPunchDistance = MIN_BAG_DISTANCE + 0.2;
+
+                    if (speed > 1.5 && forwardFactor > 0.4 && distance < maxPunchDistance && cooldown <= 0) {
                         const punchData = computePunchImpulse(vel, worldPos, isLeft);
                         if (punchData) {
                             bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
