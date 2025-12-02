@@ -71,54 +71,6 @@
             z-index: 20;
         }
 
-        #mobileControls {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 25;
-            align-items: flex-end;
-        }
-
-        .mobile-card {
-            background: radial-gradient(circle at top, rgba(200,200,220,0.08), rgba(5,5,8,0.9));
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            color: #e2e8f0;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            min-width: 240px;
-        }
-
-        .mobile-card h4 {
-            margin: 0 0 6px 0;
-            font-size: 14px;
-            letter-spacing: 0.05em;
-            color: #f8fafc;
-        }
-
-        .mobile-actions {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-        }
-
-        .punch-btn {
-            width: 100%;
-            justify-content: center;
-        }
-
-        .mobile-hint {
-            display: block;
-            margin-top: 6px;
-            font-size: 11px;
-            color: #cbd5f5;
-            opacity: 0.9;
-        }
-
         /* Webcam + overlay pose */
         #input_video {
             position: fixed;
@@ -248,20 +200,6 @@
             border-bottom: none;
         }
 
-        @media (max-width: 768px) {
-            #info { padding: 0 12px; }
-            .instruction { width: calc(100% - 24px); box-sizing: border-box; }
-            .pill-button { font-size: 14px; padding: 10px 12px; }
-            #presetBtn { top: 12px; left: 12px; }
-            #muteBtn { top: 12px; right: 12px; }
-            #webcamBtn { top: 12px; right: 120px; }
-            #viewBtn { top: 12px; right: 228px; }
-            #debugPanel { max-height: 45vh; font-size: 11px; }
-            #input_video, #pose_canvas { width: 160px; }
-            #mobileControls { left: 12px; right: 12px; align-items: stretch; }
-            .mobile-card { width: 100%; }
-        }
-
         #debugPanel .control-row input[type="range"] {
             width: 100%;
         }
@@ -383,17 +321,6 @@
     <button id="viewBtn" class="pill-button">
         👁️ 3ra Persona
     </button>
-
-    <div id="mobileControls">
-        <div class="mobile-card">
-            <h4>Modo móvil ligero</h4>
-            <div class="mobile-actions">
-                <button class="pill-button punch-btn" data-hand="left">👊 Izquierda</button>
-                <button class="pill-button punch-btn" data-hand="right">💥 Derecha</button>
-            </div>
-            <small class="mobile-hint">Toca para golpear el saco sin webcam ni mouse.</small>
-        </div>
-    </div>
 
     <div id="canvas-container"></div>
 
@@ -667,18 +594,17 @@
         const tysonTargetPosition = tysonBasePosition.clone();
 
         // Si lo pones en true, vuelven los golpes con el mouse (modo debug)
-        let DEBUG_MOUSE_PUNCH = false;
+        const DEBUG_MOUSE_PUNCH = false;
 
         // Mezcla de animaciones automáticas vs. mocap (webcam):
         // - Poné AUTO_ANIMATION_ENABLED en false para desactivar el combo automático y dejar solo mocap.
         // - Poné ENABLE_MOCAP_BLEND en false para correr las animaciones sin capturar webcam/pose.
         const AUTO_ANIMATION_ENABLED = true;
-        const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
-        const ENABLE_MOCAP_BLEND = !isMobile;
+        const ENABLE_MOCAP_BLEND = true;
         const DUST_ENABLED = false;
         const CLOCK_MODE = 'system'; // 'system' | 'session'
 
-        const MOBILE_SIMPLE_MODE = isMobile;
+        const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
 
         const RING_MODEL_URL = 'modelos/Ring 2.glb';
         const RING_POSITION = new THREE.Vector3(20.1, 0, 2.0);
@@ -704,38 +630,6 @@
         const maxDelta = 0.1;
         let accumulator = 0;
         let lastTime;
-
-        const BAG_GEOMETRY_DETAIL = MOBILE_SIMPLE_MODE
-            ? { radialSegments: 28, heightSegments: 12 }
-            : { radialSegments: 64, heightSegments: 32 };
-
-        function applyMobileSimplifications() {
-            if (!MOBILE_SIMPLE_MODE) return;
-
-            physicsTuning.baseFixedTimeStep = 1 / 50;
-            physicsTuning.maxSubSteps = 4;
-            physicsTuning.stepTimeBudgetMs = 2.0;
-            physicsTuning.stepTimeComfortMs = 1.0;
-            fixedTimeStep = physicsTuning.baseFixedTimeStep;
-            maxSubSteps = physicsTuning.maxSubSteps;
-            smoothedStepTime = physicsTuning.stepTimeComfortMs;
-
-            visualConfig.bag.mass = 52;
-            visualConfig.bag.deformationAmount = 0.3;
-            visualConfig.bag.bulgeAmount = 0.18;
-            visualConfig.bag.punchForce = 60;
-            visualConfig.bag.linearDamping = 0.7;
-            visualConfig.bag.angularDamping = 0.9;
-
-            punchConfig.left.contactArea = 0.9;
-            punchConfig.right.contactArea = 0.9;
-            DEBUG_MOUSE_PUNCH = true;
-
-            const debugPanel = document.getElementById('debugPanel');
-            if (debugPanel) {
-                debugPanel.classList.add('collapsed');
-            }
-        }
 
         let bagBody, bagMesh, fanMesh, clockHandHour, clockHandMin, clockHandSec;
         let leftFistBody, rightFistBody, fistMaterial;
@@ -2825,7 +2719,6 @@
             noiseGen = new SimplexNoise();
 
             applyPresetBagSettings(currentPreset);
-            applyMobileSimplifications();
             setupDebugPanelToggle();
             setupBagControls();
             setupPunchControls();
@@ -2852,7 +2745,6 @@
             setupPresetButton();
             setupViewButton();
             setupUiFxEvents();
-            setupMobileControls();
 
             // Tyson + webcam
             loadTysonModel();
@@ -3999,13 +3891,7 @@
         function createPunchingBag(tex, materials) {
             const { bagMaterial, chainMaterial, ceilingMaterial, staticMat } = materials;
             const h = 1.5, r = 0.35;
-            let geo = new THREE.CylinderGeometry(
-                r,
-                r,
-                h,
-                BAG_GEOMETRY_DETAIL.radialSegments,
-                BAG_GEOMETRY_DETAIL.heightSegments
-            );
+            let geo = new THREE.CylinderGeometry(r, r, h, 64, 32);
             geo = geo.toNonIndexed();
             const pos = geo.attributes.position;
             
@@ -4062,8 +3948,8 @@
             const chainGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.25);
             const chainMat = new THREE.MeshStandardMaterial({color:0x888888, metalness:1.0, roughness:0.2});
             let last = ancBody;
-            const links = MOBILE_SIMPLE_MODE ? 2 : 3;
-            const linkLength = MOBILE_SIMPLE_MODE ? 0.22 : 0.25;
+            const links = 3;
+            const linkLength = 0.25;
             for(let i=0; i<links; i++){
                 const b = new CANNON.Body({
                     mass: 2,
@@ -4410,51 +4296,6 @@
                 el.addEventListener('mouseenter', handler);
                 el.addEventListener('click', handler);
             });
-        }
-
-        function setupMobileControls() {
-            const panel = document.getElementById('mobileControls');
-            if (!panel) return;
-
-            if (!MOBILE_SIMPLE_MODE) {
-                panel.style.display = 'none';
-                return;
-            }
-
-            const buttons = panel.querySelectorAll('[data-hand]');
-            buttons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const hand = btn.dataset.hand || 'right';
-                    triggerQuickPunch(hand);
-                });
-            });
-        }
-
-        function triggerQuickPunch(hand = 'right') {
-            if (!bagMesh || !bagBody) return;
-
-            initAudioContext();
-
-            const baseForce = visualConfig.bag.punchForce * (hand === 'left' ? 0.8 : 1.0);
-            const dir = bagMesh.position.clone().sub(camera.position).normalize();
-            const hitPoint = bagMesh.position.clone().add(new THREE.Vector3(0, 0.3, 0.32));
-            const handSettings = punchConfig[hand] || punchConfig.right;
-            const syntheticSpeed = baseForce / (handSettings.effectiveMass * handSettings.contactArea);
-            const punchData = computePunchImpulse(dir.multiplyScalar(syntheticSpeed), hitPoint, hand === 'left');
-            if (!punchData) return;
-
-            bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
-            const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-            deform(hitPoint, normalDir, lastVisualStep);
-
-            const impactForce = Math.max(baseForce, punchData.impulseMagnitude);
-            playImpactSound(impactForce);
-            playHeavyImpactSound(impactForce * 0.9);
-            registerPunch(Math.min(1, punchData.normalSpeed / 6));
-
-            shakeTime = shakeDuration;
-            shakeStrength = 0.03 * (impactForce / visualConfig.bag.punchForce);
-            triggerImpactFlash(0.35, false);
         }
 
         // --- INTERACCIÓN (click sobre saco: solo si DEBUG_MOUSE_PUNCH = true) ---
