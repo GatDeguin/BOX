@@ -3558,6 +3558,8 @@
             world.addBody(floorBody);
 
             const wallH = 5;
+            const featureWallOffset = 10;
+            const featureWallX = 6 + featureWallOffset;
             const wL = new THREE.Mesh(new THREE.PlaneGeometry(3, wallH), wallMat);
             wL.position.set(-3.9, wallH/2, -5); wL.receiveShadow=true; scene.add(wL);
             const wR = new THREE.Mesh(new THREE.PlaneGeometry(5, wallH), wallMat);
@@ -3573,19 +3575,19 @@
             });
 
             const posterA = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.8), posterMat);
-            posterA.position.set(5.85, 2.1, -1.8);
+            posterA.position.set(featureWallX - 0.15, 2.1, -1.8);
             posterA.rotation.y = -Math.PI / 2;
             scene.add(posterA);
 
             const posterB = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), posterMat);
-            posterB.position.set(5.85, 1.6, 1.2);
+            posterB.position.set(featureWallX - 0.15, 1.6, 1.2);
             posterB.rotation.y = -Math.PI / 2;
             scene.add(posterB);
 
             const windowWidth = 8.6;
             const windowHeight = 0.6;
             const windowY = 4.15;
-            const windowX = 5.9;
+            const windowX = featureWallX - 0.1;
             const windowGroup = new THREE.Group();
             const windowPane = new THREE.Mesh(
                 new THREE.PlaneGeometry(windowWidth, windowHeight),
@@ -3744,7 +3746,7 @@
 
             const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(12, wallH), wallMat);
             rightWall.rotation.y = -Math.PI/2;
-            rightWall.position.set(6, wallH/2, 0);
+            rightWall.position.set(featureWallX, wallH/2, 0);
             rightWall.receiveShadow = true;
             scene.add(rightWall);
 
