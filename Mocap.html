@@ -344,6 +344,14 @@
             <select id="model_select" class="select"></select>
           </div>
           <div class="control-group">
+            <label class="hint" for="ring_select">Ring de fondo:</label>
+            <select id="ring_select" class="select"></select>
+          </div>
+          <div class="control-group">
+            <label class="hint" for="glove_select">Guantes:</label>
+            <select id="glove_select" class="select"></select>
+          </div>
+          <div class="control-group">
             <label class="hint" for="animation_select">Animación FBX:</label>
             <select id="animation_select" class="select">
               <option value="none">Ninguna (usar mocap en vivo)</option>
@@ -365,6 +373,7 @@
     import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
     import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/FBXLoader.js';
     import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/OBJLoader.js';
+    import { MTLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/MTLLoader.js';
 
     // ==============================
     // 0. Sanity checks
@@ -379,9 +388,47 @@
     // ==============================
     // 1. Constantes / utils
     // ==============================
+    function slugifyId(input) {
+      return (input || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'modelo';
+    }
+
+    const MODEL_ID_ALIASES = { ring: 'ring-1' };
+    const NON_COLOR_SPACE_FALLBACK = THREE.NoColorSpace || THREE.LinearSRGBColorSpace || THREE.SRGBColorSpace;
+
+    const MODEL_TYPE_OVERRIDES = {
+      tyson: 'character',
+      bodybuilder: 'character',
+      mma: 'character',
+      principal: 'character',
+      'training-dummy': 'object',
+      dummy: 'object',
+      bolsa: 'object',
+      'punching-bag': 'object',
+      'ring-1': 'background',
+      ring: 'background',
+      'ring-2': 'background',
+      'ring-3': 'background',
+      'guantes-amateur': 'glove',
+    };
+
+    function normalizeModelOption(option) {
+      if (!option) return null;
+      const rawId = option.id || slugifyId(option.url || option.name);
+      const id = MODEL_ID_ALIASES[rawId] || rawId;
+      const type = option.type || MODEL_TYPE_OVERRIDES[id] || 'character';
+      return { ...option, id, type };
+    }
+
     const STATIC_MODEL_OPTIONS = [
       {
         id: 'tyson',
+        type: 'character',
         name: 'Tyson (FBX)',
         url: 'modelos/Tyson.fbx',
         textures: {
@@ -390,6 +437,7 @@
       },
       {
         id: 'bodybuilder',
+        type: 'character',
         name: 'BodyBuilder (FBX)',
         url: 'modelos/Bodybuilder.fbx',
         textures: {
@@ -399,6 +447,7 @@
       },
       {
         id: 'mma',
+        type: 'character',
         name: 'MMA (FBX)',
         url: 'modelos/MMA.fbx',
         textures: {
@@ -408,6 +457,7 @@
       },
       {
         id: 'principal',
+        type: 'character',
         name: 'Principal (FBX)',
         url: 'modelos/Principal.fbx',
         textures: {
@@ -417,6 +467,7 @@
       },
       {
         id: 'training-dummy',
+        type: 'object',
         name: 'Training Dummy (FBX)',
         url: 'modelos/Training Dummy.fbx',
         textures: {
@@ -427,9 +478,15 @@
           normalMap: { url: 'texturas/Training Dummy_normal.png', flipY: false, colorSpace: THREE.NoColorSpace },
         },
       },
+      { id: 'dummy', type: 'object', name: 'Dummy (GLB)', url: 'modelos/Dummy.glb' },
+      { id: 'bolsa', type: 'object', name: 'Bolsa (GLB)', url: 'modelos/Bolsa.glb' },
+      { id: 'punching-bag', type: 'object', name: 'Punching Bag (FBX)', url: 'modelos/Punching Bag.fbx' },
+      { id: 'ring-1', type: 'background', name: 'Ring 1 (GLB)', url: 'modelos/Ring.glb' },
+      { id: 'ring-2', type: 'background', name: 'Ring 2 (GLB)', url: 'modelos/Ring 2.glb' },
+      { id: 'ring-3', type: 'background', name: 'Ring 3 (GLB)', url: 'modelos/Ring 3.glb' },
     ];
-    let MODEL_OPTIONS = [...STATIC_MODEL_OPTIONS];
-    let DEFAULT_MODEL_ID = MODEL_OPTIONS[0]?.id || 'default-model';
+    let MODEL_OPTIONS = STATIC_MODEL_OPTIONS.map(normalizeModelOption);
+    let DEFAULT_MODEL_ID = MODEL_OPTIONS.find((opt) => opt.type === 'character')?.id || MODEL_OPTIONS[0]?.id || 'default-model';
     const DEFAULT_ANIMATIONS = [
       { name: 'Idle to Fight (preset)', url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
       { name: 'Arm Stretching', url: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
@@ -463,6 +520,45 @@
       { name: 'Laying', url: 'animaciones/daño/caida/Laying.fbx', loop: 'repeat' },
       { name: 'Getting Up (fall)', url: 'animaciones/daño/caida/Getting Up.fbx', loop: 'once' },
     ];
+
+    function buildRingOptions(models) {
+      const rings = models.filter((opt) => opt.type === 'background');
+      return [{ id: 'none', name: 'Sin ring (fondo plano)' }, ...rings];
+    }
+
+    const STATIC_GLOVE_OPTIONS = [
+      { id: 'none', name: 'Sin guantes', type: 'none' },
+      {
+        id: 'amateur',
+        name: 'Guantes Amateur',
+        type: 'glove',
+        url: 'modelos/Guantes_Amateur.obj',
+        scale: 0.01,
+        baseRotation: new THREE.Euler(-Math.PI / 2, Math.PI, 0),
+        offset: new THREE.Vector3(0, 0, -0.08),
+        textures: {
+          map: { url: 'texturas/Boxing_Gloves_Leather_Tan.jpg', colorSpace: THREE.SRGBColorSpace },
+          normalMap: { url: 'texturas/Boxing_Gloves_BUMP.jpg', colorSpace: NON_COLOR_SPACE_FALLBACK },
+        },
+      },
+      {
+        id: 'pro',
+        name: 'Guantes PRO',
+        type: 'glove',
+        url: 'modelos/Guantes_PRO/mesh.obj',
+        mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
+        scale: 1,
+        baseRotation: new THREE.Euler(-Math.PI / 2, Math.PI, 0),
+        offset: new THREE.Vector3(0, 0, -0.08),
+      },
+    ];
+
+    let RING_OPTIONS = buildRingOptions(MODEL_OPTIONS);
+    let DEFAULT_RING_ID = RING_OPTIONS.find((opt) => opt.id !== 'none')?.id || 'none';
+    let ACTIVE_RING_ID = DEFAULT_RING_ID;
+
+    const GLOVE_OPTIONS = [...STATIC_GLOVE_OPTIONS];
+    let ACTIVE_GLOVE_ID = GLOVE_OPTIONS[0]?.id || 'none';
 
     const POSE_LM = {
       NOSE: 0,
@@ -606,6 +702,8 @@
 
     const animationSelect = document.getElementById('animation_select');
     const modelSelect = document.getElementById('model_select');
+    const ringSelect = document.getElementById('ring_select');
+    const gloveSelect = document.getElementById('glove_select');
     const animFileInput = document.getElementById('anim_file_input');
 
     let cameraMP = null;
@@ -833,6 +931,20 @@
     floor.receiveShadow = true;
     scene.add(floor);
 
+    const gloveAnchorGroup = new THREE.Group();
+    scene.add(gloveAnchorGroup);
+
+    let ringRoot = null;
+    let ringLoadToken = 0;
+    let glovePrototype = null;
+    let gloveMeshes = { left: null, right: null };
+    let gloveLoadToken = 0;
+    let gloveBaseRotation = new THREE.Quaternion();
+    let gloveBaseScale = 1;
+    let gloveOffset = new THREE.Vector3();
+    const gloveTextureLoader = new THREE.TextureLoader();
+    let gloveTextures = [];
+
     let mixer = null;
     let actions = {};
     let activeAction = null;
@@ -921,6 +1033,196 @@
 
       if (Array.isArray(material)) material.forEach(apply);
       else apply(material);
+    }
+
+    function disposeRingModel(target) {
+      if (!target) return;
+      target.traverse((child) => {
+        if (child.isMesh || child.isSkinnedMesh) {
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose && m.dispose());
+          else if (child.material?.dispose) child.material.dispose();
+          if (child.geometry?.dispose) child.geometry.dispose();
+        }
+      });
+    }
+
+    function loadRingById(ringId) {
+      ACTIVE_RING_ID = ringId;
+      disposeRingModel(ringRoot);
+      ringRoot = null;
+      floor.visible = ringId === 'none';
+
+      const config = RING_OPTIONS.find((opt) => opt.id === ringId);
+      if (!config || ringId === 'none') return;
+
+      const { loader, type } = getLoaderFor(config.url);
+      const token = ++ringLoadToken;
+
+      loader.load(
+        config.url,
+        (asset) => {
+          if (token !== ringLoadToken) return;
+          const root = type === 'gltf' ? asset.scene : asset;
+          ringRoot = root;
+
+          ringRoot.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.receiveShadow = true;
+              obj.castShadow = true;
+            }
+          });
+
+          scene.add(ringRoot);
+          floor.visible = false;
+        },
+        undefined,
+        (error) => {
+          if (token !== ringLoadToken) return;
+          console.error('No se pudo cargar el ring', error);
+          floor.visible = true;
+        }
+      );
+    }
+
+    function disposeGloveObject(target) {
+      if (!target) return;
+      target.traverse((child) => {
+        if (child.isMesh || child.isSkinnedMesh) {
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose && m.dispose());
+          else if (child.material?.dispose) child.material.dispose();
+          if (child.geometry?.dispose) child.geometry.dispose();
+        }
+      });
+    }
+
+    function disposeGloveTextures() {
+      gloveTextures.forEach((tex) => tex.dispose());
+      gloveTextures = [];
+    }
+
+    function disposeGloves() {
+      gloveAnchorGroup.children.slice().forEach((child) => {
+        gloveAnchorGroup.remove(child);
+        disposeGloveObject(child);
+      });
+      disposeGloveObject(glovePrototype);
+      glovePrototype = null;
+      gloveMeshes = { left: null, right: null };
+      disposeGloveTextures();
+    }
+
+    function buildGloveTextureSet(textureConfig = {}) {
+      disposeGloveTextures();
+      const prepared = {};
+      Object.entries(textureConfig).forEach(([slot, conf]) => {
+        if (!conf || slot.startsWith('__')) return;
+        const opts = typeof conf === 'string' ? { url: conf } : conf;
+        const tex = gloveTextureLoader.load(opts.url);
+        tex.colorSpace = opts.colorSpace ?? (slot === 'map' ? THREE.SRGBColorSpace : NON_COLOR_SPACE_FALLBACK);
+        tex.flipY = opts.flipY ?? false;
+        prepared[slot] = tex;
+        gloveTextures.push(tex);
+      });
+      return prepared;
+    }
+
+    function applyGloveTextures(material, textureSet) {
+      if (!material || !textureSet) return;
+      const apply = (mat) => {
+        if (!mat) return;
+        Object.entries(textureSet).forEach(([slot, tex]) => {
+          if (!tex) return;
+          mat[slot] = tex;
+        });
+        mat.needsUpdate = true;
+      };
+      if (Array.isArray(material)) material.forEach(apply);
+      else apply(material);
+    }
+
+    function createGloveInstances(prototype) {
+      if (!prototype) return;
+      const left = prototype.clone(true);
+      const right = prototype.clone(true);
+      gloveMeshes = { left, right };
+      left.visible = true;
+      right.visible = true;
+      gloveAnchorGroup.add(left);
+      gloveAnchorGroup.add(right);
+    }
+
+    function loadGloveById(gloveId) {
+      const config = getGloveConfigById(gloveId);
+      ACTIVE_GLOVE_ID = config?.id || 'none';
+      gloveLoadToken += 1;
+      const token = gloveLoadToken;
+
+      disposeGloves();
+
+      gloveBaseRotation = new THREE.Quaternion().setFromEuler(
+        (config && config.baseRotation) || new THREE.Euler(-Math.PI / 2, 0, 0)
+      );
+      gloveBaseScale = config?.scale ?? 1;
+      gloveOffset = (config?.offset || new THREE.Vector3()).clone();
+
+      if (!config || config.id === 'none') return;
+
+      const { loader, type } = getLoaderFor(config.url);
+      const textureSet = buildGloveTextureSet(config.textures || {});
+
+      const finalize = (asset) => {
+        if (token !== gloveLoadToken) {
+          disposeGloveObject(asset);
+          return;
+        }
+
+        const root = type === 'gltf' ? asset.scene ?? asset : asset;
+        glovePrototype = root;
+
+        glovePrototype.traverse((obj) => {
+          if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            applyGloveTextures(obj.material, textureSet);
+          }
+        });
+
+        createGloveInstances(glovePrototype);
+      };
+
+      if (config.mtlUrl) {
+        const mtlLoader = new MTLLoader();
+        mtlLoader.load(
+          config.mtlUrl,
+          (materials) => {
+            if (token !== gloveLoadToken) return;
+            materials.preload();
+            const objLoader = new OBJLoader();
+            objLoader.setMaterials(materials);
+            objLoader.load(config.url, finalize, undefined, (err) => {
+              if (token !== gloveLoadToken) return;
+              console.error('Error cargando guantes', err);
+            });
+          },
+          undefined,
+          (err) => {
+            if (token !== gloveLoadToken) return;
+            console.warn('Materiales de guantes no disponibles, usando OBJ simple', err);
+            loader.load(config.url, finalize);
+          }
+        );
+        return;
+      }
+
+      loader.load(
+        config.url,
+        finalize,
+        undefined,
+        (err) => {
+          if (token !== gloveLoadToken) return;
+          console.error('No se pudo cargar guantes', err);
+        }
+      );
     }
 
     function loadModel(config) {
@@ -1050,24 +1352,80 @@
 
     function populateModelSelect() {
       if (!modelSelect) return;
+      const previous = modelSelect.value;
       modelSelect.innerHTML = '';
-      MODEL_OPTIONS.forEach((opt) => {
+
+      const groups = [
+        { label: 'Personajes', type: 'character' },
+        { label: 'Objetos', type: 'object' },
+      ];
+
+      let fallbackValue = null;
+      groups.forEach(({ label, type }) => {
+        const items = MODEL_OPTIONS.filter((opt) => opt.type === type);
+        if (!items.length) return;
+        const optGroup = document.createElement('optgroup');
+        optGroup.label = label;
+
+        items.forEach((opt) => {
+          const option = document.createElement('option');
+          option.value = opt.id;
+          option.textContent = opt.name;
+          optGroup.appendChild(option);
+          if (!fallbackValue) fallbackValue = opt.id;
+        });
+
+        modelSelect.appendChild(optGroup);
+      });
+
+      const desiredValue =
+        (previous && MODEL_OPTIONS.some((opt) => opt.id === previous) && previous) ||
+        (DEFAULT_MODEL_ID && MODEL_OPTIONS.some((opt) => opt.id === DEFAULT_MODEL_ID) && DEFAULT_MODEL_ID) ||
+        fallbackValue;
+
+      if (desiredValue) modelSelect.value = desiredValue;
+    }
+
+    function getRingConfigById(id) {
+      return RING_OPTIONS.find((opt) => opt.id === id) || RING_OPTIONS[0];
+    }
+
+    function populateRingSelect() {
+      if (!ringSelect) return;
+      const previous = ringSelect.value;
+      ringSelect.innerHTML = '';
+
+      RING_OPTIONS.forEach((opt) => {
         const option = document.createElement('option');
         option.value = opt.id;
         option.textContent = opt.name;
-        modelSelect.appendChild(option);
+        ringSelect.appendChild(option);
       });
-      modelSelect.value = DEFAULT_MODEL_ID;
+
+      const target = getRingConfigById(previous || ACTIVE_RING_ID || DEFAULT_RING_ID);
+      ringSelect.value = target?.id || RING_OPTIONS[0]?.id || '';
+      ACTIVE_RING_ID = ringSelect.value;
     }
 
-    function slugifyId(input) {
-      return (input || '')
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\.[^.]+$/, '')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'modelo';
+    function getGloveConfigById(id) {
+      return GLOVE_OPTIONS.find((opt) => opt.id === id) || GLOVE_OPTIONS[0];
+    }
+
+    function populateGloveSelect() {
+      if (!gloveSelect) return;
+      const previous = gloveSelect.value;
+      gloveSelect.innerHTML = '';
+
+      GLOVE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.name;
+        gloveSelect.appendChild(option);
+      });
+
+      const target = getGloveConfigById(previous || ACTIVE_GLOVE_ID || 'none');
+      gloveSelect.value = target?.id || GLOVE_OPTIONS[0]?.id || 'none';
+      ACTIVE_GLOVE_ID = gloveSelect.value;
     }
 
     function buildModelOptionsFromManifest(manifest) {
@@ -1078,7 +1436,7 @@
           const id = slugifyId(entry.id || entry.file);
           const name = entry.name || entry.file;
           const url = `modelos/${entry.file}`;
-          return { id, name, url, textures: entry.textures || {} };
+          return normalizeModelOption({ id, name, url, type: entry.type, textures: entry.textures || {} });
         })
         .filter(Boolean);
     }
@@ -1086,9 +1444,10 @@
     function mergeModelOptions(staticOptions, manifestOptions) {
       const map = new Map();
       [...staticOptions, ...manifestOptions].forEach((opt) => {
-        if (!opt?.id || !opt.url) return;
-        const key = opt.id.toLowerCase();
-        if (!map.has(key)) map.set(key, opt);
+        const normalized = normalizeModelOption(opt);
+        if (!normalized?.id || !normalized.url) return;
+        const key = normalized.id.toLowerCase();
+        if (!map.has(key)) map.set(key, normalized);
       });
       const merged = Array.from(map.values());
       return merged.length ? merged : [...staticOptions];
@@ -1101,10 +1460,16 @@
         const manifest = await res.json();
         const manifestOptions = buildModelOptionsFromManifest(manifest);
         MODEL_OPTIONS = mergeModelOptions(STATIC_MODEL_OPTIONS, manifestOptions);
-        DEFAULT_MODEL_ID = MODEL_OPTIONS[0]?.id || DEFAULT_MODEL_ID;
+        DEFAULT_MODEL_ID =
+          MODEL_OPTIONS.find((opt) => opt.type === 'character')?.id ||
+          MODEL_OPTIONS[0]?.id ||
+          DEFAULT_MODEL_ID;
+        RING_OPTIONS = buildRingOptions(MODEL_OPTIONS);
+        DEFAULT_RING_ID = RING_OPTIONS.find((opt) => opt.id !== 'none')?.id || DEFAULT_RING_ID;
       } catch (err) {
         console.warn('No se pudo cargar manifest de modelos, usando valores por defecto:', err);
-        MODEL_OPTIONS = [...STATIC_MODEL_OPTIONS];
+        MODEL_OPTIONS = STATIC_MODEL_OPTIONS.map(normalizeModelOption);
+        RING_OPTIONS = buildRingOptions(MODEL_OPTIONS);
       }
     }
 
@@ -1160,7 +1525,11 @@
     async function bootstrapModelOptions() {
       await loadModelManifest();
       populateModelSelect();
+      populateRingSelect();
+      populateGloveSelect();
       const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
+      loadRingById(ringSelect ? ringSelect.value : DEFAULT_RING_ID);
+      loadGloveById(gloveSelect ? gloveSelect.value : ACTIVE_GLOVE_ID);
       loadModel(initialModel);
 
       // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
@@ -1204,6 +1573,18 @@
       modelSelect.addEventListener('change', () => {
         const config = getModelConfigById(modelSelect.value);
         loadModel(config);
+      });
+    }
+
+    if (ringSelect) {
+      ringSelect.addEventListener('change', () => {
+        loadRingById(ringSelect.value);
+      });
+    }
+
+    if (gloveSelect) {
+      gloveSelect.addEventListener('change', () => {
+        loadGloveById(gloveSelect.value);
       });
     }
 
@@ -1400,12 +1781,74 @@
       bone.quaternion.slerp(targetLocal, slerp);
     }
 
+    function computeHandTransform(landmarks, wristIdx, indexIdx, pinkyIdx, scaleOverride) {
+      const lmWrist = landmarks[wristIdx];
+      const lmIndex = landmarks[indexIdx];
+      const lmPinky = landmarks[pinkyIdx];
+      if (!lmWrist || !lmIndex || !lmPinky) return null;
+
+      const worldLandmarks = smoothedWorldLandmarks;
+      const wrist = lmToVec3(lmWrist, worldLandmarks?.[wristIdx], scaleOverride);
+      const index = lmToVec3(lmIndex, worldLandmarks?.[indexIdx], scaleOverride);
+      const pinky = lmToVec3(lmPinky, worldLandmarks?.[pinkyIdx], scaleOverride);
+      if (!wrist || !index || !pinky) return null;
+
+      const forward = index.clone().sub(wrist).normalize();
+      const side = pinky.clone().sub(wrist).normalize();
+      if (forward.lengthSq() < 1e-6 || side.lengthSq() < 1e-6) return null;
+
+      const up = new THREE.Vector3().crossVectors(side, forward).normalize();
+      if (up.lengthSq() < 1e-6) up.set(0, 1, 0);
+
+      const basis = new THREE.Matrix4().makeBasis(side, up, forward);
+      const quat = new THREE.Quaternion().setFromRotationMatrix(basis);
+
+      return { position: wrist, quaternion: quat };
+    }
+
+    function applyGloveTransform(target, transform) {
+      if (!target || !transform) return;
+
+      const finalQuat = transform.quaternion.clone().multiply(gloveBaseRotation);
+      const offset = gloveOffset.clone().applyQuaternion(transform.quaternion);
+      const desiredPos = transform.position.clone().add(offset);
+
+      target.position.lerp(desiredPos, 0.35);
+      target.quaternion.slerp(finalQuat, 0.35);
+      target.scale.setScalar(gloveBaseScale);
+    }
+
+    function updateGloveAnchors(landmarks, scaleOverride) {
+      if (!landmarks || (!gloveMeshes.left && !gloveMeshes.right)) return;
+
+      const leftTransform = computeHandTransform(
+        landmarks,
+        POSE_LM.LEFT_WRIST,
+        POSE_LM.LEFT_INDEX,
+        POSE_LM.LEFT_PINKY,
+        scaleOverride
+      );
+      const rightTransform = computeHandTransform(
+        landmarks,
+        POSE_LM.RIGHT_WRIST,
+        POSE_LM.RIGHT_INDEX,
+        POSE_LM.RIGHT_PINKY,
+        scaleOverride
+      );
+
+      applyGloveTransform(gloveMeshes.left, leftTransform);
+      applyGloveTransform(gloveMeshes.right, rightTransform);
+    }
+
     function updateModelFromPose(landmarks) {
-      if (!retargetEnabled) return; // Si está en modo animación FBX, no tocamos los huesos.
-      if (!landmarks || !skeleton) return;
+      if (!landmarks) return;
 
       const worldLandmarks = smoothedWorldLandmarks;
       const scale = getCalibrationScale(worldLandmarks);
+
+      updateGloveAnchors(landmarks, scale);
+
+      if (!retargetEnabled || !skeleton) return; // Si está en modo animación FBX, no tocamos los huesos.
 
       const lmLS   = landmarks[POSE_LM.LEFT_SHOULDER];
       const lmRS   = landmarks[POSE_LM.RIGHT_SHOULDER];
