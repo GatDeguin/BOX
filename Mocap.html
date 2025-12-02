@@ -1037,6 +1037,7 @@
 
     function disposeRingModel(target) {
       if (!target) return;
+      scene.remove(target);
       target.traverse((child) => {
         if (child.isMesh || child.isSkinnedMesh) {
           if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose && m.dispose());
@@ -1064,6 +1065,18 @@
           if (token !== ringLoadToken) return;
           const root = type === 'gltf' ? asset.scene : asset;
           ringRoot = root;
+
+          const ringScale = config.scale ?? 1;
+          ringRoot.scale.setScalar(ringScale);
+          ringRoot.updateMatrixWorld(true);
+
+          const bbox = new THREE.Box3().setFromObject(ringRoot);
+          const center = new THREE.Vector3();
+          bbox.getCenter(center);
+
+          ringRoot.position.x += -center.x;
+          ringRoot.position.z += -center.z;
+          ringRoot.position.y += -bbox.min.y;
 
           ringRoot.traverse((obj) => {
             if (obj.isMesh) {
@@ -1187,6 +1200,13 @@
           }
         });
 
+        glovePrototype.updateMatrixWorld(true);
+
+        const bbox = new THREE.Box3().setFromObject(glovePrototype);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        glovePrototype.position.sub(center);
+
         createGloveInstances(glovePrototype);
       };
 
@@ -1256,6 +1276,10 @@
         (asset) => {
           let root = (type === 'gltf') ? asset.scene : asset;
           modelRoot = root;
+
+          const modelScale = config.scale ?? 1;
+          modelRoot.scale.setScalar(modelScale);
+          modelRoot.updateMatrixWorld(true);
 
           modelRoot.traverse((obj) => {
             if (obj.isMesh) {
