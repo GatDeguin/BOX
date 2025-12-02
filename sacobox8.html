@@ -811,6 +811,7 @@
         let bagLightTarget;
         let cinemaBackLight;
         let ringSpotLights = [];
+        let accentLights = [];
         let ringReflectorFixtures = [];
         let doorLight;
         let fluorescentLights = [];
@@ -828,6 +829,7 @@
             rim: 1.1,
             ring: 2.1,
             ringSpot: 4.2,
+            accent: 1.35,
             cinemaBack: 0.22,
             door: 18.5,
             fluorescent: 7.5
@@ -845,6 +847,8 @@
                 ringBase: 2.35,
                 ringSpotColor: 0xffe2b0,
                 ringSpotBase: 4.85,
+                accentColor: 0x79a8ff,
+                accentBase: 1.45,
                 bagLightColor: 0xffb17a,
                 bagLightBase: 2.4,
                 cinemaBackColor: 0x1a2846,
@@ -877,6 +881,8 @@
                 ringBase: 1.85,
                 ringSpotColor: 0xffdcb0,
                 ringSpotBase: 4.05,
+                accentColor: 0xffc19b,
+                accentBase: 1.25,
                 bagLightColor: 0xffc58f,
                 bagLightBase: 2.1,
                 cinemaBackColor: 0x2c1b10,
@@ -1250,6 +1256,7 @@
             if (ringLight) ringLight.color.setHex(preset.ringColor);
             if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
             if (ringSpotLights.length) ringSpotLights.forEach(s => s.color.setHex(preset.ringSpotColor));
+            if (accentLights.length) accentLights.forEach(l => l.color.setHex(preset.accentColor));
             updateRingFixtureMaterials(preset.ringSpotColor);
 
             if (ambientLight) {
@@ -4135,6 +4142,20 @@
             scene.add(rimLight);
             scene.add(rimLight.target);
 
+            const accentPositions = [
+                new THREE.Vector3(4.25, 1.35, -2.35),
+                new THREE.Vector3(-4.25, 1.35, -2.35),
+                new THREE.Vector3(4.25, 1.35, 2.45),
+                new THREE.Vector3(-4.25, 1.35, 2.45)
+            ];
+
+            accentPositions.forEach((pos) => {
+                const accent = new THREE.PointLight(preset.accentColor, lightBases.accent, 12, 1.4);
+                accent.position.copy(pos);
+                scene.add(accent);
+                accentLights.push(accent);
+            });
+
             const ringSpotSettings = [
                 {
                     pos: RING_POSITION.clone().add(new THREE.Vector3(-3.8, 4.4, 2.2)),
@@ -4233,6 +4254,7 @@
             lightBases.door = preset.doorBase;
             lightBases.fluorescent = preset.fluorescentBase;
             lightBases.ringSpot = preset.ringSpotBase;
+            lightBases.accent = preset.accentBase ?? lightBases.accent;
             baseFogDensity = preset.fogDensity;
             volumetricBaseHue = preset.volumetricHue;
             ambientBaseIntensity = preset.ambientBase;
@@ -4252,6 +4274,11 @@
             if (ringSpotLights.length) {
                 ringSpotLights.forEach(s => {
                     s.intensity = preset.ringSpotBase;
+                });
+            }
+            if (accentLights.length) {
+                accentLights.forEach(l => {
+                    l.intensity = lightBases.accent;
                 });
             }
 
@@ -4360,6 +4387,16 @@
                     const flashBoost = 1.0 + flashPhase * 0.55 * (0.5 + 0.5 * impactFlashStrength);
                     const activity = 1.0 + punchActivity * 0.32;
                     spot.intensity = Math.max(0.0, lightBases.ringSpot * jitter * flashBoost * activity);
+                });
+            }
+
+            if (accentLights.length) {
+                accentLights.forEach((light, idx) => {
+                    const n = noiseGen.noise2D(elapsed * 0.65 + idx * 2.3, 4.5) * 0.5 + 0.5;
+                    const flashBoost = 1.0 + flashPhase * 0.4 * (0.5 + 0.5 * impactFlashStrength);
+                    const activity = 1.0 + punchActivity * 0.18;
+                    const f = 1.0 + (n - 0.5) * 0.25;
+                    light.intensity = Math.max(0.0, lightBases.accent * f * flashBoost * activity);
                 });
             }
 
