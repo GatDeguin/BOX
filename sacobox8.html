@@ -688,6 +688,12 @@
         // --- VARIABLES GLOBALES ESCENA ---
         let scene, camera, renderer, controls, composer;
         let world;
+        const collisionGroups = {
+            static: 1,
+            chain: 1 << 1,
+            bag: 1 << 2,
+            fist: 1 << 3
+        };
         const physicsTuning = {
             baseFixedTimeStep: 1 / 60,
             minFixedTimeStep: 1 / 75,
@@ -2863,13 +2869,6 @@
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('pointerdown', onPointerDown, { passive: true });
         }
-
-        const collisionGroups = {
-            static: 1,
-            chain: 1 << 1,
-            bag: 1 << 2,
-            fist: 1 << 3
-        };
 
         function initScene() {
             scene = new THREE.Scene();
