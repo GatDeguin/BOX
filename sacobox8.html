@@ -1314,12 +1314,67 @@
             }
         }
 
+        const SKINNING_WARNING_PREFIX = 'THREE.FBXLoader: Vertex has more than 4 skinning weights';
+
+        function suppressSkinningWarnings() {
+            const originalWarn = console.warn;
+            let logged = false;
+
+            console.warn = (...args) => {
+                const [message] = args;
+                const isSkinningWarning = typeof message === 'string' && message.startsWith(SKINNING_WARNING_PREFIX);
+
+                if (isSkinningWarning) {
+                    if (!logged) {
+                        originalWarn(
+                            'THREE.FBXLoader: se detectaron vértices con más de 4 pesos de skinning; se limitarán a los cuatro más fuertes.'
+                        );
+                        logged = true;
+                    }
+                    return;
+                }
+
+                originalWarn(...args);
+            };
+
+            return () => {
+                console.warn = originalWarn;
+            };
+        }
+
+        function normalizeSkinWeights(object3d) {
+            object3d.traverse((child) => {
+                const skinWeight = child.geometry?.attributes?.skinWeight;
+                if (!child.isSkinnedMesh || !skinWeight) return;
+
+                for (let i = 0; i < skinWeight.count; i++) {
+                    const x = skinWeight.getX(i);
+                    const y = skinWeight.getY(i);
+                    const z = skinWeight.getZ(i);
+                    const w = skinWeight.getW(i);
+                    const total = x + y + z + w;
+
+                    if (total > 0) {
+                        skinWeight.setXYZW(i, x / total, y / total, z / total, w / total);
+                    } else {
+                        skinWeight.setXYZW(i, 0, 0, 0, 0);
+                    }
+                }
+
+                skinWeight.needsUpdate = true;
+            });
+        }
+
         function loadTysonModel() {
             const loader = new FBXLoader();
+            const restoreWarnings = suppressSkinningWarnings();
             loader.load(
                 MODEL_URL,
                 (asset) => {
+                    restoreWarnings();
                     tysonRoot = asset;
+
+                    normalizeSkinWeights(tysonRoot);
 
                     tysonRoot.traverse((obj) => {
                         if (obj.isMesh) {
@@ -1379,6 +1434,7 @@
                 },
                 undefined,
                 (err) => {
+                    restoreWarnings();
                     console.error('Error cargando Tyson:', err);
                 }
             );
@@ -1499,9 +1555,11 @@
 
             loadClip(definition) {
                 return new Promise((resolve) => {
+                    const restoreWarnings = suppressSkinningWarnings();
                     this.loader.load(
                         definition.file,
                         (anim) => {
+                            restoreWarnings();
                             if (anim.animations && anim.animations.length > 0 && this.mixer) {
                                 const clip = sanitizeClipRootMotion(anim.animations[0]);
                                 const clipId = (definition.file || clip.name || '').toLowerCase();
@@ -1526,6 +1584,7 @@
                         },
                         undefined,
                         (err) => {
+                            restoreWarnings();
                             console.error('No se pudo cargar animación', definition.file, err);
                             resolve();
                         }
