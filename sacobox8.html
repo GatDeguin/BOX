@@ -459,6 +459,7 @@
         let doorGodrayMesh;
         let keyLight, fillLight, ringLight, rimLight, ambientLight;
         let cinemaBackLight;
+        let ringSpotLights = [];
         let doorLight;
         let fluorescentLights = [];
         let fluorescentGlowCards = [];
@@ -472,6 +473,7 @@
             fill: 0.8,
             rim: 1.1,
             ring: 1.5,
+            ringSpot: 2.4,
             cinemaBack: 0.22,
             door: 18.5,
             fluorescent: 7.5
@@ -487,6 +489,8 @@
                 rimBase: 1.25,
                 ringColor: 0xffdd88,
                 ringBase: 1.65,
+                ringSpotColor: 0xffe2b0,
+                ringSpotBase: 2.6,
                 cinemaBackColor: 0x1a2846,
                 cinemaBackBase: 0.22,
                 doorColor: 0x4488ff,
@@ -515,6 +519,8 @@
                 rimBase: 1.1,
                 ringColor: 0xffe1aa,
                 ringBase: 1.35,
+                ringSpotColor: 0xffdcb0,
+                ringSpotBase: 2.3,
                 cinemaBackColor: 0x2c1b10,
                 cinemaBackBase: 0.18,
                 doorColor: 0xffa85a,
@@ -2425,8 +2431,8 @@
             wallMap.repeat.set(2,1);
 
             const posterMap = createTex((ctx, w) => {
-                ctx.fillStyle = '#eaddcf'; ctx.fillRect(0,0,w,w); 
-                ctx.font = 'bold 120px sans-serif'; 
+                ctx.fillStyle = '#eaddcf'; ctx.fillRect(0,0,w,w);
+                ctx.font = 'bold 120px sans-serif';
                 ctx.fillStyle = '#aa2222'; ctx.textAlign = 'center';
                 ctx.fillText("FIGHT", w/2, w/3);
                 ctx.fillStyle = '#111'; ctx.font = '80px sans-serif';
@@ -2438,7 +2444,26 @@
                 }
             });
 
-            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap };
+            const windowMap = createTex((ctx, w) => {
+                const grad = ctx.createLinearGradient(0, 0, 0, w);
+                grad.addColorStop(0, '#152238');
+                grad.addColorStop(1, '#0c111b');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, w);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                ctx.lineWidth = 8;
+                ctx.strokeRect(10, 10, w-20, w-20);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+                ctx.lineWidth = 12;
+                ctx.beginPath();
+                ctx.moveTo(w/2, 8); ctx.lineTo(w/2, w-8);
+                ctx.moveTo(8, w/2); ctx.lineTo(w-8, w/2);
+                ctx.stroke();
+            });
+
+            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap, window: windowMap };
         }
 
         // --- ESCENA Y PROPS ---
@@ -2469,6 +2494,53 @@
             wR.position.set(2.1, wallH/2, -5); wR.receiveShadow=true; scene.add(wR);
             const wT = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), wallMat);
             wT.position.set(-1.4, 4, -5); wT.receiveShadow=true; scene.add(wT);
+
+            const posterMat = new THREE.MeshStandardMaterial({
+                map: tex.poster,
+                roughness: 0.82,
+                metalness: 0.05,
+                side: THREE.DoubleSide
+            });
+
+            const posterA = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.8), posterMat);
+            posterA.position.set(-3.5, 2.1, -4.92);
+            scene.add(posterA);
+
+            const posterB = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), posterMat);
+            posterB.position.set(2.8, 1.6, -4.92);
+            scene.add(posterB);
+
+            const windowGroup = new THREE.Group();
+            const windowPane = new THREE.Mesh(
+                new THREE.PlaneGeometry(2.8, 1.4),
+                new THREE.MeshStandardMaterial({
+                    map: tex.window,
+                    roughness: 0.35,
+                    metalness: 0.08,
+                    transparent: true,
+                    opacity: 0.88,
+                    emissive: new THREE.Color(0x1b2435),
+                    emissiveIntensity: 0.6,
+                    side: THREE.DoubleSide
+                })
+            );
+            windowPane.position.z = 0.01;
+
+            const windowGlow = new THREE.Mesh(
+                new THREE.PlaneGeometry(3.2, 1.8),
+                new THREE.MeshBasicMaterial({
+                    color: 0x6da5ff,
+                    transparent: true,
+                    opacity: 0.18,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                })
+            );
+            windowGlow.renderOrder = 1;
+            windowGroup.add(windowGlow);
+            windowGroup.add(windowPane);
+            windowGroup.position.set(-0.2, 2.3, -4.95);
+            scene.add(windowGroup);
 
             doorLight = new THREE.RectAreaLight(0x4488ff, lightBases.door, 2, 3);
             doorLight.position.set(-1.4, 1.5, -5.2);
@@ -2695,6 +2767,25 @@
             scene.add(rimLight);
             scene.add(rimLight.target);
 
+            const ringSpotSettings = [
+                { pos: new THREE.Vector3(-3.8, 4.4, 2.2), target: new THREE.Vector3(0, 1.2, 0) },
+                { pos: new THREE.Vector3(3.8, 4.4, 2.2), target: new THREE.Vector3(0, 1.2, 0) }
+            ];
+
+            ringSpotSettings.forEach((cfg, idx) => {
+                const spot = new THREE.SpotLight(lightingPresets[currentPreset].ringSpotColor, lightBases.ringSpot, 18, Math.PI / 5.2, 0.72, 1.6);
+                spot.position.copy(cfg.pos);
+                spot.target.position.copy(cfg.target);
+                spot.castShadow = !isMobile;
+                spot.shadow.mapSize.set(1024, 1024);
+                spot.shadow.bias = -0.00012;
+                spot.penumbra = 0.85;
+                spot.name = `ringSpot-${idx}`;
+                scene.add(spot);
+                scene.add(spot.target);
+                ringSpotLights.push(spot);
+            });
+
             cinemaBackLight = new THREE.SpotLight(lightingPresets[currentPreset].cinemaBackColor, lightBases.cinemaBack, 12, Math.PI / 3.2, 0.9, 1);
             cinemaBackLight.position.set(0, 1.6, -7.6);
             cinemaBackLight.target.position.set(0, 1.2, 0);
@@ -2777,6 +2868,7 @@
             lightBases.cinemaBack = preset.cinemaBackBase;
             lightBases.door = preset.doorBase;
             lightBases.fluorescent = preset.fluorescentBase;
+            lightBases.ringSpot = preset.ringSpotBase;
             baseFogDensity = preset.fogDensity;
             volumetricBaseHue = preset.volumetricHue;
             ambientBaseIntensity = preset.ambientBase;
@@ -2786,6 +2878,7 @@
             if (rimLight) rimLight.color.setHex(preset.rimColor);
             if (ringLight) ringLight.color.setHex(preset.ringColor);
             if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
+            if (ringSpotLights.length) ringSpotLights.forEach(s => s.color.setHex(preset.ringSpotColor));
             if (ambientLight) {
                 ambientLight.color.setHex(preset.ambientSky);
                 ambientLight.groundColor.setHex(preset.ambientGround);
@@ -2807,6 +2900,11 @@
             }
 
             if (cinemaBackLight) cinemaBackLight.intensity = preset.cinemaBackBase;
+            if (ringSpotLights.length) {
+                ringSpotLights.forEach(s => {
+                    s.intensity = preset.ringSpotBase;
+                });
+            }
         }
 
         function setupPresetButton() {
@@ -2893,6 +2991,16 @@
                 const n = noiseGen.noise2D(elapsed * 1.2, 2.7) * 0.5 + 0.5;
                 const f = 1.0 + (n - 0.5) * 0.25 + punchActivity * 0.3 + flashPhase * 0.6 * impactFlashStrength;
                 ringLight.intensity = Math.max(0.0, lightBases.ring * f);
+            }
+
+            if (ringSpotLights.length) {
+                ringSpotLights.forEach((spot, idx) => {
+                    const n = noiseGen.noise2D(elapsed * 0.55 + idx * 1.7, 6.3) * 0.5 + 0.5;
+                    const jitter = 1.0 + (n - 0.5) * 0.25;
+                    const flashBoost = 1.0 + flashPhase * 0.55 * (0.5 + 0.5 * impactFlashStrength);
+                    const activity = 1.0 + punchActivity * 0.32;
+                    spot.intensity = Math.max(0.0, lightBases.ringSpot * jitter * flashBoost * activity);
+                });
             }
 
             if (cinemaBackLight) {
