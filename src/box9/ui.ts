@@ -13,7 +13,8 @@ const ringOptions: Record<RingId, string> = {
 const characterOptions: Record<CharacterId, string> = {
   mma: 'MMA',
   bodybuilder: 'Bodybuilder',
-  tyson: 'Tyson'
+  tyson: 'Tyson',
+  principal: 'Principal'
 };
 
 function emitSceneEvent(name: string, detail?: unknown) {
@@ -370,13 +371,14 @@ function createHud(
   const winsMMA = document.createElement('small');
   const winsBodybuilder = document.createElement('small');
   const winsTyson = document.createElement('small');
-  [winsMMA, winsBodybuilder, winsTyson].forEach((el) => {
+  const winsPrincipal = document.createElement('small');
+  [winsMMA, winsBodybuilder, winsTyson, winsPrincipal].forEach((el) => {
     el.style.color = '#b4bed4';
     el.style.fontWeight = '700';
     el.style.letterSpacing = '0.06em';
   });
 
-  winsRow.append(winsMMA, winsBodybuilder, winsTyson);
+  winsRow.append(winsMMA, winsBodybuilder, winsTyson, winsPrincipal);
   fighterCard.append(progressNote, winsRow);
   hud.append(topBar, chipsRow, fighterCard);
 
@@ -396,9 +398,10 @@ function createHud(
 
     setActiveChip(state.character);
 
-    winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder}`;
-    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder}`;
-    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson}`;
+    winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder} · Principal: ${progress.wins.entrenamiento.principal}`;
+    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
+    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
+    winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
     progressNote.textContent = nextMilestone(progress);
 
     chipList.querySelectorAll<HTMLElement>('.box9-chip').forEach((chip) => {

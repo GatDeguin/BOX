@@ -1,10 +1,10 @@
 import { Box9Store, CharacterId, GloveLevel, ProgressionState, WinLedger, box9Store } from './state';
 
 const INITIAL_WINS: WinLedger = {
-  entrenamiento: { mma: 0, bodybuilder: 0, tyson: 0 },
-  amateur: { mma: 0, bodybuilder: 0, tyson: 0 },
-  pro: { mma: 0, bodybuilder: 0, tyson: 0 },
-  secreto: { mma: 0, bodybuilder: 0, tyson: 0 }
+  entrenamiento: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+  amateur: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+  pro: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+  secreto: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 }
 };
 
 const GLOVE_LABELS: Record<GloveLevel, string> = {
@@ -16,10 +16,10 @@ const GLOVE_LABELS: Record<GloveLevel, string> = {
 
 function cloneWins(wins: WinLedger): WinLedger {
   return {
-    entrenamiento: { ...wins.entrenamiento },
-    amateur: { ...wins.amateur },
-    pro: { ...wins.pro },
-    secreto: { ...wins.secreto }
+    entrenamiento: { ...INITIAL_WINS.entrenamiento, ...wins.entrenamiento },
+    amateur: { ...INITIAL_WINS.amateur, ...wins.amateur },
+    pro: { ...INITIAL_WINS.pro, ...wins.pro },
+    secreto: { ...INITIAL_WINS.secreto, ...wins.secreto }
   };
 }
 

@@ -1,5 +1,5 @@
 export type RingId = 'mmaGym' | 'bodybuilderArena' | 'tysonRing';
-export type CharacterId = 'mma' | 'bodybuilder' | 'tyson';
+export type CharacterId = 'mma' | 'bodybuilder' | 'tyson' | 'principal';
 
 export type GloveLevel = 'entrenamiento' | 'amateur' | 'pro' | 'secreto';
 
@@ -19,7 +19,8 @@ export interface ProgressionState {
 export const CHARACTER_DEFAULT_RING: Record<CharacterId, RingId> = {
   mma: 'mmaGym',
   bodybuilder: 'bodybuilderArena',
-  tyson: 'tysonRing'
+  tyson: 'tysonRing',
+  principal: 'tysonRing'
 };
 
 export function getDefaultRingForCharacter(character: CharacterId): RingId {
@@ -49,10 +50,10 @@ const defaultState: Box9State = {
   selectionStarted: false,
   progress: {
     wins: {
-      entrenamiento: { mma: 0, bodybuilder: 0, tyson: 0 },
-      amateur: { mma: 0, bodybuilder: 0, tyson: 0 },
-      pro: { mma: 0, bodybuilder: 0, tyson: 0 },
-      secreto: { mma: 0, bodybuilder: 0, tyson: 0 }
+      entrenamiento: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+      amateur: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+      pro: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 },
+      secreto: { mma: 0, bodybuilder: 0, tyson: 0, principal: 0 }
     },
     activeGlove: 'entrenamiento',
     unlocks: { amateur: false, tyson: false, pro: false, secreto: false }

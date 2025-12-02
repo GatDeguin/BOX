@@ -93,6 +93,11 @@ const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
     camera: new Vector3(3.5, 2.8, 8),
     lookAt: new Vector3(1.5, 1.8, 0),
     highlight: new Vector3(1.5, 2.5, 0)
+  },
+  principal: {
+    camera: new Vector3(6, 2.8, 8.5),
+    lookAt: new Vector3(3.2, 1.8, 0),
+    highlight: new Vector3(3.2, 2.5, 0)
   }
 };
 
@@ -108,6 +113,10 @@ const FIGHTER_ANCHORS: Record<CharacterId, FighterAnchor> = {
   tyson: {
     position: new Vector3(1.6, 0, 0.8),
     rotation: new Vector3(0, -Math.PI / 10, 0)
+  },
+  principal: {
+    position: new Vector3(3.2, 0, 0.8),
+    rotation: new Vector3(0, -Math.PI / 6, 0)
   }
 };
 
@@ -125,7 +134,7 @@ const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
 };
 
 const ALL_RINGS: RingId[] = ['mmaGym', 'bodybuilderArena', 'tysonRing'];
-const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson'];
+const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson', 'principal'];
 
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
   mmaGym: { effectProfile: 'mmaGym', selectionLight: { color: '#7ad8ff', intensity: 1.45 } },
