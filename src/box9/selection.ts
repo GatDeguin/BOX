@@ -35,6 +35,14 @@ const fighters: FighterDetails[] = [
     reach: '180 cm',
     speed: 'Explosiva',
     personality: 'Agresividad pura, combina desplazamientos bajos con ganchos veloces al mentón.'
+  },
+  {
+    id: 'principal',
+    name: 'Principal',
+    weight: '94 kg',
+    reach: '188 cm',
+    speed: 'Precisa',
+    personality: 'Boxeador técnico de la vieja escuela, mantiene el centro del ring y castiga con combinaciones limpias.'
   }
 ];
 

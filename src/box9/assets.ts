@@ -38,9 +38,10 @@ const RING_ASSETS: Record<RingId | 'default', AssetOptions & { path: string }> =
 };
 
 const FIGHTER_ASSETS: Record<CharacterId | 'dummy' | 'bag', AssetOptions & { path: string }> = {
-  mma: { path: 'modelos/MMA.glb' },
-  bodybuilder: { path: 'modelos/BodyBuilder.glb' },
+  mma: { path: 'modelos/MMA.fbx', rotation: new Euler(0, Math.PI, 0) },
+  bodybuilder: { path: 'modelos/Bodybuilder.fbx', rotation: new Euler(0, Math.PI, 0) },
   tyson: { path: 'modelos/Tyson.fbx', rotation: new Euler(0, Math.PI, 0) },
+  principal: { path: 'modelos/Principal.fbx', rotation: new Euler(0, Math.PI, 0) },
   dummy: { path: 'modelos/Dummy.glb' },
   bag: { path: 'modelos/Punching Bag.fbx', rotation: new Euler(-Math.PI / 2, 0, 0) }
 };

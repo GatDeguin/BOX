@@ -50,8 +50,9 @@ const models: AssetSection = {
     { label: 'modelos/Ring.glb', detail: 'Ring/arena GLB.' },
     { label: 'modelos/Ring 2.glb', detail: 'Ring alternativo GLB.' },
     { label: 'modelos/Ring 3.glb', detail: 'Ring alternativo GLB.' },
-    { label: 'modelos/MMA.glb', detail: 'Modelo GLB luchador MMA.' },
-    { label: 'modelos/BodyBuilder.glb', detail: 'Modelo GLB BodyBuilder.' },
+    { label: 'modelos/MMA.fbx', detail: 'Modelo FBX luchador MMA (rotación PI en Y).' },
+    { label: 'modelos/Bodybuilder.fbx', detail: 'Modelo FBX Bodybuilder (rotación PI en Y).' },
+    { label: 'modelos/Principal.fbx', detail: 'Modelo FBX Principal (rotación PI en Y).' },
     { label: 'modelos/Dummy.glb', detail: 'Modelo GLB Dummy.' },
     { label: 'modelos/Bolsa.glb', detail: 'Modelo GLB de bolsa.' },
     { label: 'modelos/Tyson.fbx', detail: 'Modelo FBX Tyson (rotado PI en Y).' },
@@ -126,7 +127,8 @@ const assetManagerMap: AssetSection = {
     { label: 'Ring por defecto', detail: 'mmaGym → modelos/Ring.glb; bodybuilderArena → modelos/Ring 2.glb; tysonRing → modelos/Ring 3.glb' },
     {
       label: 'Luchadores',
-      detail: 'mma → modelos/MMA.glb; bodybuilder → modelos/BodyBuilder.glb; tyson → modelos/Tyson.fbx (PI en Y); dummy → modelos/Dummy.glb; bag → modelos/Punching Bag.fbx (-PI/2 en X)'
+      detail:
+        'mma → modelos/MMA.fbx (PI en Y); bodybuilder → modelos/Bodybuilder.fbx (PI en Y); tyson → modelos/Tyson.fbx (PI en Y); principal → modelos/Principal.fbx (PI en Y); dummy → modelos/Dummy.glb; bag → modelos/Punching Bag.fbx (-PI/2 en X)'
     },
     { label: 'Escalado', detail: 'GLB escala 1; FBX escala 0.01 con clonación de mallas esqueléticas.' }
   ]
