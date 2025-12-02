@@ -2257,6 +2257,10 @@
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
       if (mixer) mixer.update(delta);
+
+      // Mantener los guantes pegados a los huesos de la mano (o a los landmarks si se usa ese modo)
+      const gloveScale = getCalibrationScale(smoothedWorldLandmarks);
+      updateGloveAnchors(lastPoseLandmarks, gloveScale);
       renderer.render(scene, camera3D);
     }
     animate();
