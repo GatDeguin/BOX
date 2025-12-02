@@ -627,6 +627,7 @@
         let lastTime;
 
         let bagBody, bagMesh, fanMesh, clockHandHour, clockHandMin, clockHandSec;
+        let leftFistBody, rightFistBody, fistMaterial;
         let bagVisualOffset = new THREE.Vector3();
         let chains = [];
         const mouse = new THREE.Vector2();
@@ -2592,6 +2593,8 @@
         // Seguimiento de manos para detectar golpes
         let lastLeftHandPos = null;
         let lastRightHandPos = null;
+        let lastLeftFistPos = null;
+        let lastRightFistPos = null;
         let leftPunchCooldown = 0;
         let rightPunchCooldown = 0;
 
@@ -2641,6 +2644,7 @@
         }
 
         function updatePosePunch(dt) {
+            if (leftFistBody && rightFistBody) return;
             if (!skeleton || !bagBody || !bagMesh) return;
 
             leftPunchCooldown = Math.max(0, leftPunchCooldown - dt);
@@ -2671,7 +2675,6 @@
                     if (speed > 1.5 && forwardFactor > 0.4 && distance < maxPunchDistance && cooldown <= 0) {
                         const punchData = computePunchImpulse(vel, worldPos, isLeft);
                         if (punchData) {
-                            bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
                             const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
                             deform(worldPos, normalDir, dt);
 
@@ -2747,6 +2750,13 @@
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('pointerdown', onPointerDown, { passive: true });
         }
+
+        const collisionGroups = {
+            static: 1,
+            chain: 1 << 1,
+            bag: 1 << 2,
+            fist: 1 << 3
+        };
 
         function initScene() {
             scene = new THREE.Scene();
@@ -3701,6 +3711,7 @@
             const { staticMat, ceilingMat } = envProps;
 
             const bagMat = new CANNON.Material('bag');
+            fistMaterial = new CANNON.Material('fist');
             const chainMaterial = new CANNON.Material('chain');
 
             const wornClothContact = {
@@ -3745,7 +3756,123 @@
                 frictionEquationRelaxation: 5.5
             }));
 
+            world.addContactMaterial(new CANNON.ContactMaterial(bagMat, fistMaterial, {
+                friction: 0.3,
+                restitution: 0.04,
+                contactEquationStiffness: 25000,
+                contactEquationRelaxation: 4,
+                frictionEquationRelaxation: 3
+            }));
+
             createPunchingBag(tex.bag, { bagMaterial: bagMat, chainMaterial, ceilingMaterial: ceilingMat, staticMat });
+            createFistColliders();
+        }
+
+        function createFistColliders() {
+            if (!world || !fistMaterial || leftFistBody || rightFistBody) return;
+
+            const createFistBody = () => new CANNON.Body({
+                mass: 1.0,
+                type: CANNON.Body.KINEMATIC,
+                position: new CANNON.Vec3(),
+                shape: new CANNON.Sphere(0.08),
+                material: fistMaterial,
+                collisionFilterGroup: collisionGroups.fist,
+                collisionFilterMask: collisionGroups.bag
+            });
+
+            leftFistBody = createFistBody();
+            rightFistBody = createFistBody();
+
+            world.addBody(leftFistBody);
+            world.addBody(rightFistBody);
+        }
+
+        function getBodyPointVelocity(body, contactPoint) {
+            const relativePoint = new CANNON.Vec3();
+            contactPoint.vsub(body.position, relativePoint);
+
+            const angularComponent = new CANNON.Vec3();
+            body.angularVelocity.cross(relativePoint, angularComponent);
+
+            const pointVelocity = new CANNON.Vec3();
+            body.velocity.vadd(angularComponent, pointVelocity);
+            return pointVelocity;
+        }
+
+        function syncFistBodies(dt) {
+            if (!skeleton || !leftFistBody || !rightFistBody) return;
+            const updateFist = (boneName, body, lastPosKey) => {
+                const bone = getBone(boneName);
+                if (!bone) return;
+                const worldPos = new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld);
+
+                const lastPos = lastPosKey === 'left' ? lastLeftFistPos : lastRightFistPos;
+                if (lastPos) {
+                    const vel = worldPos.clone().sub(lastPos).divideScalar(Math.max(dt, 0.0001));
+                    body.velocity.set(vel.x, vel.y, vel.z);
+                } else {
+                    body.velocity.set(0, 0, 0);
+                }
+
+                body.position.set(worldPos.x, worldPos.y, worldPos.z);
+
+                if (lastPosKey === 'left') {
+                    lastLeftFistPos = worldPos;
+                } else {
+                    lastRightFistPos = worldPos;
+                }
+            };
+
+            updateFist('LeftHand', leftFistBody, 'left');
+            updateFist('RightHand', rightFistBody, 'right');
+        }
+
+        function handleBagCollision(event) {
+            const other = event.body;
+            if (!other || (other !== leftFistBody && other !== rightFistBody)) return;
+            const contact = event.contact;
+            if (!contact) return;
+
+            const isLeft = other === leftFistBody;
+
+            const contactPoint = new CANNON.Vec3();
+            const contactNormal = new CANNON.Vec3();
+
+            if (contact.bi === bagBody) {
+                contactPoint.copy(contact.ri).vadd(bagBody.position, contactPoint);
+                contactNormal.copy(contact.ni);
+            } else if (contact.bj === bagBody) {
+                contactPoint.copy(contact.rj).vadd(bagBody.position, contactPoint);
+                contactNormal.copy(contact.ni).scale(-1);
+            } else {
+                return;
+            }
+
+            const fistPointVelocity = getBodyPointVelocity(other, contactPoint);
+            const punchData = computePunchImpulse(fistPointVelocity, contactPoint, isLeft);
+
+            if (punchData) {
+                bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
+
+                const normalDir = new THREE.Vector3(contactNormal.x, contactNormal.y, contactNormal.z);
+                deform(new THREE.Vector3(contactPoint.x, contactPoint.y, contactPoint.z), normalDir, lastVisualStep);
+
+                if (!audioInitialized) initAudioContext();
+                const normalizedImpact = THREE.MathUtils.clamp(
+                    punchData.impulseMagnitude / visualConfig.bag.punchForce,
+                    0.15,
+                    1.5
+                );
+                const impactForce = visualConfig.bag.punchForce * normalizedImpact;
+                playImpactSound(impactForce);
+                playHeavyImpactSound(impactForce);
+
+                registerPunch(Math.min(1, punchData.normalSpeed / 6));
+
+                if (isLeft) leftPunchCooldown = 0.25;
+                else rightPunchCooldown = 0.25;
+            }
         }
 
         function applyBagPhysicsToBody() {
@@ -3794,12 +3921,6 @@
             bagMesh.castShadow = true;
             bagMesh.receiveShadow = true;
             scene.add(bagMesh);
-
-            const collisionGroups = {
-                static: 1,
-                chain: 1 << 1,
-                bag: 1 << 2
-            };
 
             world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, chainMaterial, {
                 friction: 0.38,
@@ -3861,7 +3982,7 @@
                 material: bagMaterial,
                 position: new CANNON.Vec3(0, 2, 0),
                 collisionFilterGroup: collisionGroups.bag,
-                collisionFilterMask: collisionGroups.static | collisionGroups.chain,
+                collisionFilterMask: collisionGroups.static | collisionGroups.chain | collisionGroups.fist,
                 linearDamping: visualConfig.bag.linearDamping,
                 angularDamping: visualConfig.bag.angularDamping,
                 allowSleep: true
@@ -3872,6 +3993,7 @@
             bagBody.sleepTimeLimit = 1.0;
             bagBody.shapeOrientations[0].setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
             world.addBody(bagBody);
+            bagBody.addEventListener('collide', handleBagCollision);
             bagVisualOffset.set(bagShapeOffset.x, bagShapeOffset.y, bagShapeOffset.z);
             const swingConstraint = new CANNON.ConeTwistConstraint(
                 last,
@@ -4246,6 +4368,7 @@
             lastVisualStep = visualStep;
 
             if (world) {
+                syncFistBodies(visualStep);
                 if (lastTime !== undefined) {
                     const frameDelta = Math.min(maxDelta, (time - lastTime) / 1000);
                     accumulator += frameDelta;
