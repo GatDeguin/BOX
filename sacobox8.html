@@ -887,6 +887,10 @@
         let animationDirector = null;
         let currentAnimationEntry = null;
         let currentAnimationCategory = null;
+        let walkSignalsRegistered = false;
+
+        const WALK_INTERRUPT_EVENT = 'box9:interrupt-walk';
+        const WALK_NEW_ACTION_EVENT = 'box9:new-action';
 
         // Debug state
         const debugState = {
@@ -912,6 +916,19 @@
             debugElements.animation.textContent = debugState.animation || '—';
             debugElements.category.textContent = debugState.category || '—';
             debugElements.sound.textContent = debugState.sound || '—';
+        }
+
+        function registerWalkInterruptSignals() {
+            if (walkSignalsRegistered) return;
+            walkSignalsRegistered = true;
+
+            window.addEventListener(WALK_INTERRUPT_EVENT, () => {
+                if (animationDirector) animationDirector.requestWalkInterrupt('signal');
+            });
+
+            window.addEventListener(WALK_NEW_ACTION_EVENT, () => {
+                if (animationDirector) animationDirector.notifyIncomingAction();
+            });
         }
 
         function formatAnimationLabel(entry) {
@@ -2087,6 +2104,12 @@
                 this.actionTimeState = null;
                 this.lastStuckWarning = { action: null, time: 0 };
                 this.lastProgressTimestamp = 0;
+                this.walkStepCount = 0;
+                this.walkLoopAtLastCheck = 0;
+                this.walkStartTimestamp = 0;
+                this.walkStepDurationMs = 800;
+                this.pendingWalkInterrupt = false;
+                this.recentAttackHistory = [];
             }
 
             async loadLibrary(definitions = ANIMATION_LIBRARY) {
@@ -2174,6 +2197,7 @@
                 this.lastProgressTimestamp = performance.now?.() || Date.now();
                 currentAnimationEntry = next;
                 currentAnimationCategory = next.category || getClipCategory(next.name);
+                this.onEntryStarted(next);
 
                 updateDebugAnimation(next);
                 handleCategoryTransitions(currentAnimationCategory);
@@ -2191,21 +2215,38 @@
                 const desiredHits = [3, 4, 5, 6][Math.floor(Math.random() * 4)];
                 const sequence = [];
                 let lastAttack = null;
+                const bagDistance = this.getDistanceToBag();
+                const recentSet = new Set(this.recentAttackHistory);
+                const farFromBag = bagDistance !== null && bagDistance > MIN_BAG_DISTANCE + 0.45;
+
+                const pickAttack = () => {
+                    const weightedPool = attacks
+                        .map((entry) => ({
+                            entry,
+                            weight: this.weightAttackEntry(entry, { lastAttack, recentSet, bagDistance })
+                        }))
+                        .filter(({ weight }) => weight > 0);
+
+                    if (!weightedPool.length) return attacks[0];
+                    return this.pickWeightedEntry(weightedPool);
+                };
 
                 for (let i = 0; i < desiredHits; i++) {
-                    const attackPool = attacks.filter((entry) => entry !== lastAttack);
-                    const attack = attackPool[Math.floor(Math.random() * attackPool.length)] || attacks[0];
+                    const attack = pickAttack();
                     sequence.push(attack);
                     lastAttack = attack;
+                    this.rememberAttack(attack);
 
-                    const shouldWalk = i < desiredHits - 1 && walks.length > 0 && Math.random() > 0.4;
+                    const walkBias = farFromBag ? 0.25 : 0.55;
+                    const shouldWalk = i < desiredHits - 1 && walks.length > 0 && Math.random() > walkBias;
                     if (shouldWalk) {
                         const walk = walks[Math.floor(Math.random() * walks.length)];
                         sequence.push(walk);
                     }
                 }
 
-                if (walks.length && Math.random() > 0.65) {
+                const tailWalkBias = farFromBag ? 0.35 : 0.65;
+                if (walks.length && Math.random() > tailWalkBias) {
                     sequence.push(walks[Math.floor(Math.random() * walks.length)]);
                 }
 
@@ -2215,6 +2256,108 @@
                 }
 
                 return sequence;
+            }
+
+            pickWeightedEntry(weightedPool) {
+                const total = weightedPool.reduce((sum, { weight }) => sum + weight, 0);
+                if (total <= 0) return weightedPool[0]?.entry || null;
+
+                let roll = Math.random() * total;
+                for (const { entry, weight } of weightedPool) {
+                    roll -= weight;
+                    if (roll <= 0) return entry;
+                }
+
+                return weightedPool[weightedPool.length - 1]?.entry || null;
+            }
+
+            weightAttackEntry(entry, { lastAttack, recentSet, bagDistance }) {
+                let weight = 1;
+                const id = (entry.file || entry.name || '').toLowerCase();
+                const isLongRange = id.includes('jab') || id.includes('cross') || id.includes('lead');
+                const isCloseRange =
+                    id.includes('hook') || id.includes('upper') || id.includes('punching bag') || id.includes('elbow');
+
+                if (bagDistance !== null) {
+                    if (bagDistance > MIN_BAG_DISTANCE + 0.4 && isLongRange) weight += 0.8;
+                    if (bagDistance < MIN_BAG_DISTANCE + 0.2 && isCloseRange) weight += 0.8;
+                    if (bagDistance > MIN_BAG_DISTANCE + 0.6 && isCloseRange) weight *= 0.7;
+                }
+
+                if (lastAttack === entry) weight *= 0.45;
+                if (recentSet.has(entry)) weight *= 0.65;
+
+                return Math.max(weight, 0.15);
+            }
+
+            rememberAttack(entry) {
+                this.recentAttackHistory.push(entry);
+                const maxHistory = 4;
+                if (this.recentAttackHistory.length > maxHistory) {
+                    this.recentAttackHistory.splice(0, this.recentAttackHistory.length - maxHistory);
+                }
+            }
+
+            getDistanceToBag() {
+                if (!tysonRoot || !bagMesh) return null;
+                tmpVecA.copy(tysonRoot.position).sub(bagMesh.position);
+                tmpVecA.y = 0;
+                return tmpVecA.length();
+            }
+
+            notifyIncomingAction() {
+                this.requestWalkInterrupt('incoming-action');
+            }
+
+            requestWalkInterrupt(reason = 'external') {
+                this.pendingWalkInterrupt = true;
+                this.processWalkInterrupts();
+            }
+
+            estimateWalkStepDuration(entry) {
+                const clip = entry?.action?.getClip?.();
+                const clipMs = clip?.duration ? clip.duration * 1000 : 0;
+                const estimate = clipMs ? clipMs * 0.6 : 800;
+                return Math.min(1200, Math.max(320, estimate));
+            }
+
+            onEntryStarted(entry) {
+                if (!entry) return;
+                if (entry.category === 'walk') {
+                    this.walkStartTimestamp = performance.now?.() || Date.now();
+                    this.walkLoopAtLastCheck = 0;
+                    this.walkStepCount = 0;
+                    this.walkStepDurationMs = this.estimateWalkStepDuration(entry);
+                } else {
+                    this.pendingWalkInterrupt = false;
+                }
+            }
+
+            processWalkInterrupts() {
+                if (!this.activeEntry || this.activeEntry.category !== 'walk') {
+                    if (this.activeEntry && this.activeEntry.category !== 'walk') {
+                        this.pendingWalkInterrupt = false;
+                    }
+                    this.walkStepCount = 0;
+                    this.walkLoopAtLastCheck = 0;
+                    return;
+                }
+
+                const now = performance.now?.() || Date.now();
+                const loop = this.actionTimeState?.loop || 0;
+                if (loop !== this.walkLoopAtLastCheck) {
+                    this.walkStepCount += loop - this.walkLoopAtLastCheck;
+                    this.walkLoopAtLastCheck = loop;
+                }
+
+                if (!this.walkStartTimestamp) this.walkStartTimestamp = now;
+                const elapsed = now - this.walkStartTimestamp;
+                const firstStepDone = this.walkStepCount > 0 || elapsed >= this.walkStepDurationMs;
+
+                if (this.pendingWalkInterrupt && firstStepDone) {
+                    this.pendingWalkInterrupt = false;
+                    this.cutCurrentWalk();
+                }
             }
 
             handleAudioFor(entry) {
@@ -2439,6 +2582,7 @@
             update() {
                 this.processActionTime();
                 this.processCues();
+                this.processWalkInterrupts();
                 this.ensureNotStuck();
             }
 
@@ -2481,6 +2625,7 @@
             if (!tysonRoot) return;
 
             animationDirector = new AnimationSoundDirector({ mixer });
+            registerWalkInterruptSignals();
             animationDirector.loadLibrary().then(() => {
                 animationDirector.startAutoPlaylist();
             });
