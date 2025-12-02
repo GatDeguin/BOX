@@ -848,6 +848,7 @@
                 ringBase: 2.35,
                 ringSpotColor: 0xffe2b0,
                 ringSpotBase: 4.85,
+                trainingSetColor: 0xffa347,
                 accentColor: 0x79a8ff,
                 accentBase: 1.45,
                 bagLightColor: 0xffb17a,
@@ -882,6 +883,7 @@
                 ringBase: 1.85,
                 ringSpotColor: 0xffdcb0,
                 ringSpotBase: 4.05,
+                trainingSetColor: 0x6db7ff,
                 accentColor: 0xffc19b,
                 accentBase: 1.25,
                 bagLightColor: 0xffc58f,
@@ -4082,6 +4084,22 @@
             speedBagAccent.position.set(3.0, 2.0, trainingWallZ - 0.4);
             scene.add(speedBagAccent);
             trainingAreaLights.push({ light: speedBagAccent, base: 2.6, colorKey: 'accentColor' });
+
+            const trainingBackdrop = new THREE.SpotLight(
+                lightingPresets[currentPreset].trainingSetColor,
+                2.8,
+                14,
+                Math.PI / 3.4,
+                0.55,
+                1.05
+            );
+            trainingBackdrop.position.set(0.5, 3.1, trainingWallZ + 0.8);
+            trainingBackdrop.target.position.set(0.5, 1.6, trainingWallZ - 0.5);
+            trainingBackdrop.castShadow = !isMobile;
+            trainingBackdrop.shadow.mapSize.set(768, 768);
+            scene.add(trainingBackdrop);
+            scene.add(trainingBackdrop.target);
+            trainingAreaLights.push({ light: trainingBackdrop, base: 2.8, colorKey: 'trainingSetColor' });
 
             const lockerGeo = new THREE.BoxGeometry(0.8, 2.2, 0.6);
             const lockerMat = new THREE.MeshStandardMaterial({ color: 0x556677, metalness: 0.6, roughness: 0.4, envMapIntensity: 1.0 });
