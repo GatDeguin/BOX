@@ -251,6 +251,69 @@
       display: none;
     }
 
+    .debug-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .debug-card {
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 12px;
+      background: radial-gradient(circle at top right, rgba(59,130,246,0.08), rgba(15,23,42,0.25));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .debug-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0.95;
+    }
+
+    .debug-title small {
+      font-weight: 500;
+      opacity: 0.75;
+    }
+
+    .debug-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .debug-row label {
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+
+    .debug-inputs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .debug-input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.35);
+      color: #e5e7eb;
+      font-size: 0.8rem;
+    }
+
+    .debug-hint {
+      font-size: 0.75rem;
+      opacity: 0.7;
+    }
+
     @media (max-width: 960px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
@@ -364,6 +427,66 @@
         </div>
       </section>
     </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <span>🛠️ Mocap Debug</span>
+        <div class="chip-row">
+          <div class="chip">Ajustá escala y posición</div>
+          <div class="chip">Personaje, ring y guantes</div>
+        </div>
+      </div>
+      <div class="debug-grid">
+        <div class="debug-card">
+          <div class="debug-title">Personaje <small>(character)</small></div>
+          <div class="debug-row">
+            <label for="debug_character_scale">Escala</label>
+            <input class="debug-input" type="number" step="0.01" id="debug_character_scale" value="1" />
+          </div>
+          <div class="debug-row">
+            <label>Posición (X / Y / Z)</label>
+            <div class="debug-inputs">
+              <input class="debug-input" type="number" step="0.01" id="debug_character_x" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_character_y" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_character_z" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="debug-card">
+          <div class="debug-title">Ring <small>(background)</small></div>
+          <div class="debug-row">
+            <label for="debug_ring_scale">Escala</label>
+            <input class="debug-input" type="number" step="0.01" id="debug_ring_scale" value="1" />
+          </div>
+          <div class="debug-row">
+            <label>Posición (X / Y / Z)</label>
+            <div class="debug-inputs">
+              <input class="debug-input" type="number" step="0.01" id="debug_ring_x" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_ring_y" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_ring_z" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="debug-card">
+          <div class="debug-title">Guantes <small>(gloves)</small></div>
+          <div class="debug-row">
+            <label for="debug_glove_scale">Escala</label>
+            <input class="debug-input" type="number" step="0.01" id="debug_glove_scale" value="1" />
+          </div>
+          <div class="debug-row">
+            <label>Offset (X / Y / Z)</label>
+            <div class="debug-inputs">
+              <input class="debug-input" type="number" step="0.01" id="debug_glove_x" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_glove_y" value="0" />
+              <input class="debug-input" type="number" step="0.01" id="debug_glove_z" value="0" />
+            </div>
+            <p class="debug-hint">Se suma al offset actual relativo a la mano.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- Lógica principal -->
@@ -705,6 +828,32 @@
     const ringSelect = document.getElementById('ring_select');
     const gloveSelect = document.getElementById('glove_select');
     const animFileInput = document.getElementById('anim_file_input');
+    const debugInputRefs = {
+      character: {
+        scale: document.getElementById('debug_character_scale'),
+        x: document.getElementById('debug_character_x'),
+        y: document.getElementById('debug_character_y'),
+        z: document.getElementById('debug_character_z'),
+      },
+      ring: {
+        scale: document.getElementById('debug_ring_scale'),
+        x: document.getElementById('debug_ring_x'),
+        y: document.getElementById('debug_ring_y'),
+        z: document.getElementById('debug_ring_z'),
+      },
+      glove: {
+        scale: document.getElementById('debug_glove_scale'),
+        x: document.getElementById('debug_glove_x'),
+        y: document.getElementById('debug_glove_y'),
+        z: document.getElementById('debug_glove_z'),
+      },
+    };
+
+    const debugTransforms = {
+      character: { scale: 1, position: new THREE.Vector3() },
+      ring: { scale: 1, position: new THREE.Vector3() },
+      glove: { scale: 1, position: new THREE.Vector3() },
+    };
 
     let cameraMP = null;
     let capturing = false;
@@ -941,9 +1090,17 @@
     let gloveLoadToken = 0;
     let gloveBaseRotation = new THREE.Quaternion();
     let gloveBaseScale = 1;
+    let gloveBaseScaleConfig = 1;
     let gloveOffset = new THREE.Vector3();
+    const gloveBaseOffset = new THREE.Vector3();
     const gloveTextureLoader = new THREE.TextureLoader();
     let gloveTextures = [];
+
+    let ringBaseScale = 1;
+    const ringBasePosition = new THREE.Vector3();
+
+    let modelBaseScale = 1;
+    const modelBasePosition = new THREE.Vector3();
 
     let mixer = null;
     let actions = {};
@@ -1066,17 +1223,17 @@
           const root = type === 'gltf' ? asset.scene : asset;
           ringRoot = root;
 
-          const ringScale = config.scale ?? 1;
-          ringRoot.scale.setScalar(ringScale);
+          ringBaseScale = config.scale ?? 1;
+          ringRoot.scale.setScalar(ringBaseScale * (debugTransforms.ring.scale || 1));
           ringRoot.updateMatrixWorld(true);
 
           const bbox = new THREE.Box3().setFromObject(ringRoot);
           const center = new THREE.Vector3();
           bbox.getCenter(center);
 
-          ringRoot.position.x += -center.x;
-          ringRoot.position.z += -center.z;
-          ringRoot.position.y += -bbox.min.y;
+          ringBasePosition.set(-center.x, -bbox.min.y, -center.z);
+          ringRoot.position.copy(ringBasePosition).add(debugTransforms.ring.position);
+          ringRoot.updateMatrixWorld(true);
 
           ringRoot.traverse((obj) => {
             if (obj.isMesh) {
@@ -1153,6 +1310,81 @@
       else apply(material);
     }
 
+    function parseInputNumber(input, fallback = 0) {
+      if (!input) return fallback;
+      const value = parseFloat(input.value);
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function updateDebugInputsFromState() {
+      Object.entries(debugInputRefs).forEach(([key, refs]) => {
+        const transform = debugTransforms[key];
+        if (!transform || !refs) return;
+        if (refs.scale) refs.scale.value = transform.scale;
+        if (refs.x) refs.x.value = transform.position.x;
+        if (refs.y) refs.y.value = transform.position.y;
+        if (refs.z) refs.z.value = transform.position.z;
+      });
+    }
+
+    function applyCharacterDebugTransform() {
+      if (!modelRoot) return;
+      const scale = modelBaseScale * (debugTransforms.character.scale || 1);
+      modelRoot.scale.setScalar(scale);
+      modelRoot.position.copy(modelBasePosition).add(debugTransforms.character.position);
+      modelRoot.updateMatrixWorld(true);
+    }
+
+    function applyRingDebugTransform() {
+      if (!ringRoot) return;
+      const scale = ringBaseScale * (debugTransforms.ring.scale || 1);
+      ringRoot.scale.setScalar(scale);
+      ringRoot.position.copy(ringBasePosition).add(debugTransforms.ring.position);
+      ringRoot.updateMatrixWorld(true);
+    }
+
+    function applyGloveDebugTransform() {
+      gloveBaseScale = gloveBaseScaleConfig * (debugTransforms.glove.scale || 1);
+      gloveOffset = gloveBaseOffset.clone().add(debugTransforms.glove.position);
+      if (gloveMeshes.left) gloveMeshes.left.scale.setScalar(gloveBaseScale);
+      if (gloveMeshes.right) gloveMeshes.right.scale.setScalar(gloveBaseScale);
+    }
+
+    function applyDebugTransform(type) {
+      if (type === 'character') applyCharacterDebugTransform();
+      else if (type === 'ring') applyRingDebugTransform();
+      else if (type === 'glove') applyGloveDebugTransform();
+    }
+
+    function handleDebugChange(type) {
+      const refs = debugInputRefs[type];
+      const transform = debugTransforms[type];
+      if (!refs || !transform) return;
+
+      transform.scale = parseInputNumber(refs.scale, 1);
+      transform.position.set(
+        parseInputNumber(refs.x, 0),
+        parseInputNumber(refs.y, 0),
+        parseInputNumber(refs.z, 0)
+      );
+
+      applyDebugTransform(type);
+    }
+
+    function setupDebugInputs() {
+      Object.keys(debugInputRefs).forEach((key) => {
+        const refs = debugInputRefs[key];
+        if (!refs) return;
+        Object.values(refs).forEach((input) => {
+          if (!input) return;
+          input.addEventListener('input', () => handleDebugChange(key));
+        });
+      });
+
+      updateDebugInputsFromState();
+      ['character', 'ring', 'glove'].forEach((type) => handleDebugChange(type));
+    }
+
     function createGloveInstances(prototype) {
       if (!prototype) return;
       const left = prototype.clone(true);
@@ -1175,8 +1407,9 @@
       gloveBaseRotation = new THREE.Quaternion().setFromEuler(
         (config && config.baseRotation) || new THREE.Euler(-Math.PI / 2, 0, 0)
       );
-      gloveBaseScale = config?.scale ?? 1;
-      gloveOffset = (config?.offset || new THREE.Vector3()).clone();
+      gloveBaseScaleConfig = config?.scale ?? 1;
+      gloveBaseOffset.copy(config?.offset || new THREE.Vector3());
+      applyGloveDebugTransform();
 
       if (!config || config.id === 'none') return;
 
@@ -1277,8 +1510,8 @@
           let root = (type === 'gltf') ? asset.scene : asset;
           modelRoot = root;
 
-          const modelScale = config.scale ?? 1;
-          modelRoot.scale.setScalar(modelScale);
+          modelBaseScale = config.scale ?? 1;
+          modelRoot.scale.setScalar(modelBaseScale * (debugTransforms.character.scale || 1));
           modelRoot.updateMatrixWorld(true);
 
           modelRoot.traverse((obj) => {
@@ -1313,9 +1546,9 @@
           bbox.getSize(size);
           bbox.getCenter(center);
 
-          modelRoot.position.x += -center.x;
-          modelRoot.position.z += -center.z;
-          modelRoot.position.y += -bbox.min.y;
+          modelBasePosition.set(-center.x, -bbox.min.y, -center.z);
+          modelRoot.position.copy(modelBasePosition).add(debugTransforms.character.position);
+          modelRoot.updateMatrixWorld(true);
 
           scene.updateMatrixWorld(true);
           captureBindInfo();
@@ -1562,6 +1795,7 @@
       });
     }
 
+    setupDebugInputs();
     bootstrapModelOptions();
 
     function onWindowResize() {
