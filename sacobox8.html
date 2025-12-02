@@ -384,6 +384,7 @@
                 bulgeAmount: 0.25,
                 elasticity: 0.15,
                 damping: 0.85,
+                maxVertexSpeed: 2.5,
                 noiseFactor: 0.03,
                 punchForce: 80,
                 mass: 60,
@@ -391,6 +392,9 @@
                 angularDamping: 0.8
             }
         };
+
+        const fixedVisualStep = 1 / 60;
+        let lastVisualStep = fixedVisualStep;
 
         const punchConfig = {
             left: {
@@ -2158,7 +2162,7 @@
                         if (punchData) {
                             bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
                             const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                            deform(worldPos, normalDir);
+                            deform(worldPos, normalDir, dt);
 
                             if (!audioInitialized) initAudioContext();
                             const normalizedImpact = THREE.MathUtils.clamp(
@@ -3245,8 +3249,9 @@
         }
 
         // --- DEFORMACIÓN ---
-        function deform(point, dir) {
+        function deform(point, dir, dt) {
             if(!bagMesh) return;
+            const visualStep = dt || lastVisualStep || fixedVisualStep;
             const lp = bagMesh.worldToLocal(point.clone());
             const pos = bagMesh.geometry.attributes.position;
             const rot = bagMesh.quaternion.clone().invert();
@@ -3257,17 +3262,18 @@
                 const d = v.distanceTo(lp);
                 if(d < 0.5) {
                     const f = (1 - d/0.5);
-                    vertexVelocities[i].add(ld.clone().multiplyScalar(f * visualConfig.bag.deformationAmount));
+                    vertexVelocities[i].add(ld.clone().multiplyScalar(f * visualConfig.bag.deformationAmount * visualStep));
                 } else if(d < 0.9) {
                     const t = (d-0.5)/(0.4);
                     const f = Math.sin(t*Math.PI) * visualConfig.bag.bulgeAmount * 0.3;
-                    vertexVelocities[i].add(ld.clone().negate().multiplyScalar(f));
+                    vertexVelocities[i].add(ld.clone().negate().multiplyScalar(f * visualStep));
                 }
             }
         }
 
-        function updateMesh() {
+        function updateMesh(dt) {
             if(!bagMesh) return;
+            const visualStep = dt || lastVisualStep || fixedVisualStep;
             const pos = bagMesh.geometry.attributes.position;
             let moved = false;
 
@@ -3279,12 +3285,16 @@
                 tempDisp.subVectors(tempV, o);
                 const displacementLenSq = tempDisp.lengthSq();
 
-                const force = tempDisp.multiplyScalar(-visualConfig.bag.elasticity);
+                const force = tempDisp.multiplyScalar(-visualConfig.bag.elasticity * visualStep);
                 vel.add(force);
-                vel.multiplyScalar(visualConfig.bag.damping);
-                
+
+                const baseStep = Math.max(fixedVisualStep, 0.0001);
+                const dampingFactor = Math.pow(visualConfig.bag.damping, visualStep / baseStep);
+                vel.multiplyScalar(dampingFactor);
+                vel.clampLength(0, visualConfig.bag.maxVertexSpeed);
+
                 if(vel.lengthSq()>0.00001 || displacementLenSq>0.00001) {
-                    tempV.add(vel);
+                    tempV.addScaledVector(vel, visualStep);
                     pos.setXYZ(i, tempV.x, tempV.y, tempV.z);
                     moved = true;
                 }
@@ -3542,13 +3552,13 @@
                 const syntheticSpeed = targetImpulse / (rightSettings.effectiveMass * rightSettings.contactArea);
                 const handVelocity = dir.clone().multiplyScalar(syntheticSpeed);
 
-                const punchData = computePunchImpulse(handVelocity, hit.point, false);
-                if (punchData) {
-                    bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
-                    const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
-                    deform(hit.point, normalDir);
-                    const impactForce = Math.max(targetImpulse, punchData.impulseMagnitude);
-                    playImpactSound(impactForce);
+                    const punchData = computePunchImpulse(handVelocity, hit.point, false);
+                    if (punchData) {
+                        bagBody.applyImpulse(punchData.impulse, punchData.contactPoint);
+                        const normalDir = new THREE.Vector3(punchData.normal.x, punchData.normal.y, punchData.normal.z);
+                        deform(hit.point, normalDir, lastVisualStep);
+                        const impactForce = Math.max(targetImpulse, punchData.impulseMagnitude);
+                        playImpactSound(impactForce);
 
                     registerPunch(Math.min(1, punchData.normalSpeed / 6));
 
@@ -3572,6 +3582,8 @@
             requestAnimationFrame(animate);
             const dtVis = Math.min(clock.getDelta(), 0.1);
             const elapsed = clock.getElapsedTime();
+            const visualStep = fixedVisualStep || dtVis;
+            lastVisualStep = visualStep;
 
             if (world) {
                 if (lastTime !== undefined) {
@@ -3698,7 +3710,7 @@
                 shakeOffset.set(0, 0, 0);
             }
 
-            updateMesh();
+            updateMesh(visualStep);
             updateFog(dtVis, elapsed);
 
             // Golpes desde manos del personaje
