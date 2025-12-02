@@ -444,7 +444,19 @@
         // --- VARIABLES GLOBALES ESCENA ---
         let scene, camera, renderer, controls, composer;
         let world;
-        const fixedTimeStep = 1 / 60;
+        const physicsTuning = {
+            baseFixedTimeStep: 1 / 60,
+            minFixedTimeStep: 1 / 75,
+            maxFixedTimeStep: 1 / 45,
+            minSubSteps: 2,
+            maxSubSteps: 8,
+            stepTimeBudgetMs: 3.5,
+            stepTimeComfortMs: 1.6,
+            smoothing: 0.9
+        };
+        let fixedTimeStep = physicsTuning.baseFixedTimeStep;
+        let maxSubSteps = physicsTuning.maxSubSteps;
+        let smoothedStepTime = physicsTuning.stepTimeComfortMs;
         const maxDelta = 0.1;
         let accumulator = 0;
         let lastTime;
@@ -3578,6 +3590,26 @@
             resizeCanvasToVideo();
         }
 
+        function tunePhysicsBudget(stepDurationMs) {
+            smoothedStepTime = physicsTuning.smoothing * smoothedStepTime + (1 - physicsTuning.smoothing) * stepDurationMs;
+
+            if (smoothedStepTime > physicsTuning.stepTimeBudgetMs) {
+                if (maxSubSteps > physicsTuning.minSubSteps) {
+                    maxSubSteps -= 1;
+                }
+                if (fixedTimeStep < physicsTuning.maxFixedTimeStep) {
+                    fixedTimeStep = Math.min(physicsTuning.maxFixedTimeStep, fixedTimeStep * 1.1);
+                }
+            } else if (smoothedStepTime < physicsTuning.stepTimeComfortMs) {
+                if (maxSubSteps < physicsTuning.maxSubSteps) {
+                    maxSubSteps += 1;
+                }
+                if (fixedTimeStep > physicsTuning.minFixedTimeStep) {
+                    fixedTimeStep = Math.max(physicsTuning.minFixedTimeStep, fixedTimeStep * 0.95);
+                }
+            }
+        }
+
         function animate(time) {
             requestAnimationFrame(animate);
             const dtVis = Math.min(clock.getDelta(), 0.1);
@@ -3590,12 +3622,17 @@
                     const frameDelta = Math.min(maxDelta, (time - lastTime) / 1000);
                     accumulator += frameDelta;
 
-                    while (accumulator >= fixedTimeStep) {
+                    let subSteps = 0;
+                    while (accumulator >= fixedTimeStep && subSteps < maxSubSteps) {
+                        const stepStart = performance.now();
                         world.step(fixedTimeStep);
+                        const stepDuration = performance.now() - stepStart;
+                        tunePhysicsBudget(stepDuration);
                         accumulator -= fixedTimeStep;
+                        subSteps += 1;
                     }
 
-                    accumulator = Math.min(accumulator, fixedTimeStep);
+                    accumulator = Math.min(accumulator, fixedTimeStep * maxSubSteps);
                 }
 
                 lastTime = time;
