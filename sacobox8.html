@@ -858,6 +858,7 @@
         let audioContext, masterGain, reverbNode, reverbWetGain, reverbDryGain;
         let audioInitialized = false;
         const audioBuffers = new Map();
+        let audioUnlockHandlers = [];
         const audioFiles = {
             impacts: [
                 'sonidos/golpe_1.mp3',
@@ -2870,6 +2871,7 @@
             setupViewButton();
             setupUiFxEvents();
             setupMobileControls();
+            setupAudioUnlockListeners();
 
             // Tyson + webcam
             loadTysonModel();
@@ -4228,6 +4230,36 @@
             loadAllAudio();
         }
 
+        async function ensureAudioContextActive() {
+            if (!audioInitialized) initAudioContext();
+            if (audioContext && audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            return audioContext && audioContext.state === 'running';
+        }
+
+        function setupAudioUnlockListeners() {
+            if (audioUnlockHandlers.length > 0) return;
+
+            const tryUnlock = async () => {
+                if (await ensureAudioContextActive()) removeAudioUnlockListeners();
+            };
+
+            const events = ['pointerdown', 'touchstart', 'keydown'];
+            audioUnlockHandlers = events.map((evt) => {
+                const handler = () => tryUnlock();
+                document.addEventListener(evt, handler, { capture: true, passive: true });
+                return { evt, handler };
+            });
+        }
+
+        function removeAudioUnlockListeners() {
+            audioUnlockHandlers.forEach(({ evt, handler }) =>
+                document.removeEventListener(evt, handler, { capture: true })
+            );
+            audioUnlockHandlers = [];
+        }
+
         function createImpulseResponse(context, decaySeconds) {
             const decay = Math.max(0.1, decaySeconds || 1);
             const sampleRate = context.sampleRate;
@@ -4330,11 +4362,13 @@
         }
 
         function playBuffer(name, { volume = 1, playbackRate = 1, slices = 1 } = {}) {
-            if (!audioConfig.enabled || !audioContext) return;
+            if (!audioConfig.enabled) return;
+            setupAudioUnlockListeners();
+            if (!audioContext) return;
             const buffer = audioBuffers.get(name);
             if (!buffer) return;
 
-            if (audioContext.state === 'suspended') audioContext.resume();
+            if (audioContext.state === 'suspended') return;
 
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
