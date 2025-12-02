@@ -124,13 +124,50 @@
             z-index: 35;
         }
 
+        #debugPanel.collapsed {
+            padding-bottom: 10px;
+        }
+
+        #debugPanel.collapsed #debugContent {
+            display: none;
+        }
+
+        #debugPanel .debug-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
         #debugPanel .debug-title {
             font-size: 11px;
             letter-spacing: 0.18em;
             text-transform: uppercase;
             color: #f8fafc;
             opacity: 0.85;
-            margin-bottom: 6px;
+            margin: 0;
+        }
+
+        #debugToggleBtn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #e2e8f0;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        #debugToggleBtn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        #debugToggleBtn:active {
+            transform: translateY(1px);
         }
 
         #debugPanel .debug-row {
@@ -174,6 +211,25 @@
             font-weight: 700;
             color: #e2e8f0;
             text-align: right;
+        }
+
+        #debugPanel .section-label {
+            grid-column: 1 / -1;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #cbd5e1;
+            opacity: 0.85;
+            padding-top: 4px;
+        }
+
+        #debugPanel .color-input {
+            width: 100%;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            height: 28px;
+            cursor: pointer;
         }
 
         /* Tipografía del encabezado */
@@ -270,53 +326,159 @@
 
     <!-- Debug info -->
     <div id="debugPanel">
-        <div class="debug-title">Debug</div>
-        <div class="debug-row">
-            <span class="label">Animación</span>
-            <span class="value" id="debugAnimation">—</span>
+        <div class="debug-header">
+            <div class="debug-title">Debug</div>
+            <button id="debugToggleBtn" aria-label="Alternar panel debug">⏷</button>
         </div>
-        <div class="debug-row">
-            <span class="label">Categoría</span>
-            <span class="value" id="debugCategory">—</span>
-        </div>
-        <div class="debug-row">
-            <span class="label">Sonido</span>
-            <span class="value" id="debugSound">—</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Masa</span>
-            <input id="bagMass" type="range" min="20" max="120" step="1" value="60" />
-            <span class="value" id="bagMassVal">60 kg</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Lin. damping</span>
-            <input id="bagLinearDamping" type="range" min="0" max="1" step="0.01" value="0.6" />
-            <span class="value" id="bagLinearDampingVal">0.60</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Ang. damping</span>
-            <input id="bagAngularDamping" type="range" min="0" max="1" step="0.01" value="0.8" />
-            <span class="value" id="bagAngularDampingVal">0.80</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Masa mano izq.</span>
-            <input id="leftHandMass" type="range" min="1" max="10" step="0.1" value="4.5" />
-            <span class="value" id="leftHandMassVal">4.5 kg</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Área contacto izq.</span>
-            <input id="leftHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
-            <span class="value" id="leftHandAreaVal">1.00x</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Masa mano der.</span>
-            <input id="rightHandMass" type="range" min="1" max="10" step="0.1" value="5.5" />
-            <span class="value" id="rightHandMassVal">5.5 kg</span>
-        </div>
-        <div class="control-row">
-            <span class="label">Área contacto der.</span>
-            <input id="rightHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
-            <span class="value" id="rightHandAreaVal">1.00x</span>
+        <div id="debugContent">
+            <div class="debug-row">
+                <span class="label">Animación</span>
+                <span class="value" id="debugAnimation">—</span>
+            </div>
+            <div class="debug-row">
+                <span class="label">Categoría</span>
+                <span class="value" id="debugCategory">—</span>
+            </div>
+            <div class="debug-row">
+                <span class="label">Sonido</span>
+                <span class="value" id="debugSound">—</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Masa</span>
+                <input id="bagMass" type="range" min="20" max="120" step="1" value="60" />
+                <span class="value" id="bagMassVal">60 kg</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Lin. damping</span>
+                <input id="bagLinearDamping" type="range" min="0" max="1" step="0.01" value="0.6" />
+                <span class="value" id="bagLinearDampingVal">0.60</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ang. damping</span>
+                <input id="bagAngularDamping" type="range" min="0" max="1" step="0.01" value="0.8" />
+                <span class="value" id="bagAngularDampingVal">0.80</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Masa mano izq.</span>
+                <input id="leftHandMass" type="range" min="1" max="10" step="0.1" value="4.5" />
+                <span class="value" id="leftHandMassVal">4.5 kg</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Área contacto izq.</span>
+                <input id="leftHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
+                <span class="value" id="leftHandAreaVal">1.00x</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Masa mano der.</span>
+                <input id="rightHandMass" type="range" min="1" max="10" step="0.1" value="5.5" />
+                <span class="value" id="rightHandMassVal">5.5 kg</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Área contacto der.</span>
+                <input id="rightHandArea" type="range" min="0.5" max="2.0" step="0.05" value="1" />
+                <span class="value" id="rightHandAreaVal">1.00x</span>
+            </div>
+            <div class="control-row">
+                <span class="section-label">Luces - Intensidad</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Key</span>
+                <input id="keyIntensity" type="range" min="0" max="25" step="0.05" value="8.8" />
+                <span class="value" id="keyIntensityVal">8.80</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Fill</span>
+                <input id="fillIntensity" type="range" min="0" max="5" step="0.05" value="0.8" />
+                <span class="value" id="fillIntensityVal">0.80</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Rim</span>
+                <input id="rimIntensity" type="range" min="0" max="5" step="0.05" value="1.1" />
+                <span class="value" id="rimIntensityVal">1.10</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ring</span>
+                <input id="ringIntensity" type="range" min="0" max="8" step="0.05" value="1.5" />
+                <span class="value" id="ringIntensityVal">1.50</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ring Spot</span>
+                <input id="ringSpotIntensity" type="range" min="0" max="10" step="0.05" value="3.3" />
+                <span class="value" id="ringSpotIntensityVal">3.30</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Cinema Back</span>
+                <input id="cinemaBackIntensity" type="range" min="0" max="5" step="0.05" value="0.22" />
+                <span class="value" id="cinemaBackIntensityVal">0.22</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Puerta</span>
+                <input id="doorIntensity" type="range" min="0" max="30" step="0.1" value="18.5" />
+                <span class="value" id="doorIntensityVal">18.50</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Fluorescente</span>
+                <input id="fluorescentIntensity" type="range" min="0" max="15" step="0.1" value="7.5" />
+                <span class="value" id="fluorescentIntensityVal">7.50</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ambiente</span>
+                <input id="ambientIntensity" type="range" min="0" max="2" step="0.01" value="0.62" />
+                <span class="value" id="ambientIntensityVal">0.62</span>
+            </div>
+            <div class="control-row">
+                <span class="section-label">Luces - Color</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Key</span>
+                <input id="keyColor" type="color" class="color-input" value="#ffaa77" />
+                <span class="value" id="keyColorVal">#ffaa77</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Fill</span>
+                <input id="fillColor" type="color" class="color-input" value="#6c7cff" />
+                <span class="value" id="fillColorVal">#6c7cff</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Rim</span>
+                <input id="rimColor" type="color" class="color-input" value="#4a8dff" />
+                <span class="value" id="rimColorVal">#4a8dff</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ring</span>
+                <input id="ringColor" type="color" class="color-input" value="#ffdd88" />
+                <span class="value" id="ringColorVal">#ffdd88</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ring Spot</span>
+                <input id="ringSpotColor" type="color" class="color-input" value="#ffe2b0" />
+                <span class="value" id="ringSpotColorVal">#ffe2b0</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Cinema Back</span>
+                <input id="cinemaBackColor" type="color" class="color-input" value="#1a2846" />
+                <span class="value" id="cinemaBackColorVal">#1a2846</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Puerta</span>
+                <input id="doorColor" type="color" class="color-input" value="#4488ff" />
+                <span class="value" id="doorColorVal">#4488ff</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Fluorescente</span>
+                <input id="fluorescentColor" type="color" class="color-input" value="#f0f6ff" />
+                <span class="value" id="fluorescentColorVal">#f0f6ff</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ambiente cielo</span>
+                <input id="ambientSkyColor" type="color" class="color-input" value="#222233" />
+                <span class="value" id="ambientSkyColorVal">#222233</span>
+            </div>
+            <div class="control-row">
+                <span class="label">Ambiente suelo</span>
+                <input id="ambientGroundColor" type="color" class="color-input" value="#000000" />
+                <span class="value" id="ambientGroundColorVal">#000000</span>
+            </div>
         </div>
     </div>
 
@@ -619,6 +781,12 @@
             sound: document.getElementById('debugSound')
         };
 
+        const debugPanelElements = {
+            panel: document.getElementById('debugPanel'),
+            content: document.getElementById('debugContent'),
+            toggle: document.getElementById('debugToggleBtn')
+        };
+
         function refreshDebugPanel() {
             if (!debugElements.animation || !debugElements.category || !debugElements.sound) return;
             debugElements.animation.textContent = debugState.animation || '—';
@@ -662,6 +830,24 @@
 
         refreshDebugPanel();
 
+        function setupDebugPanelToggle() {
+            const { panel, content, toggle } = debugPanelElements;
+            if (!panel || !content || !toggle) return;
+
+            const updateLabel = () => {
+                const collapsed = panel.classList.contains('collapsed');
+                toggle.textContent = collapsed ? '⏵' : '⏷';
+                toggle.setAttribute('aria-expanded', (!collapsed).toString());
+            };
+
+            toggle.addEventListener('click', () => {
+                panel.classList.toggle('collapsed');
+                updateLabel();
+            });
+
+            updateLabel();
+        }
+
         const bagControlElements = {
             mass: document.getElementById('bagMass'),
             massValue: document.getElementById('bagMassVal'),
@@ -682,6 +868,65 @@
             rightAreaValue: document.getElementById('rightHandAreaVal')
         };
 
+        const lightingControlElements = {
+            key: {
+                intensity: document.getElementById('keyIntensity'),
+                intensityValue: document.getElementById('keyIntensityVal'),
+                color: document.getElementById('keyColor'),
+                colorValue: document.getElementById('keyColorVal')
+            },
+            fill: {
+                intensity: document.getElementById('fillIntensity'),
+                intensityValue: document.getElementById('fillIntensityVal'),
+                color: document.getElementById('fillColor'),
+                colorValue: document.getElementById('fillColorVal')
+            },
+            rim: {
+                intensity: document.getElementById('rimIntensity'),
+                intensityValue: document.getElementById('rimIntensityVal'),
+                color: document.getElementById('rimColor'),
+                colorValue: document.getElementById('rimColorVal')
+            },
+            ring: {
+                intensity: document.getElementById('ringIntensity'),
+                intensityValue: document.getElementById('ringIntensityVal'),
+                color: document.getElementById('ringColor'),
+                colorValue: document.getElementById('ringColorVal')
+            },
+            ringSpot: {
+                intensity: document.getElementById('ringSpotIntensity'),
+                intensityValue: document.getElementById('ringSpotIntensityVal'),
+                color: document.getElementById('ringSpotColor'),
+                colorValue: document.getElementById('ringSpotColorVal')
+            },
+            cinemaBack: {
+                intensity: document.getElementById('cinemaBackIntensity'),
+                intensityValue: document.getElementById('cinemaBackIntensityVal'),
+                color: document.getElementById('cinemaBackColor'),
+                colorValue: document.getElementById('cinemaBackColorVal')
+            },
+            door: {
+                intensity: document.getElementById('doorIntensity'),
+                intensityValue: document.getElementById('doorIntensityVal'),
+                color: document.getElementById('doorColor'),
+                colorValue: document.getElementById('doorColorVal')
+            },
+            fluorescent: {
+                intensity: document.getElementById('fluorescentIntensity'),
+                intensityValue: document.getElementById('fluorescentIntensityVal'),
+                color: document.getElementById('fluorescentColor'),
+                colorValue: document.getElementById('fluorescentColorVal')
+            },
+            ambient: {
+                intensity: document.getElementById('ambientIntensity'),
+                intensityValue: document.getElementById('ambientIntensityVal'),
+                skyColor: document.getElementById('ambientSkyColor'),
+                skyColorValue: document.getElementById('ambientSkyColorVal'),
+                groundColor: document.getElementById('ambientGroundColor'),
+                groundColorValue: document.getElementById('ambientGroundColorVal')
+            }
+        };
+
         function formatDampingValue(value) {
             return parseFloat(value).toFixed(2);
         }
@@ -698,6 +943,14 @@
 
         function formatAreaMultiplier(value) {
             return `${parseFloat(value).toFixed(2)}x`;
+        }
+
+        function numberToHexString(value) {
+            return `#${value.toString(16).padStart(6, '0')}`;
+        }
+
+        function parseColorInput(value) {
+            return parseInt(value.replace('#', ''), 16);
         }
 
         function syncPunchControlsFromConfig() {
@@ -755,6 +1008,179 @@
                 if (el) {
                     el.addEventListener('input', handler);
                 }
+            });
+        }
+
+        function updateRingFixtureMaterials(color) {
+            if (!ringReflectorFixtures.length) return;
+            ringReflectorFixtures.forEach(fixture => {
+                fixture.traverse((child) => {
+                    if (child.isMesh && child.material && child.material.isMeshBasicMaterial) {
+                        child.material.color.setHex(color);
+                    }
+                });
+            });
+        }
+
+        function applyLightingColorsToScene(preset) {
+            if (keyLight) keyLight.color.setHex(preset.keyColor);
+            if (fillLight) fillLight.color.setHex(preset.fillColor);
+            if (rimLight) rimLight.color.setHex(preset.rimColor);
+            if (ringLight) ringLight.color.setHex(preset.ringColor);
+            if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
+            if (ringSpotLights.length) ringSpotLights.forEach(s => s.color.setHex(preset.ringSpotColor));
+            updateRingFixtureMaterials(preset.ringSpotColor);
+
+            if (ambientLight) {
+                ambientLight.color.setHex(preset.ambientSky);
+                ambientLight.groundColor.setHex(preset.ambientGround);
+                ambientLight.intensity = ambientBaseIntensity;
+            }
+
+            if (doorLight) doorLight.color.setHex(preset.doorColor);
+            if (fluorescentLights.length) {
+                fluorescentLights.forEach(l => l.color.setHex(preset.fluorescentColor));
+            }
+
+            if (doorGodrayMesh && doorGodrayMesh.material.uniforms && doorGodrayMesh.material.uniforms.uColor) {
+                doorGodrayMesh.material.uniforms.uColor.value.setHex(preset.doorColor);
+            }
+            if (windowGodrayMesh && windowGodrayMesh.material.uniforms && windowGodrayMesh.material.uniforms.uColor) {
+                windowGodrayMesh.material.uniforms.uColor.value.setHex(preset.doorColor);
+            }
+        }
+
+        function syncLightingControlsFromState() {
+            const preset = lightingPresets[currentPreset];
+            if (!preset || !lightingControlElements.key || !lightingControlElements.key.intensity) return;
+
+            const intensityEntries = [
+                { key: 'key', value: lightBases.key, decimals: 2 },
+                { key: 'fill', value: lightBases.fill, decimals: 2 },
+                { key: 'rim', value: lightBases.rim, decimals: 2 },
+                { key: 'ring', value: lightBases.ring, decimals: 2 },
+                { key: 'ringSpot', value: lightBases.ringSpot, decimals: 2 },
+                { key: 'cinemaBack', value: lightBases.cinemaBack, decimals: 2 },
+                { key: 'door', value: lightBases.door, decimals: 2 },
+                { key: 'fluorescent', value: lightBases.fluorescent, decimals: 2 },
+                { key: 'ambient', value: ambientBaseIntensity, decimals: 2 }
+            ];
+
+            intensityEntries.forEach(({ key, value, decimals }) => {
+                const controls = lightingControlElements[key];
+                if (!controls || !controls.intensity) return;
+                controls.intensity.value = value;
+                if (controls.intensityValue) {
+                    controls.intensityValue.textContent = parseFloat(value).toFixed(decimals);
+                }
+            });
+
+            const colorEntries = [
+                { key: 'key', value: preset.keyColor },
+                { key: 'fill', value: preset.fillColor },
+                { key: 'rim', value: preset.rimColor },
+                { key: 'ring', value: preset.ringColor },
+                { key: 'ringSpot', value: preset.ringSpotColor },
+                { key: 'cinemaBack', value: preset.cinemaBackColor },
+                { key: 'door', value: preset.doorColor },
+                { key: 'fluorescent', value: preset.fluorescentColor }
+            ];
+
+            colorEntries.forEach(({ key, value }) => {
+                const controls = lightingControlElements[key];
+                if (!controls || !controls.color) return;
+                const hex = numberToHexString(value);
+                controls.color.value = hex;
+                if (controls.colorValue) controls.colorValue.textContent = hex;
+            });
+
+            if (lightingControlElements.ambient) {
+                const ambientControls = lightingControlElements.ambient;
+                const skyHex = numberToHexString(preset.ambientSky);
+                const groundHex = numberToHexString(preset.ambientGround);
+                if (ambientControls.skyColor) ambientControls.skyColor.value = skyHex;
+                if (ambientControls.skyColorValue) ambientControls.skyColorValue.textContent = skyHex;
+                if (ambientControls.groundColor) ambientControls.groundColor.value = groundHex;
+                if (ambientControls.groundColorValue) ambientControls.groundColorValue.textContent = groundHex;
+            }
+        }
+
+        function applyLightingControlsFromUI() {
+            const preset = lightingPresets[currentPreset];
+            if (!preset || !lightingControlElements.key || !lightingControlElements.key.intensity) return;
+
+            lightBases.key = parseFloat(lightingControlElements.key.intensity.value);
+            lightBases.fill = parseFloat(lightingControlElements.fill.intensity.value);
+            lightBases.rim = parseFloat(lightingControlElements.rim.intensity.value);
+            lightBases.ring = parseFloat(lightingControlElements.ring.intensity.value);
+            lightBases.ringSpot = parseFloat(lightingControlElements.ringSpot.intensity.value);
+            lightBases.cinemaBack = parseFloat(lightingControlElements.cinemaBack.intensity.value);
+            lightBases.door = parseFloat(lightingControlElements.door.intensity.value);
+            lightBases.fluorescent = parseFloat(lightingControlElements.fluorescent.intensity.value);
+            ambientBaseIntensity = parseFloat(lightingControlElements.ambient.intensity.value);
+
+            preset.keyBase = lightBases.key;
+            preset.fillBase = lightBases.fill;
+            preset.rimBase = lightBases.rim;
+            preset.ringBase = lightBases.ring;
+            preset.ringSpotBase = lightBases.ringSpot;
+            preset.cinemaBackBase = lightBases.cinemaBack;
+            preset.doorBase = lightBases.door;
+            preset.fluorescentBase = lightBases.fluorescent;
+            preset.ambientBase = ambientBaseIntensity;
+
+            preset.keyColor = parseColorInput(lightingControlElements.key.color.value);
+            preset.fillColor = parseColorInput(lightingControlElements.fill.color.value);
+            preset.rimColor = parseColorInput(lightingControlElements.rim.color.value);
+            preset.ringColor = parseColorInput(lightingControlElements.ring.color.value);
+            preset.ringSpotColor = parseColorInput(lightingControlElements.ringSpot.color.value);
+            preset.cinemaBackColor = parseColorInput(lightingControlElements.cinemaBack.color.value);
+            preset.doorColor = parseColorInput(lightingControlElements.door.color.value);
+            preset.fluorescentColor = parseColorInput(lightingControlElements.fluorescent.color.value);
+            if (lightingControlElements.ambient) {
+                const ambientControls = lightingControlElements.ambient;
+                if (ambientControls.skyColor) preset.ambientSky = parseColorInput(ambientControls.skyColor.value);
+                if (ambientControls.groundColor) preset.ambientGround = parseColorInput(ambientControls.groundColor.value);
+            }
+
+            applyLightingColorsToScene(preset);
+            syncLightingControlsFromState();
+        }
+
+        function setupLightingControls() {
+            if (!lightingControlElements.key || !lightingControlElements.key.intensity) return;
+
+            syncLightingControlsFromState();
+
+            const intensityInputs = [
+                lightingControlElements.key.intensity,
+                lightingControlElements.fill.intensity,
+                lightingControlElements.rim.intensity,
+                lightingControlElements.ring.intensity,
+                lightingControlElements.ringSpot.intensity,
+                lightingControlElements.cinemaBack.intensity,
+                lightingControlElements.door.intensity,
+                lightingControlElements.fluorescent.intensity,
+                lightingControlElements.ambient.intensity
+            ];
+
+            const colorInputs = [
+                lightingControlElements.key.color,
+                lightingControlElements.fill.color,
+                lightingControlElements.rim.color,
+                lightingControlElements.ring.color,
+                lightingControlElements.ringSpot.color,
+                lightingControlElements.cinemaBack.color,
+                lightingControlElements.door.color,
+                lightingControlElements.fluorescent.color,
+                lightingControlElements.ambient.skyColor,
+                lightingControlElements.ambient.groundColor
+            ];
+
+            const handler = () => applyLightingControlsFromUI();
+
+            [...intensityInputs, ...colorInputs].forEach(el => {
+                if (el) el.addEventListener('input', handler);
             });
         }
 
@@ -2285,8 +2711,10 @@
             noiseGen = new SimplexNoise();
 
             applyPresetBagSettings(currentPreset);
+            setupDebugPanelToggle();
             setupBagControls();
             setupPunchControls();
+            setupLightingControls();
 
             initScene();
             initRenderer(container);
@@ -3104,36 +3532,7 @@
             volumetricBaseHue = preset.volumetricHue;
             ambientBaseIntensity = preset.ambientBase;
 
-            if (keyLight) keyLight.color.setHex(preset.keyColor);
-            if (fillLight) fillLight.color.setHex(preset.fillColor);
-            if (rimLight) rimLight.color.setHex(preset.rimColor);
-            if (ringLight) ringLight.color.setHex(preset.ringColor);
-            if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
-            if (ringSpotLights.length) ringSpotLights.forEach(s => s.color.setHex(preset.ringSpotColor));
-            if (ringReflectorFixtures.length) {
-                ringReflectorFixtures.forEach(fixture => {
-                    fixture.traverse((child) => {
-                        if (child.isMesh && child.material && child.material.isMeshBasicMaterial) {
-                            child.material.color.setHex(preset.ringSpotColor);
-                        }
-                    });
-                });
-            }
-            if (ambientLight) {
-                ambientLight.color.setHex(preset.ambientSky);
-                ambientLight.groundColor.setHex(preset.ambientGround);
-                ambientLight.intensity = preset.ambientBase;
-            }
-            if (doorLight) doorLight.color.setHex(preset.doorColor);
-            if (fluorescentLights.length) {
-                fluorescentLights.forEach(l => l.color.setHex(preset.fluorescentColor));
-            }
-            if (doorGodrayMesh && doorGodrayMesh.material.uniforms && doorGodrayMesh.material.uniforms.uColor) {
-                doorGodrayMesh.material.uniforms.uColor.value.setHex(preset.doorColor);
-            }
-            if (windowGodrayMesh && windowGodrayMesh.material.uniforms && windowGodrayMesh.material.uniforms.uColor) {
-                windowGodrayMesh.material.uniforms.uColor.value.setHex(preset.doorColor);
-            }
+            applyLightingColorsToScene(preset);
             if (scene && scene.fog) {
                 scene.fog.color.setHex(preset.fogColor);
                 scene.fog.density = baseFogDensity;
@@ -3148,6 +3547,8 @@
                     s.intensity = preset.ringSpotBase;
                 });
             }
+
+            syncLightingControlsFromState();
         }
 
         function setupPresetButton() {
