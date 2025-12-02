@@ -230,6 +230,13 @@
             transform: translateY(1px);
         }
 
+        .debug-button {
+            width: 100%;
+            text-align: center;
+            font-size: 11px;
+            padding: 6px 10px;
+        }
+
         #debugPanel .debug-row {
             display: flex;
             justify-content: space-between;
@@ -416,6 +423,13 @@
             <button id="debugToggleBtn" aria-label="Alternar panel debug">⏷</button>
         </div>
         <div id="debugContent">
+            <div class="debug-row">
+                <button id="freeCamBtn" class="pill-button debug-button">🛰️ Cámara libre OFF</button>
+            </div>
+            <div class="debug-row">
+                <span class="label">Movimiento</span>
+                <span class="value">WASD + Shift</span>
+            </div>
             <div class="debug-row">
                 <span class="label">Animación</span>
                 <span class="value" id="debugAnimation">—</span>
@@ -1386,6 +1400,12 @@
         const povCameraOffset = new THREE.Vector3(0.0, 0.02, 0.18);
         const povTargetOffset = new THREE.Vector3(0.0, -0.01, 0.38);
         let thirdPersonActive = true;
+        let freeCameraActive = false;
+        const freeCamVelocity = new THREE.Vector3();
+        const freeCamForward = new THREE.Vector3();
+        const freeCamSide = new THREE.Vector3();
+        const freeCamMoveState = { forward: false, back: false, left: false, right: false, fast: false };
+        const freeCamSettings = { speed: 3.5, boost: 2.2 };
 
         // Reutilización de vectores para deformación
         const tempV = new THREE.Vector3();
@@ -3088,6 +3108,7 @@
             setupMuteButton();
             setupPresetButton();
             setupViewButton();
+            setupFreeCameraControls();
             setupUiFxEvents();
             setupMobileControls();
             setupAudioUnlockListeners();
@@ -4599,6 +4620,8 @@
         }
 
         function applyViewMode() {
+            if (freeCameraActive) return;
+
             if (!controls || !camera) return;
 
             if (thirdPersonActive) {
@@ -4612,6 +4635,93 @@
             controls.target.copy(targetBase);
         }
 
+        function updateFreeCameraButton() {
+            const freeCamBtn = document.getElementById('freeCamBtn');
+            if (!freeCamBtn) return;
+            freeCamBtn.textContent = freeCameraActive ? '🛰️ Cámara libre ON' : '🛰️ Cámara libre OFF';
+            freeCamBtn.classList.toggle('active', freeCameraActive);
+        }
+
+        function alignFreeCameraTarget() {
+            if (!controls || !camera) return;
+            tmpVecB.set(0, 0, -1).applyQuaternion(camera.quaternion);
+            controls.target.copy(camera.position).add(tmpVecB);
+        }
+
+        function setFreeCameraActive(active) {
+            if (!controls || !camera) return;
+            freeCameraActive = active;
+            controls.enablePan = active;
+            controls.enableZoom = active;
+            freeCamVelocity.set(0, 0, 0);
+            if (active) {
+                alignFreeCameraTarget();
+            } else {
+                applyViewMode();
+            }
+            updateFreeCameraButton();
+        }
+
+        function updateFreeCamera(dt) {
+            if (!freeCameraActive || !camera || !controls) return;
+
+            freeCamForward.copy(controls.target).sub(camera.position);
+            freeCamForward.y = 0;
+            if (freeCamForward.lengthSq() < 1e-6) {
+                freeCamForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+                freeCamForward.y = 0;
+            }
+            freeCamForward.normalize();
+
+            freeCamSide.copy(freeCamForward).cross(THREE.Object3D.DEFAULT_UP).normalize();
+
+            tmpVecB.set(0, 0, 0);
+            if (freeCamMoveState.forward) tmpVecB.add(freeCamForward);
+            if (freeCamMoveState.back) tmpVecB.sub(freeCamForward);
+            if (freeCamMoveState.left) tmpVecB.sub(freeCamSide);
+            if (freeCamMoveState.right) tmpVecB.add(freeCamSide);
+
+            if (tmpVecB.lengthSq() > 0) {
+                tmpVecB.normalize().multiplyScalar(freeCamSettings.speed * (freeCamMoveState.fast ? freeCamSettings.boost : 1) * dt);
+                freeCamVelocity.add(tmpVecB);
+            }
+
+            freeCamVelocity.multiplyScalar(0.9);
+
+            if (freeCamVelocity.lengthSq() > 0) {
+                camera.position.add(freeCamVelocity);
+                controls.target.add(freeCamVelocity);
+            }
+        }
+
+        function setupFreeCameraControls() {
+            const freeCamBtn = document.getElementById('freeCamBtn');
+            if (freeCamBtn) {
+                updateFreeCameraButton();
+                freeCamBtn.addEventListener('click', () => setFreeCameraActive(!freeCameraActive));
+            }
+
+            const handleKey = (event, isDown) => {
+                if (['INPUT', 'TEXTAREA'].includes(event.target?.tagName)) return;
+                switch (event.code) {
+                    case 'KeyW': freeCamMoveState.forward = isDown; break;
+                    case 'KeyS': freeCamMoveState.back = isDown; break;
+                    case 'KeyA': freeCamMoveState.left = isDown; break;
+                    case 'KeyD': freeCamMoveState.right = isDown; break;
+                    case 'ShiftLeft':
+                    case 'ShiftRight':
+                        freeCamMoveState.fast = isDown;
+                        break;
+                    default:
+                        return;
+                }
+                if (freeCameraActive) event.preventDefault();
+            };
+
+            window.addEventListener('keydown', (e) => handleKey(e, true));
+            window.addEventListener('keyup', (e) => handleKey(e, false));
+        }
+
         function setupViewButton() {
             const viewBtn = document.getElementById('viewBtn');
             if (!viewBtn) return;
@@ -4619,6 +4729,7 @@
             applyViewMode();
 
             viewBtn.addEventListener('click', () => {
+                if (freeCameraActive) setFreeCameraActive(false);
                 thirdPersonActive = !thirdPersonActive;
                 applyViewMode();
                 viewBtn.textContent = thirdPersonActive ? '👁️ 3ra Persona' : '🎯 POV';
@@ -4829,37 +4940,46 @@
                 bokehPass.materialBokeh.uniforms.focus.value = d;
             }
 
-            const headAnchor = getHeadBone();
-            const usingHeadAnchor = !thirdPersonActive && headAnchor;
+            if (!freeCameraActive) {
+                const headAnchor = getHeadBone();
+                const usingHeadAnchor = !thirdPersonActive && headAnchor;
 
-            if (usingHeadAnchor) {
-                headAnchor.getWorldPosition(tmpVecA);
-                headAnchor.getWorldQuaternion(tmpQuatA);
+                if (usingHeadAnchor) {
+                    headAnchor.getWorldPosition(tmpVecA);
+                    headAnchor.getWorldQuaternion(tmpQuatA);
 
-                targetBase.copy(tmpVecA).add(tmpDir.copy(povTargetOffset).applyQuaternion(tmpQuatA));
-                camera.position.copy(tmpVecA).add(tmpVecB.copy(povCameraOffset).applyQuaternion(tmpQuatA));
-            } else if (!thirdPersonActive) {
-                camera.position.copy(defaultCameraPosition);
-                targetBase.copy(baseTarget);
-            }
+                    targetBase.copy(tmpVecA).add(tmpDir.copy(povTargetOffset).applyQuaternion(tmpQuatA));
+                    camera.position.copy(tmpVecA).add(tmpVecB.copy(povCameraOffset).applyQuaternion(tmpQuatA));
+                } else if (!thirdPersonActive) {
+                    camera.position.copy(defaultCameraPosition);
+                    targetBase.copy(baseTarget);
+                }
 
-            const bobEnabled = thirdPersonActive || !usingHeadAnchor;
-            if (bobEnabled) {
-                const bobAmount = 0.03;
-                const swayAmount = 0.04;
-                const bobY = Math.sin(elapsed * 1.8) * bobAmount;
-                const swayX = Math.sin(elapsed * 1.2) * swayAmount;
-                tmpVecB.set(
-                    targetBase.x + swayX,
-                    targetBase.y + bobY,
-                    targetBase.z
-                );
-                controls.target.copy(tmpVecB);
+                const bobEnabled = thirdPersonActive || !usingHeadAnchor;
+                if (bobEnabled) {
+                    const bobAmount = 0.03;
+                    const swayAmount = 0.04;
+                    const bobY = Math.sin(elapsed * 1.8) * bobAmount;
+                    const swayX = Math.sin(elapsed * 1.2) * swayAmount;
+                    tmpVecB.set(
+                        targetBase.x + swayX,
+                        targetBase.y + bobY,
+                        targetBase.z
+                    );
+                    controls.target.copy(tmpVecB);
+                } else {
+                    controls.target.copy(targetBase);
+                }
             } else {
-                controls.target.copy(targetBase);
+                alignFreeCameraTarget();
             }
 
             controls.update();
+
+            if (freeCameraActive) {
+                updateFreeCamera(visualStep);
+                alignFreeCameraTarget();
+            }
 
             if (shakeTime > 0) {
                 shakeTime -= dtVis;
