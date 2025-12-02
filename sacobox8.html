@@ -712,7 +712,24 @@
         const RING_POSITION = new THREE.Vector3(20.1, 0, 2.0);
         const RING_CEILING_HEIGHT = 5.6;
 
+        const POSTER_TEXTURE_PATHS = [
+            'texturas/poster1.png',
+            'texturas/poster2.png',
+            'texturas/Tyson.jpeg',
+            'texturas/MMA.jpeg',
+            'texturas/BodyBuilder.jpeg',
+            'texturas/Boxing_Gloves_Leather_Tan.jpg',
+            'texturas/Boxing_Gloves_BUMP.jpg',
+            'texturas/Training Dummy_albedo.jpg',
+            'texturas/Training Dummy_albedo.jpeg',
+            'texturas/Training Dummy_AO.jpg',
+            'texturas/Training Dummy_normal.png',
+            'texturas/internal_ground_ao_texture.jpeg'
+        ];
+        const POSTER_VARIATIONS = 13;
+
         const gltfLoader = new GLTFLoader();
+        const posterTextureLoader = new THREE.TextureLoader();
 
         // --- VARIABLES GLOBALES ESCENA ---
         let scene, camera, renderer, controls, composer;
@@ -1690,6 +1707,60 @@
                 [arr[i], arr[j]] = [arr[j], arr[i]];
             }
             return arr;
+        }
+
+        function loadPosterTexture(url) {
+            return new Promise((resolve) => {
+                const texture = posterTextureLoader.load(
+                    encodeURI(url),
+                    () => resolve(texture),
+                    undefined,
+                    () => resolve(null)
+                );
+                texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+                texture.colorSpace = THREE.SRGBColorSpace;
+            });
+        }
+
+        function clonePosterTexture(texture) {
+            const clone = texture.clone();
+            clone.wrapS = texture.wrapS;
+            clone.wrapT = texture.wrapT;
+            clone.colorSpace = texture.colorSpace;
+            clone.needsUpdate = true;
+            return clone;
+        }
+
+        async function loadPosterPool(fallbackPoster, coverPoster) {
+            const textures = await Promise.all(POSTER_TEXTURE_PATHS.map((path) => loadPosterTexture(path)));
+            const available = textures.filter(Boolean);
+
+            if (!available.length) {
+                const minimalPool = [fallbackPoster, fallbackPoster, fallbackPoster];
+                if (coverPoster) minimalPool.push(coverPoster);
+                return minimalPool;
+            }
+
+            const posterQuota = Math.max(POSTER_VARIATIONS - 1, 1);
+            const pool = available.slice(0, posterQuota);
+            while (pool.length < posterQuota) {
+                const source = available[pool.length % available.length];
+                pool.push(clonePosterTexture(source));
+            }
+
+            pool.push(coverPoster || fallbackPoster);
+            return pool.slice(0, POSTER_VARIATIONS);
+        }
+
+        function selectPosterSet(posterPool, fallbackPoster) {
+            const pool = posterPool && posterPool.length ? shuffleArray([...posterPool]) : [];
+            if (!pool.length) return [fallbackPoster, fallbackPoster, fallbackPoster];
+
+            while (pool.length < 3) {
+                pool.push(pool[pool.length % pool.length]);
+            }
+
+            return pool.slice(0, 3);
         }
 
         const BIND = {};
@@ -3075,10 +3146,12 @@
         // ============================
         //      ESCENA GYM + SACO
         // ============================
-        init();
-        animate();
+        (async function boot() {
+            await init();
+            animate();
+        })();
 
-        function init() {
+        async function init() {
             const container = document.getElementById('canvas-container');
             noiseGen = new SimplexNoise();
 
@@ -3094,10 +3167,10 @@
             initCamera();
             initControls();
             initPostProcessing();
-            
-            initWorld(); 
 
-            const textures = generateProceduralTextures();
+            initWorld();
+
+            const textures = await buildGymTextures();
             generateEnvMap();
 
             initLights();
@@ -3200,6 +3273,12 @@
             controls.enablePan = false;
         }
 
+        async function buildGymTextures() {
+            const textures = generateProceduralTextures();
+            textures.posterPool = await loadPosterPool(textures.posterPlaceholder, textures.posterCover);
+            return textures;
+        }
+
         // --- TEXTURAS PROCEDURALES ---
         function generateProceduralTextures() {
             const width = 1024;
@@ -3210,6 +3289,7 @@
                 drawFn(ctx, width);
                 const t = new THREE.CanvasTexture(cvs);
                 t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                t.colorSpace = THREE.SRGBColorSpace;
                 return t;
             };
 
@@ -3316,7 +3396,7 @@
                 const img = ctx.createImageData(w, w);
                 for(let i=0; i<img.data.length; i+=4) {
                     const x = (i/4)%w, y=Math.floor((i/4)/w);
-                    const n = noiseGen.noise2D(x*0.01, y*0.05); 
+                    const n = noiseGen.noise2D(x*0.01, y*0.05);
                     const val = 40 + n*10;
                     img.data[i]=val; img.data[i+1]=val; img.data[i+2]=val+2; img.data[i+3]=255;
                 }
@@ -3324,19 +3404,80 @@
             });
             wallMap.repeat.set(2,1);
 
-            const posterMap = createTex((ctx, w) => {
-                ctx.fillStyle = '#eaddcf'; ctx.fillRect(0,0,w,w);
-                ctx.font = 'bold 120px sans-serif';
-                ctx.fillStyle = '#aa2222'; ctx.textAlign = 'center';
-                ctx.fillText("FIGHT", w/2, w/3);
-                ctx.fillStyle = '#111'; ctx.font = '80px sans-serif';
-                ctx.fillText("CLUB", w/2, w/2);
-                ctx.globalCompositeOperation = 'destination-out';
-                for(let i=0; i<20; i++) {
+            const posterPlaceholder = createTex((ctx, w) => {
+                const bg = ctx.createLinearGradient(0, 0, w, w);
+                bg.addColorStop(0, '#0f172a');
+                bg.addColorStop(1, '#1e293b');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0,0,w,w);
+
+                const accent = ctx.createLinearGradient(0, 0, w, 0);
+                accent.addColorStop(0, 'rgba(255, 99, 71, 0.65)');
+                accent.addColorStop(1, 'rgba(255, 182, 73, 0.8)');
+                ctx.fillStyle = accent;
+                ctx.fillRect(w*0.18, w*0.2, w*0.64, w*0.08);
+                ctx.fillRect(w*0.18, w*0.7, w*0.64, w*0.08);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 140px Inter, sans-serif';
+                ctx.fillText('BOX', w/2, w*0.45);
+                ctx.font = '900 120px Inter, sans-serif';
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillText('GYM', w/2, w*0.6);
+
+                ctx.globalCompositeOperation = 'soft-light';
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+                ctx.lineWidth = 6;
+                for(let i=0; i<18; i++) {
                     const x = Math.random()*w; const y = Math.random()*w;
-                    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.random()*100-50, y+Math.random()*100); ctx.stroke();
+                    const r = w*0.02 + Math.random()*w*0.03;
+                    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
                 }
+                ctx.globalCompositeOperation = 'source-over';
             });
+            posterPlaceholder.wrapS = posterPlaceholder.wrapT = THREE.ClampToEdgeWrapping;
+
+            const posterCover = createTex((ctx, w) => {
+                const bg = ctx.createRadialGradient(w*0.3, w*0.35, w*0.1, w*0.5, w*0.5, w*0.7);
+                bg.addColorStop(0, '#0b1222');
+                bg.addColorStop(1, '#0f172a');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0,0,w,w);
+
+                const streaks = ctx.createLinearGradient(0, 0, w, w);
+                streaks.addColorStop(0, 'rgba(80,160,255,0.5)');
+                streaks.addColorStop(1, 'rgba(255,120,80,0.4)');
+                ctx.fillStyle = streaks;
+                ctx.fillRect(w*0.08, w*0.15, w*0.84, w*0.1);
+                ctx.fillRect(w*0.08, w*0.72, w*0.84, w*0.06);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'center';
+                ctx.font = '900 150px Inter, sans-serif';
+                ctx.fillText('BOX', w/2, w*0.44);
+                ctx.fillStyle = '#f97316';
+                ctx.font = '900 120px Inter, sans-serif';
+                ctx.fillText('FIGHT', w/2, w*0.6);
+
+                ctx.font = '600 60px Inter, sans-serif';
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillText('EDICIÓN ESPECIAL', w/2, w*0.7);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 10;
+                ctx.strokeRect(w*0.06, w*0.08, w*0.88, w*0.84);
+
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                for(let i=0; i<14; i++) {
+                    const x = Math.random()*w; const y = Math.random()*w;
+                    const r = w*0.015 + Math.random()*w*0.025;
+                    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+                }
+                ctx.globalCompositeOperation = 'source-over';
+            });
+            posterCover.wrapS = posterCover.wrapT = THREE.ClampToEdgeWrapping;
 
             const windowMap = createTex((ctx, w) => {
                 const grad = ctx.createLinearGradient(0, 0, 0, w);
@@ -3357,13 +3498,14 @@
                 ctx.stroke();
             });
 
-            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap, window: windowMap };
+            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, posterPlaceholder, posterCover, window: windowMap };
         }
 
         // --- ESCENA Y PROPS ---
         function createEnvironment(tex) {
             const staticMat = new CANNON.Material('floor-wall');
             const ceilingMat = new CANNON.Material('ceiling');
+            const [featurePoster, accentPoster, sidePoster] = selectPosterSet(tex.posterPool, tex.posterPlaceholder);
             const wallMat = new THREE.MeshStandardMaterial({
                 map: tex.wall, roughness: 0.9, color: 0x444444
             });
@@ -3533,7 +3675,7 @@
             wT.position.set(-1.4, 4, -5); wT.receiveShadow=true; scene.add(wT);
 
             const posterMat = new THREE.MeshStandardMaterial({
-                map: tex.poster,
+                map: featurePoster,
                 roughness: 0.82,
                 metalness: 0.05,
                 side: THREE.DoubleSide
@@ -3544,7 +3686,14 @@
             posterA.rotation.y = -Math.PI / 2;
             scene.add(posterA);
 
-            const posterB = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), posterMat);
+            const posterBMat = new THREE.MeshStandardMaterial({
+                map: accentPoster,
+                roughness: 0.82,
+                metalness: 0.05,
+                side: THREE.DoubleSide
+            });
+
+            const posterB = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), posterBMat);
             posterB.position.set(featureWallX - 0.15, 1.6, 1.2);
             posterB.rotation.y = -Math.PI / 2;
             scene.add(posterB);
@@ -3716,7 +3865,7 @@
             scene.add(rightWall);
 
             const posterGeo = new THREE.PlaneGeometry(1.2, 1.8);
-            const sidePosterMat = new THREE.MeshStandardMaterial({ map: tex.poster, roughness: 0.8 });
+            const sidePosterMat = new THREE.MeshStandardMaterial({ map: sidePoster, roughness: 0.8 });
             const p1 = new THREE.Mesh(posterGeo, sidePosterMat);
             p1.position.set(-5.95, 2.5, 1); p1.rotation.y = Math.PI/2; p1.rotation.z = -0.05;
             scene.add(p1);
