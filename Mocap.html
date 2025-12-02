@@ -393,6 +393,7 @@
         name: 'BodyBuilder (GLB)',
         url: 'modelos/BodyBuilder.glb',
         textures: {
+          __overrideExisting: false,
           map: { url: 'texturas/BodyBuilder.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
         },
       },
@@ -401,6 +402,7 @@
         name: 'MMA (GLB)',
         url: 'modelos/MMA.glb',
         textures: {
+          __overrideExisting: false,
           map: { url: 'texturas/MMA.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
         },
       },
@@ -772,9 +774,11 @@
 
     function buildTextureSet(textureConfig = {}) {
       disposeCurrentTextures();
-      const prepared = {};
+      const overrideExisting = textureConfig.__overrideExisting ?? true;
+      const prepared = { __overrideExisting: overrideExisting };
+
       Object.entries(textureConfig).forEach(([slot, conf]) => {
-        if (!conf) return;
+        if (!conf || slot.startsWith('__')) return;
         const opts = typeof conf === 'string' ? { url: conf } : conf;
         const tex = textureLoader.load(opts.url);
         tex.colorSpace = opts.colorSpace ?? (slot === 'map' ? THREE.SRGBColorSpace : NON_COLOR_SPACE);
@@ -787,13 +791,15 @@
 
     function applyTexturesToMaterial(material, textureSet) {
       if (!material || !textureSet) return;
+      const { __overrideExisting: overrideExisting = true, ...maps } = textureSet;
       const apply = (mat) => {
         if (!mat) return;
-        if (textureSet.map) mat.map = textureSet.map;
-        if (textureSet.aoMap) mat.aoMap = textureSet.aoMap;
-        if (textureSet.metalnessMap) mat.metalnessMap = textureSet.metalnessMap;
-        if (textureSet.roughnessMap) mat.roughnessMap = textureSet.roughnessMap;
-        if (textureSet.normalMap) mat.normalMap = textureSet.normalMap;
+        Object.entries(maps).forEach(([slot, tex]) => {
+          if (!tex) return;
+          if (overrideExisting || !mat[slot]) {
+            mat[slot] = tex;
+          }
+        });
         mat.needsUpdate = true;
       };
 
