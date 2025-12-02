@@ -281,7 +281,7 @@
   <header>
     <div>
       <h1>MediaPipe + Three.js</h1>
-      <p>Tu cuerpo → esqueleto MediaPipe → Tyson 3D (retarget completo)</p>
+      <p>Tu cuerpo → esqueleto MediaPipe → Personaje 3D (retarget completo)</p>
     </div>
     <div class="badge">
       <span class="badge-dot"></span>
@@ -336,8 +336,12 @@
         <div class="control-bar">
           <div class="control-group">
             <span class="hint">
-              Dejá <code>modelos/Tyson.fbx</code>, <code>texturas/gltf_embedded_0.jpeg</code> y tus .fbx de animación dentro de <code>animaciones/</code> (ahora organizadas en <code>ataque</code>, <code>descanso</code>, <code>movimiento</code> y <code>daño</code>).
+              Elegí el modelo del selector (Tyson, BodyBuilder, MMA o Training Dummy con sus texturas) y dejá tus .fbx de animación dentro de <code>animaciones/</code> (ahora organizadas en <code>ataque</code>, <code>descanso</code>, <code>movimiento</code> y <code>daño</code>).
             </span>
+          </div>
+          <div class="control-group">
+            <label class="hint" for="model_select">Modelo 3D:</label>
+            <select id="model_select" class="select"></select>
           </div>
           <div class="control-group">
             <label class="hint" for="animation_select">Animación FBX:</label>
@@ -375,8 +379,45 @@
     // ==============================
     // 1. Constantes / utils
     // ==============================
-    const MODEL_URL = 'modelos/Tyson.fbx';
-    const TEXTURE_URL = 'texturas/gltf_embedded_0.jpeg';
+    const MODEL_OPTIONS = [
+      {
+        id: 'tyson',
+        name: 'Tyson (FBX)',
+        url: 'modelos/Tyson.fbx',
+        textures: {
+          map: { url: 'texturas/gltf_embedded_0.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
+        },
+      },
+      {
+        id: 'bodybuilder',
+        name: 'BodyBuilder (GLB)',
+        url: 'modelos/BodyBuilder.glb',
+        textures: {
+          map: { url: 'texturas/BodyBuilder.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
+        },
+      },
+      {
+        id: 'mma',
+        name: 'MMA (GLB)',
+        url: 'modelos/MMA.glb',
+        textures: {
+          map: { url: 'texturas/MMA.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
+        },
+      },
+      {
+        id: 'training-dummy',
+        name: 'Training Dummy (FBX)',
+        url: 'modelos/Training Dummy.fbx',
+        textures: {
+          map: { url: 'texturas/Training Dummy_albedo.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
+          aoMap: { url: 'texturas/Training Dummy_AO.jpeg', flipY: false, colorSpace: THREE.NoColorSpace },
+          metalnessMap: { url: 'texturas/Training Dummy_metallic.jpeg', flipY: false, colorSpace: THREE.NoColorSpace },
+          roughnessMap: { url: 'texturas/Training Dummy_roughness.jpeg', flipY: false, colorSpace: THREE.NoColorSpace },
+          normalMap: { url: 'texturas/Training Dummy_normal.png', flipY: false, colorSpace: THREE.NoColorSpace },
+        },
+      },
+    ];
+    const DEFAULT_MODEL_ID = MODEL_OPTIONS[0].id;
     const DEFAULT_ANIMATIONS = [
       { name: 'Idle to Fight (preset)', url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: 'once' },
       { name: 'Arm Stretching', url: 'animaciones/descanso/Arm Stretching.fbx', loop: 'repeat' },
@@ -473,6 +514,7 @@
     const statusLabel = document.getElementById('status_label');
 
     const animationSelect = document.getElementById('animation_select');
+    const modelSelect = document.getElementById('model_select');
     const animFileInput = document.getElementById('anim_file_input');
 
     let cameraMP = null;
@@ -685,17 +727,13 @@
     let mixer = null;
     let actions = {};
     let activeAction = null;
-    let pendingClips = [];
     let skeleton = null;
     const bonesByName = {};
     let modelRoot = null;
-
-    // Carga de textura para el modelo Tyson
+    let currentTextures = [];
     const textureLoader = new THREE.TextureLoader();
-    const tysonTexture = textureLoader.load(TEXTURE_URL);
-    tysonTexture.colorSpace = THREE.SRGBColorSpace;
-    // Si la textura se ve invertida verticalmente, probá comentar la siguiente línea:
-    tysonTexture.flipY = false;
+    const animationLibrary = [];
+    const NON_COLOR_SPACE = THREE.NoColorSpace || THREE.LinearSRGBColorSpace || THREE.SRGBColorSpace;
 
     function getLoaderFor(url) {
       const lower = url.toLowerCase();
@@ -713,10 +751,84 @@
       animationSelect.appendChild(opt);
     }
 
-    function loadModel(url) {
-      const { loader, type } = getLoaderFor(url);
+    function resetAnimationOptions() {
+      if (!animationSelect) return;
+      animationSelect.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = 'none';
+      opt.textContent = 'Ninguna (usar mocap en vivo)';
+      animationSelect.appendChild(opt);
+    }
+
+    function clearBones() {
+      skeleton = null;
+      Object.keys(bonesByName).forEach((key) => delete bonesByName[key]);
+    }
+
+    function disposeCurrentTextures() {
+      currentTextures.forEach((tex) => tex.dispose());
+      currentTextures = [];
+    }
+
+    function buildTextureSet(textureConfig = {}) {
+      disposeCurrentTextures();
+      const prepared = {};
+      Object.entries(textureConfig).forEach(([slot, conf]) => {
+        if (!conf) return;
+        const opts = typeof conf === 'string' ? { url: conf } : conf;
+        const tex = textureLoader.load(opts.url);
+        tex.colorSpace = opts.colorSpace ?? (slot === 'map' ? THREE.SRGBColorSpace : NON_COLOR_SPACE);
+        tex.flipY = opts.flipY ?? false;
+        prepared[slot] = tex;
+        currentTextures.push(tex);
+      });
+      return prepared;
+    }
+
+    function applyTexturesToMaterial(material, textureSet) {
+      if (!material || !textureSet) return;
+      const apply = (mat) => {
+        if (!mat) return;
+        if (textureSet.map) mat.map = textureSet.map;
+        if (textureSet.aoMap) mat.aoMap = textureSet.aoMap;
+        if (textureSet.metalnessMap) mat.metalnessMap = textureSet.metalnessMap;
+        if (textureSet.roughnessMap) mat.roughnessMap = textureSet.roughnessMap;
+        if (textureSet.normalMap) mat.normalMap = textureSet.normalMap;
+        mat.needsUpdate = true;
+      };
+
+      if (Array.isArray(material)) material.forEach(apply);
+      else apply(material);
+    }
+
+    function loadModel(config) {
+      if (!config) return;
+      const { loader, type } = getLoaderFor(config.url);
+      const textureSet = buildTextureSet(config.textures || {});
+
+      stopAllAnimations();
+      clearBones();
+      if (modelRoot) {
+        scene.remove(modelRoot);
+        modelRoot.traverse((child) => {
+          if (child.isMesh || child.isSkinnedMesh) {
+            if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose && m.dispose());
+            else if (child.material && child.material.dispose) child.material.dispose();
+            if (child.geometry && child.geometry.dispose) child.geometry.dispose();
+          }
+        });
+      }
+      modelRoot = null;
+      mixer = null;
+      actions = {};
+      activeAction = null;
+      resetAnimationOptions();
+      retargetEnabled = true;
+
+      setStatus(false, `Cargando ${config.name}…`);
+
       loader.load(
-        url,
+        config.url,
         (asset) => {
           let root = (type === 'gltf') ? asset.scene : asset;
           modelRoot = root;
@@ -725,19 +837,7 @@
             if (obj.isMesh) {
               obj.castShadow = true;
               obj.frustumCulled = false;
-
-              // Aplicar la textura al material del mesh
-              if (tysonTexture && obj.material) {
-                if (Array.isArray(obj.material)) {
-                  obj.material.forEach((m) => {
-                    m.map = tysonTexture;
-                    m.needsUpdate = true;
-                  });
-                } else {
-                  obj.material.map = tysonTexture;
-                  obj.material.needsUpdate = true;
-                }
-              }
+              applyTexturesToMaterial(obj.material, textureSet);
             }
             if (obj.isSkinnedMesh) skeleton = obj.skeleton;
             if (obj.isBone) {
@@ -768,32 +868,21 @@
           scene.updateMatrixWorld(true);
           captureBindInfo();
 
-          // Crear mixer y enganchar cualquier animación que venga dentro del modelo + las pendientes.
           mixer = new THREE.AnimationMixer(modelRoot);
 
-          if (asset.animations && asset.animations.length) {
-            asset.animations.forEach((clip, idx) => {
-              const name = clip.name || `Clip_modelo_${idx}`;
-              const action = mixer.clipAction(clip);
-              action.loop = THREE.LoopRepeat;
-              actions[name] = action;
-              addAnimationOption(name);
-            });
-          }
+          const animationsFromModel = (asset.animations && asset.animations.length) ? asset.animations : [];
+          animationsFromModel.forEach((clip, idx) => {
+            const name = clip.name || `Clip_modelo_${idx}`;
+            const entry = { clip, name, loop: 'repeat' };
+            const existingIndex = animationLibrary.findIndex((anim) => anim.name === name);
+            if (existingIndex >= 0) animationLibrary[existingIndex] = entry;
+            else animationLibrary.push(entry);
+          });
 
-          if (pendingClips.length) {
-            pendingClips.forEach(({ clip, name, loop }) => {
-              const action = mixer.clipAction(clip);
-              const shouldLoop = loop !== 'once';
-              action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
-              action.clampWhenFinished = !shouldLoop;
-              actions[name] = action;
-              addAnimationOption(name);
-            });
-            pendingClips = [];
-          }
+          rebuildAnimationActions();
 
-          console.log('Modelo cargado (fbx). Huesos detectados:', Object.keys(bonesByName));
+          setStatus(capturing, capturing ? 'Capturando pose…' : 'Modelo listo. Mocap en vivo');
+          console.log(`Modelo cargado (${config.name}). Huesos detectados:`, Object.keys(bonesByName));
         },
         (xhr) => {
           if (xhr.total) {
@@ -810,6 +899,40 @@
       );
     }
 
+    function attachAnimationEntry(entry) {
+      if (!mixer || !entry?.clip) return;
+      const action = mixer.clipAction(entry.clip);
+      const shouldLoop = entry.loop !== 'once';
+      action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
+      action.clampWhenFinished = !shouldLoop;
+      actions[entry.name] = action;
+      addAnimationOption(entry.name);
+    }
+
+    function rebuildAnimationActions() {
+      actions = {};
+      activeAction = null;
+      resetAnimationOptions();
+      animationLibrary.forEach((entry) => attachAnimationEntry(entry));
+      if (animationSelect) animationSelect.value = 'none';
+    }
+
+    function getModelConfigById(id) {
+      return MODEL_OPTIONS.find((opt) => opt.id === id) || MODEL_OPTIONS[0];
+    }
+
+    function populateModelSelect() {
+      if (!modelSelect) return;
+      modelSelect.innerHTML = '';
+      MODEL_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.name;
+        modelSelect.appendChild(option);
+      });
+      modelSelect.value = DEFAULT_MODEL_ID;
+    }
+
     function loadAnimationFBXFromURL(url, displayName, loopMode = 'repeat') {
       const loader = new FBXLoader();
       loader.load(
@@ -822,23 +945,12 @@
           }
 
           clips.forEach((clip, idx) => {
-            const name =
-              displayName ||
-              clip.name ||
-              `Clip_${Object.keys(actions).length + idx}`;
-
-            if (!modelRoot || !mixer) {
-              // Guardamos la animación para engancharla cuando el modelo esté listo.
-              pendingClips.push({ clip, name, loop: loopMode });
-            } else {
-              const action = mixer.clipAction(clip);
-              const shouldLoop = loopMode !== 'once';
-              action.loop = shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce;
-              action.clampWhenFinished = !shouldLoop;
-              action.enabled = true;
-              actions[name] = action;
-              addAnimationOption(name);
-            }
+            const name = displayName || clip.name || `Clip_${idx}`;
+            const entry = { clip, name, loop: loopMode };
+            const existingIndex = animationLibrary.findIndex((anim) => anim.name === name);
+            if (existingIndex >= 0) animationLibrary[existingIndex] = entry;
+            else animationLibrary.push(entry);
+            attachAnimationEntry(entry);
           });
           setStatus(false, 'Animación cargada: ' + (displayName || url));
         },
@@ -870,7 +982,9 @@
       activeAction = null;
     }
 
-    loadModel(MODEL_URL);
+    populateModelSelect();
+    const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
+    loadModel(initialModel);
 
     // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
     DEFAULT_ANIMATIONS.forEach((entry) => {
@@ -903,6 +1017,13 @@
           playAnimation(selected);
           setStatus(false, 'Reproduciendo animación: ' + selected);
         }
+      });
+    }
+
+    if (modelSelect) {
+      modelSelect.addEventListener('change', () => {
+        const config = getModelConfigById(modelSelect.value);
+        loadModel(config);
       });
     }
 
