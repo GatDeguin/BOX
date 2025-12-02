@@ -480,6 +480,7 @@
         let keyLight, fillLight, ringLight, rimLight, ambientLight;
         let cinemaBackLight;
         let ringSpotLights = [];
+        let ringReflectorFixtures = [];
         let doorLight;
         let fluorescentLights = [];
         let fluorescentGlowCards = [];
@@ -493,7 +494,7 @@
             fill: 0.8,
             rim: 1.1,
             ring: 1.5,
-            ringSpot: 2.4,
+            ringSpot: 3.3,
             cinemaBack: 0.22,
             door: 18.5,
             fluorescent: 7.5
@@ -510,7 +511,7 @@
                 ringColor: 0xffdd88,
                 ringBase: 1.65,
                 ringSpotColor: 0xffe2b0,
-                ringSpotBase: 2.6,
+                ringSpotBase: 3.6,
                 cinemaBackColor: 0x1a2846,
                 cinemaBackBase: 0.22,
                 doorColor: 0x4488ff,
@@ -540,7 +541,7 @@
                 ringColor: 0xffe1aa,
                 ringBase: 1.35,
                 ringSpotColor: 0xffdcb0,
-                ringSpotBase: 2.3,
+                ringSpotBase: 3.0,
                 cinemaBackColor: 0x2c1b10,
                 cinemaBackBase: 0.18,
                 doorColor: 0xffa85a,
@@ -2909,6 +2910,40 @@
             clockHandHour.rotation.z = -hours * (Math.PI / 6);
         }
 
+        function createRingReflectorFixture(position, target) {
+            const fixture = new THREE.Group();
+
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x1e1e1e, metalness: 0.82, roughness: 0.32 });
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x2d2d2d, metalness: 0.88, roughness: 0.24 });
+
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.9, 14), poleMat);
+            pole.position.y = -0.45;
+            fixture.add(pole);
+
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.45, 22, 1, true), headMat);
+            head.rotation.x = Math.PI / 2;
+            head.position.y = 0.05;
+            fixture.add(head);
+
+            const glow = new THREE.Mesh(
+                new THREE.CircleGeometry(0.16, 18),
+                new THREE.MeshBasicMaterial({
+                    color: lightingPresets[currentPreset].ringSpotColor,
+                    transparent: true,
+                    opacity: 1.0,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                })
+            );
+            glow.position.set(0, 0.15, 0.18);
+            head.add(glow);
+
+            fixture.position.copy(position);
+            fixture.lookAt(target);
+
+            return fixture;
+        }
+
         function initLights() {
             ambientLight = new THREE.HemisphereLight(0x222233, 0x000000, 0.52);
             scene.add(ambientLight);
@@ -2949,6 +2984,14 @@
                 {
                     pos: RING_POSITION.clone().add(new THREE.Vector3(3.8, 4.4, 2.2)),
                     target: RING_POSITION.clone().add(new THREE.Vector3(0, 1.2, 0))
+                },
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(-3.4, 4.4, -2.5)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(0, 1.1, 0))
+                },
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(3.4, 4.4, -2.5)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(0, 1.1, 0))
                 }
             ];
 
@@ -2964,6 +3007,10 @@
                 scene.add(spot);
                 scene.add(spot.target);
                 ringSpotLights.push(spot);
+
+                const fixture = createRingReflectorFixture(cfg.pos, cfg.target);
+                ringReflectorFixtures.push(fixture);
+                scene.add(fixture);
             });
 
             cinemaBackLight = new THREE.SpotLight(lightingPresets[currentPreset].cinemaBackColor, lightBases.cinemaBack, 12, Math.PI / 3.2, 0.9, 1);
@@ -3059,6 +3106,15 @@
             if (ringLight) ringLight.color.setHex(preset.ringColor);
             if (cinemaBackLight) cinemaBackLight.color.setHex(preset.cinemaBackColor);
             if (ringSpotLights.length) ringSpotLights.forEach(s => s.color.setHex(preset.ringSpotColor));
+            if (ringReflectorFixtures.length) {
+                ringReflectorFixtures.forEach(fixture => {
+                    fixture.traverse((child) => {
+                        if (child.isMesh && child.material && child.material.isMeshBasicMaterial) {
+                            child.material.color.setHex(preset.ringSpotColor);
+                        }
+                    });
+                });
+            }
             if (ambientLight) {
                 ambientLight.color.setHex(preset.ambientSky);
                 ambientLight.groundColor.setHex(preset.ambientGround);
