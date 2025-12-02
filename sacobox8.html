@@ -4000,7 +4000,28 @@
                 }
             ];
 
-            ringSpotSettings.forEach((cfg, idx) => {
+            const ringCornerSpotSettings = [
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(-2.6, 3.3, -2.6)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(-1.1, 1.1, -1.1))
+                },
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(2.6, 3.3, -2.6)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(1.1, 1.1, -1.1))
+                },
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(-2.6, 3.3, 2.6)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(-1.1, 1.1, 1.1))
+                },
+                {
+                    pos: RING_POSITION.clone().add(new THREE.Vector3(2.6, 3.3, 2.6)),
+                    target: RING_POSITION.clone().add(new THREE.Vector3(1.1, 1.1, 1.1))
+                }
+            ];
+
+            const allRingSpots = [...ringSpotSettings, ...ringCornerSpotSettings];
+
+            allRingSpots.forEach((cfg, idx) => {
                 const spot = new THREE.SpotLight(lightingPresets[currentPreset].ringSpotColor, lightBases.ringSpot, 24, Math.PI / 5.0, 0.7, 1.45);
                 spot.position.copy(cfg.pos);
                 spot.target.position.copy(cfg.target);
