@@ -1,0 +1,16 @@
+{
+  "models": [
+    { "name": "Bodybuilder (FBX)", "file": "Bodybuilder.fbx" },
+    { "name": "Dummy (GLB)", "file": "Dummy.glb" },
+    { "name": "Principal (FBX)", "file": "Principal.fbx" },
+    { "name": "Ring 2 (GLB)", "file": "Ring 2.glb" },
+    { "name": "Ring (GLB)", "file": "Ring.glb" },
+    { "name": "Tyson (FBX)", "file": "Tyson.fbx" },
+    { "name": "Bolsa (GLB)", "file": "Bolsa.glb" },
+    { "name": "Guantes Amateur (OBJ)", "file": "Guantes_Amateur.obj" },
+    { "name": "MMA (FBX)", "file": "MMA.fbx" },
+    { "name": "Punching Bag (FBX)", "file": "Punching Bag.fbx" },
+    { "name": "Ring 3 (GLB)", "file": "Ring 3.glb" },
+    { "name": "Training Dummy (FBX)", "file": "Training Dummy.fbx" }
+  ]
+}
