@@ -435,6 +435,7 @@
         const AUTO_ANIMATION_ENABLED = true;
         const ENABLE_MOCAP_BLEND = true;
         const DUST_ENABLED = false;
+        const CLOCK_MODE = 'system'; // 'system' | 'session'
 
         const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
 
@@ -2812,6 +2813,29 @@
             scene.add(clockGroup);
         }
 
+        function updateClockHands(elapsedSeconds) {
+            if (!clockHandSec) return;
+
+            let seconds;
+            let minutes;
+            let hours;
+
+            if (CLOCK_MODE === 'session') {
+                seconds = elapsedSeconds % 60;
+                minutes = (elapsedSeconds / 60) % 60;
+                hours = (elapsedSeconds / 3600) % 12;
+            } else {
+                const now = new Date();
+                seconds = now.getSeconds() + now.getMilliseconds() / 1000;
+                minutes = now.getMinutes() + seconds / 60;
+                hours = (now.getHours() % 12) + minutes / 60;
+            }
+
+            clockHandSec.rotation.z = -seconds * (Math.PI / 30);
+            clockHandMin.rotation.z = -minutes * (Math.PI / 30);
+            clockHandHour.rotation.z = -hours * (Math.PI / 6);
+        }
+
         function initLights() {
             ambientLight = new THREE.HemisphereLight(0x222233, 0x000000, 0.52);
             scene.add(ambientLight);
@@ -3733,15 +3757,7 @@
 
             if (fanMesh) fanMesh.rotation.y -= 2.0 * dtVis;
 
-            if (clockHandSec) {
-                const d = new Date();
-                const s = d.getSeconds() + d.getMilliseconds() / 1000;
-                const m = d.getMinutes();
-                const h = d.getHours();
-                clockHandSec.rotation.z = -s * (Math.PI / 30);
-                clockHandMin.rotation.z = -m * (Math.PI / 30);
-                clockHandHour.rotation.z = -(h % 12 + m / 60) * (Math.PI / 6);
-            }
+            updateClockHands(elapsed);
 
             updatePunchState(dtVis);
             const flashPhase = getImpactFlashPhase();
