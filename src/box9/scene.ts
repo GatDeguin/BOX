@@ -8,6 +8,7 @@ import {
   AnimationMixer,
   AnimationClip,
   AnimationAction,
+  NumberKeyframeTrack,
   SpotLight,
   Vector2,
   Vector3,
@@ -735,12 +736,23 @@ function findClip(animations: AnimationClip[], keywords: string[]): AnimationCli
   );
 }
 
+function createFallbackClips(): { idle: AnimationClip; pose: AnimationClip } {
+  const idleTrack = new NumberKeyframeTrack('.rotation[y]', [0, 1.5, 3], [-0.05, 0.05, -0.05]);
+  const poseTrack = new NumberKeyframeTrack('.position[y]', [0, 0.6, 1.2], [0, 0.08, 0]);
+
+  const idle = new AnimationClip('fallbackIdle', 3, [idleTrack]);
+  const pose = new AnimationClip('fallbackPose', 1.2, [poseTrack]);
+
+  return { idle, pose };
+}
+
 function setupFighterAnimation(model: Object3D, animations: AnimationClip[]) {
   if (!context) return;
 
   const mixer = new AnimationMixer(model);
-  const idleClip = findClip(animations, ['idle', 'rest', 'breath']);
-  const poseClip = findClip(animations, ['pose', 'victory', 'taunt', 'intro']);
+  const { idle: fallbackIdle, pose: fallbackPose } = createFallbackClips();
+  const idleClip = findClip(animations, ['idle', 'rest', 'breath']) ?? fallbackIdle;
+  const poseClip = findClip(animations, ['pose', 'victory', 'taunt', 'intro']) ?? fallbackPose;
 
   context.fighterMixer = mixer;
   context.fighterActions = {};
