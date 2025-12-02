@@ -621,8 +621,8 @@
                 color: 0x4a3b32,
                 roughness: 0.4,
                 metalness: 0.1,
-                deformationAmount: 0.8,
-                bulgeAmount: 0.35,
+                deformationAmount: 1.05,
+                bulgeAmount: 0.45,
                 elasticity: 0.22,
                 damping: 0.82,
                 maxVertexSpeed: 3.5,
@@ -727,8 +727,8 @@
             smoothedStepTime = physicsTuning.stepTimeComfortMs;
 
             visualConfig.bag.mass = 52;
-            visualConfig.bag.deformationAmount = 0.6;
-            visualConfig.bag.bulgeAmount = 0.32;
+            visualConfig.bag.deformationAmount = 0.85;
+            visualConfig.bag.bulgeAmount = 0.42;
             visualConfig.bag.punchForce = 60;
             visualConfig.bag.linearDamping = 0.7;
             visualConfig.bag.angularDamping = 0.9;
@@ -4172,13 +4172,13 @@
             const rot = bagMesh.quaternion.clone().invert();
             const ld = dir.clone().applyQuaternion(rot).normalize();
 
-            const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.35, 2.0);
-            const innerRadius = 0.65;
-            const outerRadius = 1.05;
+            const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.25, 2.5);
+            const innerRadius = 0.78;
+            const outerRadius = 1.18;
             const innerRadiusSq = innerRadius * innerRadius;
             const outerRadiusSq = outerRadius * outerRadius;
-            const pushScale = visualConfig.bag.deformationAmount * visualStep * (0.8 + clampedIntensity * 0.55);
-            const bulgeScale = visualConfig.bag.bulgeAmount * visualStep * (0.6 + clampedIntensity * 0.5);
+            const pushScale = visualConfig.bag.deformationAmount * visualStep * (1.05 + clampedIntensity * 0.75);
+            const bulgeScale = visualConfig.bag.bulgeAmount * visualStep * (0.95 + clampedIntensity * 0.65);
 
             for(let i=0; i<pos.count; i++) {
                 tempV.fromBufferAttribute(pos, i);
