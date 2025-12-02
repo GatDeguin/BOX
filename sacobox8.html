@@ -2198,8 +2198,8 @@
             initLights();
             createVolumetricLight();
             
-            const envProps = createEnvironment(textures); 
-            initPhysics(textures, envProps.staticMat);
+            const envProps = createEnvironment(textures);
+            initPhysics(textures, envProps);
 
             setupMuteButton();
             setupPresetButton();
@@ -2429,12 +2429,13 @@
                 }
             });
 
-            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap };
+            return { bag: {c: leatherColor, n: leatherNormal, r: leatherRough}, floor: {c: floorColor, r: floorRough}, wall: wallMap, poster: posterMap, staticMat, ceilingMat };
         }
 
         // --- ESCENA Y PROPS ---
         function createEnvironment(tex) {
-            const staticMat = new CANNON.Material();
+            const staticMat = new CANNON.Material('floor-wall');
+            const ceilingMat = new CANNON.Material('ceiling');
             const wallMat = new THREE.MeshStandardMaterial({ 
                 map: tex.wall, roughness: 0.9, color: 0x444444 
             });
@@ -2935,10 +2936,55 @@
             world.allowSleep = true;
         }
 
-        function initPhysics(tex, staticMat) {
-            const bagMat = new CANNON.Material();
-            world.addContactMaterial(new CANNON.ContactMaterial(staticMat, bagMat, { friction: 0.5, restitution: 0.2 }));
-            createPunchingBag(tex.bag, bagMat, staticMat);
+        function initPhysics(tex, envProps) {
+            const { staticMat, ceilingMat } = envProps;
+
+            const bagMat = new CANNON.Material('bag');
+            const chainMaterial = new CANNON.Material('chain');
+
+            const wornClothContact = {
+                friction: 0.55,
+                restitution: 0.08,
+                contactEquationStiffness: 50000,
+                contactEquationRelaxation: 4.5,
+                frictionEquationRelaxation: 3.5
+            };
+
+            const metalToCloth = {
+                friction: 0.48,
+                restitution: 0.03,
+                contactEquationStiffness: 40000,
+                contactEquationRelaxation: 5.5,
+                frictionEquationRelaxation: 4.5
+            };
+
+            const metalToCeiling = {
+                friction: 0.42,
+                restitution: 0.02,
+                contactEquationStiffness: 35000,
+                contactEquationRelaxation: 6.5,
+                frictionEquationRelaxation: 5.5
+            };
+
+            world.addContactMaterial(new CANNON.ContactMaterial(staticMat, bagMat, wornClothContact));
+            world.addContactMaterial(new CANNON.ContactMaterial(staticMat, chainMaterial, {
+                friction: 0.5,
+                restitution: 0.04,
+                contactEquationStiffness: 60000,
+                contactEquationRelaxation: 3.5,
+                frictionEquationRelaxation: 2.5
+            }));
+            world.addContactMaterial(new CANNON.ContactMaterial(bagMat, chainMaterial, metalToCloth));
+            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, ceilingMat, metalToCeiling));
+            world.addContactMaterial(new CANNON.ContactMaterial(bagMat, ceilingMat, {
+                friction: 0.35,
+                restitution: 0.01,
+                contactEquationStiffness: 28000,
+                contactEquationRelaxation: 6.5,
+                frictionEquationRelaxation: 5.5
+            }));
+
+            createPunchingBag(tex.bag, { bagMaterial: bagMat, chainMaterial, ceilingMaterial: ceilingMat, staticMat });
         }
 
         function applyBagPhysicsToBody() {
@@ -2949,7 +2995,8 @@
             bagBody.angularDamping = visualConfig.bag.angularDamping;
         }
 
-        function createPunchingBag(tex, physMat, staticMat) {
+        function createPunchingBag(tex, materials) {
+            const { bagMaterial, chainMaterial, ceilingMaterial, staticMat } = materials;
             const h = 1.5, r = 0.35;
             let geo = new THREE.CylinderGeometry(r, r, h, 64, 32);
             geo = geo.toNonIndexed();
@@ -2993,15 +3040,22 @@
                 bag: 1 << 2
             };
 
-            const chainMaterial = new CANNON.Material('chain');
-            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, chainMaterial, { friction: 0.4, restitution: 0.05 }));
-            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, physMat, { friction: 0.45, restitution: 0.05 }));
-            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, staticMat, { friction: 0.5, restitution: 0.05 }));
+            world.addContactMaterial(new CANNON.ContactMaterial(chainMaterial, chainMaterial, {
+                friction: 0.38,
+                restitution: 0.04,
+                contactEquationStiffness: 32000,
+                contactEquationRelaxation: 7,
+                frictionEquationRelaxation: 6
+            }));
 
             const ancBody = new CANNON.Body({
                 mass: 0,
-                position: new CANNON.Vec3(0, 4.25, 0)
+                position: new CANNON.Vec3(0, 4.25, 0),
+                material: ceilingMaterial,
+                collisionFilterGroup: collisionGroups.static,
+                collisionFilterMask: collisionGroups.chain | collisionGroups.bag
             });
+            ancBody.addShape(new CANNON.Sphere(0.08));
             world.addBody(ancBody);
 
             const chainGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.25);
@@ -3043,7 +3097,7 @@
 
             bagBody = new CANNON.Body({
                 mass: visualConfig.bag.mass,
-                material: physMat,
+                material: bagMaterial,
                 position: new CANNON.Vec3(0, 2, 0),
                 collisionFilterGroup: collisionGroups.bag,
                 collisionFilterMask: collisionGroups.static | collisionGroups.chain,
