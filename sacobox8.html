@@ -3962,6 +3962,32 @@
             trainingWall.receiveShadow = true;
             scene.add(trainingWall);
 
+            const [trainingPosterA, trainingPosterB] = selectPosterSet(tex.posterPool, tex.posterPlaceholder);
+
+            const trainingPosterMatA = new THREE.MeshStandardMaterial({
+                map: trainingPosterA,
+                roughness: 0.82,
+                metalness: 0.06,
+                side: THREE.DoubleSide
+            });
+
+            const trainingPosterLeft = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.8), trainingPosterMatA);
+            trainingPosterLeft.position.set(-1.8, 2.2, trainingWallZ - 0.02);
+            trainingPosterLeft.rotation.y = Math.PI;
+            scene.add(trainingPosterLeft);
+
+            const trainingPosterMatB = new THREE.MeshStandardMaterial({
+                map: trainingPosterB,
+                roughness: 0.82,
+                metalness: 0.06,
+                side: THREE.DoubleSide
+            });
+
+            const trainingPosterRight = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.5), trainingPosterMatB);
+            trainingPosterRight.position.set(2.6, 2.0, trainingWallZ - 0.02);
+            trainingPosterRight.rotation.y = Math.PI;
+            scene.add(trainingPosterRight);
+
             const machine = new THREE.Group();
             const columnGeo = new THREE.BoxGeometry(0.12, 2.4, 0.35);
             const crossBarGeo = new THREE.BoxGeometry(2.4, 0.1, 0.16);
