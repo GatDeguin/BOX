@@ -28,6 +28,13 @@
             pointer-events: none;
             text-shadow: 0 2px 10px rgba(0,0,0,0.9);
             z-index: 10;
+            opacity: 1;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+            visibility: visible;
+        }
+        #info.hidden {
+            opacity: 0;
+            visibility: hidden;
         }
         .instruction {
             background: radial-gradient(circle at top, rgba(200,200,220,0.1), rgba(5,5,8,0.9));
@@ -572,6 +579,11 @@
 
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const infoBanner = document.getElementById('info');
+        if (infoBanner) {
+            setTimeout(() => infoBanner.classList.add('hidden'), 2000);
+        }
 
         // --- UTILIDAD DE RUIDO ---
         class SimplexNoise {
