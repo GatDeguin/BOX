@@ -1171,6 +1171,33 @@
             });
         }
 
+        function applyRingIntensityBases() {
+            const ringBase = Math.max(0, lightBases.ring);
+            const ringSpotBase = Math.max(0, lightBases.ringSpot);
+
+            if (ringLight) {
+                ringLight.intensity = ringBase;
+            }
+
+            if (ringSpotLights.length) {
+                ringSpotLights.forEach((spot) => {
+                    spot.intensity = ringSpotBase;
+                });
+            }
+
+            if (ringReflectorFixtures.length) {
+                const glowStrength = THREE.MathUtils.clamp(0.35 + (ringSpotBase / 6.5), 0.35, 1.1);
+                ringReflectorFixtures.forEach((fixture) => {
+                    fixture.traverse((child) => {
+                        if (child.isMesh && child.material && child.material.isMeshBasicMaterial) {
+                            child.material.opacity = glowStrength;
+                            child.material.needsUpdate = true;
+                        }
+                    });
+                });
+            }
+        }
+
         function applyLightingColorsToScene(preset) {
             if (keyLight) keyLight.color.setHex(preset.keyColor);
             if (fillLight) fillLight.color.setHex(preset.fillColor);
@@ -1292,6 +1319,7 @@
                 if (ambientControls.groundColor) preset.ambientGround = parseColorInput(ambientControls.groundColor.value);
             }
 
+            applyRingIntensityBases();
             applyLightingColorsToScene(preset);
             syncLightingControlsFromState();
         }
@@ -3841,6 +3869,7 @@
             volumetricBaseHue = preset.volumetricHue;
             ambientBaseIntensity = preset.ambientBase;
 
+            applyRingIntensityBases();
             applyLightingColorsToScene(preset);
             if (scene && scene.fog) {
                 scene.fog.color.setHex(preset.fogColor);
