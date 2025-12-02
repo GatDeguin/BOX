@@ -1903,12 +1903,17 @@
                     const now = performance.now?.() || Date.now();
                     const sameAction = this.lastStuckWarning.action === this.activeAction;
                     const elapsed = now - this.lastStuckWarning.time;
+                    const cooldownMs = 1500;
 
-                    if (!sameAction || elapsed > 1500) {
-                        console.warn('Detección de animación trabada, saltando a la siguiente.');
-                        this.lastStuckWarning = { action: this.activeAction, time: now };
+                    if (sameAction && elapsed < cooldownMs) {
+                        return;
                     }
 
+                    if (!sameAction || elapsed >= cooldownMs) {
+                        console.warn('Detección de animación trabada, saltando a la siguiente.');
+                    }
+
+                    this.lastStuckWarning = { action: this.activeAction, time: now };
                     this.playNext();
                 }
             }
