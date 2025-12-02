@@ -127,13 +127,13 @@ export class BagSimulation {
         const pos = this.bagMesh.geometry.attributes.position;
         const rot = this.bagMesh.quaternion.clone().invert();
         const ld = dir.clone().applyQuaternion(rot).normalize();
-        const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.25, 2.5);
-        const innerRadius = 0.78;
-        const outerRadius = 1.18;
+        const clampedIntensity = THREE.MathUtils.clamp(intensity, 0.25, 3.5);
+        const innerRadius = 0.65;
+        const outerRadius = 1.05;
         const innerRadiusSq = innerRadius * innerRadius;
         const outerRadiusSq = outerRadius * outerRadius;
-        const pushScale = this.visualConfig.bag.deformationAmount * visualStep * (1.05 + clampedIntensity * 0.75);
-        const bulgeScale = this.visualConfig.bag.bulgeAmount * visualStep * (0.95 + clampedIntensity * 0.65);
+        const pushScale = this.visualConfig.bag.deformationAmount * visualStep * (1.35 + clampedIntensity * 1.15);
+        const bulgeScale = this.visualConfig.bag.bulgeAmount * visualStep * (1.15 + clampedIntensity * 0.8);
         const tempV = new THREE.Vector3();
         const tempDisp = new THREE.Vector3();
         for (let i = 0; i < pos.count; i++) {
@@ -142,14 +142,17 @@ export class BagSimulation {
             const d2 = tempDisp.lengthSq();
             if (d2 < innerRadiusSq) {
                 const d = Math.sqrt(d2);
-                const f = 1 - d / innerRadius;
-                this.vertexVelocities[i].addScaledVector(ld, f * pushScale);
+                const f = Math.pow(1 - d / innerRadius, 1.2);
+                const crush = 0.35 + clampedIntensity * 0.2;
+                this.vertexVelocities[i].addScaledVector(ld, f * pushScale * crush);
             }
             else if (d2 < outerRadiusSq) {
                 const d = Math.sqrt(d2);
                 const t = (d - innerRadius) / (outerRadius - innerRadius);
-                const f = Math.sin(t * Math.PI) * bulgeScale;
+                const f = Math.sin(t * Math.PI) * Math.sin(t * Math.PI) * bulgeScale;
+                const slideDir = tempDisp.normalize().multiplyScalar(0.25 * (1 - t));
                 this.vertexVelocities[i].addScaledVector(ld, -f);
+                this.vertexVelocities[i].addScaledVector(slideDir, f * 0.35);
             }
         }
     }
