@@ -3058,11 +3058,10 @@
             initWorld(); 
 
             const textures = generateProceduralTextures();
-            generateEnvMap(); 
+            generateEnvMap();
 
             initLights();
-            createVolumetricLight();
-            
+
             const envProps = createEnvironment(textures);
             initPhysics(textures, envProps);
 
@@ -3945,52 +3944,8 @@
         }
 
         function createVolumetricLight() {
-            const geometry = new THREE.CylinderGeometry(3.6, 0.05, 6, 48, 1, true);
-            const material = new THREE.ShaderMaterial({
-                uniforms: {
-                    uTime: { value: 0 },
-                    uColor: { value: new THREE.Color(0xffaa77) }
-                },
-                vertexShader: `
-                    varying vec2 vUv;
-                    varying vec3 vPos;
-                    void main() {
-                        vUv = uv;
-                        vPos = position;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
-                fragmentShader: `
-                    uniform float uTime;
-                    uniform vec3 uColor;
-                    varying vec2 vUv;
-                    varying vec3 vPos;
-                    float rand(vec2 n) { return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453); }
-                    float noise(vec2 p){
-                        vec2 ip = floor(p); vec2 u = fract(p);
-                        u = u*u*(3.0-2.0*u);
-                        float res = mix(mix(rand(ip), rand(ip+vec2(1.0,0.0)), u.x), mix(rand(ip+vec2(0.0,1.0)), rand(ip+vec2(1.0,1.0)), u.x), u.y);
-                        return res*res;
-                    }
-                    void main() {
-                        float radial = length(vPos.xz) / 3.6;
-                        float beam = smoothstep(1.0, 0.2, radial);
-                        float mist = noise(vec2(vUv.x * 22.0, vUv.y * 7.0 + uTime * 0.32));
-                        float alpha = beam * (1.0 - vUv.y) * 0.16 * (0.85 + mist * 0.45);
-                        alpha *= smoothstep(0.0, 0.18, vUv.y);
-                        alpha *= smoothstep(1.0, 0.78, vUv.y);
-                        if (alpha < 0.01) discard;
-                        gl_FragColor = vec4(uColor, alpha);
-                    }
-                `,
-                transparent: true,
-                depthWrite: false,
-                side: THREE.DoubleSide,
-                blending: THREE.AdditiveBlending
-            });
-            volumetricMesh = new THREE.Mesh(geometry, material);
-            volumetricMesh.position.y = 2.5;
-            scene.add(volumetricMesh);
+            // Deshabilitado: el cono volumétrico ya no se crea en la inicialización.
+            volumetricMesh = null;
         }
 
         function alignVolumetricLight() {
