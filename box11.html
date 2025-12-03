@@ -15,7 +15,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #0b0602;
+            background-color: #1a0b02;
             user-select: none;
         }
         #info {
@@ -721,7 +721,7 @@
 
         const MOBILE_SIMPLE_MODE = isMobile;
 
-        const RING_MODEL_URL = 'modelos/Ring 2.glb';
+        const RING_MODEL_URL = 'modelos/Ring.glb';
         const RING_POSITION = new THREE.Vector3(20.1, 0, 2.0);
         const RING_CEILING_HEIGHT = 5.6;
 
@@ -1655,9 +1655,9 @@
         // ============================
         //  TYSON + MEDIAPIPE (MOCAP)
         // ============================
-        const MODEL_URL = 'modelos/Tyson.fbx';
-        // Textura base del modelo de Tyson (corregimos la ruta inexistente)
-        const TYSON_TEXTURE_URL = 'texturas/Tyson.jpeg';
+        const MODEL_URL = 'modelos/Bodybuilder.fbx';
+        // Textura base del modelo de Bodybuilder
+        const TYSON_TEXTURE_URL = 'texturas/BodyBuilder.jpeg';
 
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('pose_canvas');
@@ -3437,7 +3437,7 @@
                 ctx.strokeStyle = '#a0a0ff'; ctx.lineWidth=4; ctx.strokeRect(w*0.35, w*0.3, w*0.3, w*0.15);
                 ctx.fillStyle = '#c0c0ff'; ctx.font = 'bold 80px Impact'; ctx.textAlign = 'center';
                 ctx.fillText("TITAN", w*0.5, w*0.41);
-                ctx.strokeStyle = '#6060ff'; ctx.lineWidth = 6;
+                ctx.strokeStyle = '#f5a524'; ctx.lineWidth = 6;
                 ctx.beginPath(); ctx.moveTo(w*0.25, 0); ctx.lineTo(w*0.25, w); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(w*0.75, 0); ctx.lineTo(w*0.75, w); ctx.stroke();
             });
@@ -3461,12 +3461,12 @@
             });
 
             const floorColor = createTex((ctx, w) => {
-                ctx.fillStyle = '#151515'; ctx.fillRect(0,0,w,w);
+                ctx.fillStyle = '#1b0f08'; ctx.fillRect(0,0,w,w);
                 for(let i=0; i<100; i++) {
                     const x = Math.random()*w; const y = Math.random()*w;
                     const r = Math.random()*50 + 20;
                     const g = ctx.createRadialGradient(x,y,0,x,y,r);
-                    g.addColorStop(0, 'rgba(255,255,255,0.05)');
+                    g.addColorStop(0, 'rgba(255,191,94,0.08)');
                     g.addColorStop(1, 'transparent');
                     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
                 }
@@ -3498,8 +3498,8 @@
                 for(let i=0; i<img.data.length; i+=4) {
                     const x = (i/4)%w, y=Math.floor((i/4)/w);
                     const n = noiseGen.noise2D(x*0.01, y*0.05);
-                    const val = 40 + n*10;
-                    img.data[i]=val; img.data[i+1]=val; img.data[i+2]=val+2; img.data[i+3]=255;
+                    const val = 54 + n*12;
+                    img.data[i]=val+30; img.data[i+1]=val+10; img.data[i+2]=val; img.data[i+3]=255;
                 }
                 ctx.putImageData(img,0,0);
             });
