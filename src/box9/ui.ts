@@ -9,7 +9,14 @@ import {
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
-import { emitFightWin, getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+import {
+  canFightCharacter,
+  emitFightWin,
+  getFightLockReason,
+  getGloveLabel,
+  nextMilestone,
+  normalizeProgress
+} from './progression';
 
 declare global {
   interface Window {
@@ -145,6 +152,14 @@ function createStyles() {
     .box9-dialogue { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.4); color: #d7ffe6; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); pointer-events: none; opacity: 0; transition: opacity 160ms ease; max-width: 640px; display: grid; gap: 4px; text-align: center; backdrop-filter: blur(6px); }
     .box9-dialogue strong { letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; }
     .box9-dialogue.visible { opacity: 1; }
+    .box9-cinematic { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 18px; background: radial-gradient(circle at 50% 40%, rgba(122,155,255,0.12), rgba(3,5,8,0.9)); pointer-events: none; }
+    .box9-cinematic.visible { display: flex; animation: box9CinematicFade 320ms ease; pointer-events: auto; }
+    .box9-cinematic-panel { max-width: 520px; background: linear-gradient(135deg, rgba(7,10,18,0.92), rgba(10,14,24,0.95)); border: 1px solid rgba(122,155,255,0.45); border-radius: 16px; padding: 18px 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.55), 0 0 60px rgba(122,155,255,0.2); display: grid; gap: 10px; text-align: center; }
+    .box9-cinematic-badge { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(84,255,191,0.5); color: #c7ffe8; background: rgba(84,255,191,0.12); letter-spacing: 0.08em; font-weight: 800; text-transform: uppercase; }
+    .box9-cinematic h3 { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-cinematic p { margin: 0; color: #dce2f5; line-height: 1.5; }
+    .box9-cinematic .box9-button { justify-self: center; min-width: 180px; }
+    @keyframes box9CinematicFade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     .box9-fighter-card { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; max-width: 320px; pointer-events: auto; box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
     .box9-fighter-name { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; color: #e9ecf4; }
     .box9-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -589,6 +604,8 @@ function createHud(
   const hud = document.createElement('div');
   hud.className = 'box9-hud';
 
+  let currentProgress = normalizeProgress(store.getState().progress);
+
   const topBar = document.createElement('div');
   topBar.className = 'box9-topbar';
 
@@ -680,6 +697,14 @@ function createHud(
     chip.appendChild(chipText);
     chip.addEventListener('click', () => {
       const character = id as CharacterId;
+      if (!canFightCharacter(character, currentProgress)) {
+        window.dispatchEvent(
+          new CustomEvent('box9:character-locked', {
+            detail: { character, reason: getFightLockReason(character, currentProgress) }
+          })
+        );
+        return;
+      }
       setActiveChip(character);
       onSelectCharacter(character);
     });
@@ -928,6 +953,7 @@ function createHud(
   const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
     const state = store.getState();
     const progress = progressOverride ?? normalizeProgress(state.progress);
+    currentProgress = progress;
     ringValue.textContent = ringOptions[state.ring];
     cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
     gloveValue.textContent = getGloveLabel(progress.activeGlove);
@@ -1149,6 +1175,24 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   winDialogue.append(winTitle, winCopy);
   container.appendChild(winDialogue);
 
+  const gloveCinematic = document.createElement('div');
+  gloveCinematic.className = 'box9-cinematic';
+  const glovePanel = document.createElement('div');
+  glovePanel.className = 'box9-cinematic-panel';
+  const gloveBadge = document.createElement('div');
+  gloveBadge.className = 'box9-cinematic-badge';
+  gloveBadge.textContent = 'Guantes PRO';
+  const gloveHeading = document.createElement('h3');
+  gloveHeading.textContent = 'Entrega de guantes';
+  const gloveCopy = document.createElement('p');
+  gloveCopy.textContent = 'Tyson te tiende el set PRO. El cuero brilla mientras lo ajusta en tus muñecas.';
+  const gloveCta = document.createElement('button');
+  gloveCta.className = 'box9-button';
+  gloveCta.textContent = 'Equipar y seguir';
+  glovePanel.append(gloveBadge, gloveHeading, gloveCopy, gloveCta);
+  gloveCinematic.appendChild(glovePanel);
+  container.appendChild(gloveCinematic);
+
   let winDialogueTimeout: number | null = null;
   const showWinDialogue = (opponent: CharacterId) => {
     const fighter = getFighterDetails(opponent);
@@ -1163,6 +1207,28 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       winDialogueTimeout = null;
     }, 2600);
   };
+
+  let gloveCinematicTimeout: number | null = null;
+  const hideGloveCinematic = () => {
+    gloveCinematic.classList.remove('visible');
+    if (gloveCinematicTimeout !== null) {
+      window.clearTimeout(gloveCinematicTimeout);
+      gloveCinematicTimeout = null;
+    }
+  };
+
+  const showGloveCinematic = () => {
+    gloveCinematic.classList.add('visible');
+    if (gloveCinematicTimeout !== null) {
+      window.clearTimeout(gloveCinematicTimeout);
+    }
+    gloveCinematicTimeout = window.setTimeout(() => {
+      gloveCinematic.classList.remove('visible');
+      gloveCinematicTimeout = null;
+    }, 3200);
+  };
+
+  gloveCta.addEventListener('click', hideGloveCinematic);
 
   let lockWarningTimeout: number | null = null;
   const showLockWarning = (message: string) => {
@@ -1189,10 +1255,16 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     showWinDialogue(detail.opponent);
   });
 
+  let lastProgress = normalizeProgress(store.getState().progress);
   let lastSelectionStarted = store.getState().selectionStarted;
 
   store.subscribe((state) => {
     const progress = normalizeProgress(state.progress);
+
+    const proJustUnlocked = !lastProgress.unlocks.pro && progress.unlocks.pro;
+    if (proJustUnlocked) {
+      showGloveCinematic();
+    }
 
     updateLocks(progress);
     overlay.style.display = state.selectionStarted ? 'none' : 'flex';
@@ -1217,6 +1289,8 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       panel.style.display = state.selectionStarted ? '' : 'none';
       panel.toggleAttribute('aria-hidden', !state.selectionStarted);
     });
+
+    lastProgress = progress;
   });
 
   container.append(overlay, hud, backdrop, assetBackdrop, gloveBackdrop, loadingOverlay);
