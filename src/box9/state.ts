@@ -29,6 +29,7 @@ export function getDefaultRingForCharacter(character: CharacterId): RingId {
 
 export interface Box9State {
   ring: RingId;
+  ringOverride: boolean;
   freeCamera: boolean;
   character: CharacterId;
   selectionStarted: boolean;
@@ -45,6 +46,7 @@ export interface Box9Store {
 
 const defaultState: Box9State = {
   ring: CHARACTER_DEFAULT_RING.mma,
+  ringOverride: false,
   freeCamera: false,
   character: 'mma',
   selectionStarted: false,

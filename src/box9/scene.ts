@@ -534,8 +534,9 @@ export function activateSelection(initialCharacter?: CharacterId): void {
 
 export function confirmCharacterSelection(character: CharacterId): void {
   const preferredRing = getDefaultRingForCharacter(character);
-  if (box9Store.getState().ring !== preferredRing) {
-    box9Store.setState({ ring: preferredRing });
+  const state = box9Store.getState();
+  if (!state.ringOverride && state.ring !== preferredRing) {
+    box9Store.setState({ ring: preferredRing, ringOverride: false });
     window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: preferredRing } }));
   }
 

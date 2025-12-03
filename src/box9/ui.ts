@@ -1056,7 +1056,10 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       backdrop.style.display = 'none';
     },
     (ring, freeCamera) => {
-      store.setState({ ring, freeCamera });
+      const preferredRing = getDefaultRingForCharacter(store.getState().character);
+      const ringOverride = ring !== preferredRing;
+
+      store.setState({ ring, ringOverride, freeCamera });
       emitSceneEvent('ring-change', { ring });
       emitSceneEvent('freecam-change', { enabled: freeCamera });
     }

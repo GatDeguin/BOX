@@ -74,8 +74,8 @@ export function initSelectionControls(
   };
 
   const applySelection = (id: CharacterId, animation: 'idle' | 'pose' = 'idle') => {
-    const preferredRing = getDefaultRingForCharacter(id);
     const state = store.getState();
+    const preferredRing = getDefaultRingForCharacter(id);
     const progress = normalizeProgress(state.progress);
 
     if (!canFightCharacter(id, progress)) {
@@ -87,8 +87,8 @@ export function initSelectionControls(
       return false;
     }
 
-    if (state.ring !== preferredRing) {
-      store.setState({ ring: preferredRing });
+    if (!state.ringOverride && state.ring !== preferredRing) {
+      store.setState({ ring: preferredRing, ringOverride: false });
       window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: preferredRing } }));
     }
 
