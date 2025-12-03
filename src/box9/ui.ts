@@ -45,6 +45,36 @@ const ringOptions: Record<RingId, string> = {
   tysonRing: 'Ring Tyson'
 };
 
+const gymVariants: Record<
+  CharacterId,
+  {
+    href: string;
+    label: string;
+    description: string;
+  }
+> = {
+  mma: {
+    href: 'box10.html',
+    label: 'BOX 10 · MMA Sparring',
+    description: 'Octágono húmedo con clinch, sprawl y cámara pegada a las jaulas.'
+  },
+  bodybuilder: {
+    href: 'box11.html',
+    label: 'BOX 11 · Golden Pump',
+    description: 'Sesión de hipertrofia con luz cálida, cadenas y repeticiones al fallo.'
+  },
+  tyson: {
+    href: 'box12.html',
+    label: 'BOX 12 · Tyson POV',
+    description: 'POV pesado inspirado en Tyson con sombras, uppercuts y respiración cruda.'
+  },
+  principal: {
+    href: 'box13.html',
+    label: 'BOX 13 · Bolsa Tyson',
+    description: 'Warmup guiado en saco con marcador simple y Tyson liderando el ritmo.'
+  }
+};
+
 const characterOptions: Record<CharacterId, string> = {
   mma: 'MMA',
   bodybuilder: 'Bodybuilder',
@@ -93,6 +123,13 @@ function createStyles() {
     .box9-stat small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .box9-stat strong { color: #f6f7fb; }
     .box9-fighter-personality { margin: 0; color: #b4bed4; line-height: 1.5; }
+    .box9-gym-panel { background: rgba(0,0,0,0.32); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+    .box9-gym-panel h4 { margin: 0; letter-spacing: 0.06em; text-transform: uppercase; color: #e9ecf4; font-size: 13px; }
+    .box9-gym-panel p { margin: 0; color: #cbd3e8; line-height: 1.4; font-size: 13px; }
+    .box9-gym-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .box9-gym-actions .box9-button { flex: 1; min-width: 180px; }
+    .box9-gym-embed { display: none; border: 1px solid rgba(122,155,255,0.35); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+    .box9-gym-embed iframe { width: 100%; height: 320px; border: 0; background: #05070c; }
     .box9-modal-backdrop { position: absolute; inset: 0; background: rgba(3,5,8,0.65); display: none; align-items: center; justify-content: center; pointer-events: auto; }
     .box9-modal { background: #0c111d; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px; width: min(420px, 90vw); box-shadow: 0 18px 80px rgba(0,0,0,0.45); }
     .box9-modal h2 { margin: 0 0 12px; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -722,6 +759,55 @@ function createHud(
 
   winsRow.append(winsMMA, winsBodybuilder, winsTyson, winsPrincipal);
   fighterCard.append(progressNote, checklist, tysonLockCopy, winsRow);
+
+  const gymPanel = document.createElement('div');
+  gymPanel.className = 'box9-gym-panel';
+
+  const gymTitle = document.createElement('h4');
+  gymTitle.textContent = 'Gimnasio alterno';
+
+  const gymDescription = document.createElement('p');
+  gymDescription.textContent = 'Abre la variante de gimnasio asociada al rival seleccionado.';
+
+  const gymActions = document.createElement('div');
+  gymActions.className = 'box9-gym-actions';
+
+  const gymTabButton = document.createElement('button');
+  gymTabButton.className = 'box9-button';
+  gymTabButton.textContent = 'Abrir gimnasio';
+  gymTabButton.addEventListener('click', () => {
+    const variant = gymVariants[store.getState().character];
+    if (!variant) return;
+    window.open(variant.href, '_blank', 'noopener,noreferrer');
+  });
+
+  let gymEmbedVisible = false;
+  const gymIframeButton = document.createElement('button');
+  gymIframeButton.className = 'box9-button box9-secondary';
+  gymIframeButton.textContent = 'Abrir en iframe';
+
+  const gymEmbed = document.createElement('div');
+  gymEmbed.className = 'box9-gym-embed';
+  const gymIframe = document.createElement('iframe');
+  gymIframe.title = 'Vista de gimnasio alterno';
+  gymEmbed.appendChild(gymIframe);
+
+  gymIframeButton.addEventListener('click', () => {
+    const variant = gymVariants[store.getState().character];
+    if (!variant) return;
+
+    if (!gymIframe.src || gymIframe.src !== new URL(variant.href, window.location.href).href) {
+      gymIframe.src = variant.href;
+    }
+
+    gymEmbedVisible = !gymEmbedVisible;
+    gymEmbed.style.display = gymEmbedVisible ? 'block' : 'none';
+    gymIframeButton.textContent = gymEmbedVisible ? 'Cerrar iframe' : 'Abrir en iframe';
+  });
+
+  gymActions.append(gymTabButton, gymIframeButton);
+  gymPanel.append(gymTitle, gymDescription, gymActions, gymEmbed);
+
   const progressPanel = document.createElement('div');
   progressPanel.className = 'box9-progress-panel';
 
@@ -771,43 +857,69 @@ function createHud(
 
   progressPanel.append(progressHeader, winsList, milestoneCopy);
 
-  hud.append(topBar, chipsRow, fighterCard, progressPanel);
+  hud.append(topBar, chipsRow, fighterCard, gymPanel, progressPanel);
 
-    const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
-      const state = store.getState();
-      const progress = progressOverride ?? normalizeProgress(state.progress);
-      ringValue.textContent = ringOptions[state.ring];
-      cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
-      gloveValue.textContent = getGloveLabel(progress.activeGlove);
-      activeGloveChip.textContent = getGloveLabel(progress.activeGlove);
+  const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
+    const state = store.getState();
+    const progress = progressOverride ?? normalizeProgress(state.progress);
+    ringValue.textContent = ringOptions[state.ring];
+    cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
+    gloveValue.textContent = getGloveLabel(progress.activeGlove);
+    activeGloveChip.textContent = getGloveLabel(progress.activeGlove);
 
-      const fighter = getFighterDetails(state.character);
-      fighterName.textContent = fighter.name;
-      weightValue.textContent = fighter.weight;
-      reachValue.textContent = fighter.reach;
+    const fighter = getFighterDetails(state.character);
+    fighterName.textContent = fighter.name;
+    weightValue.textContent = fighter.weight;
+    reachValue.textContent = fighter.reach;
     speedValue.textContent = fighter.speed;
     fighterPersonality.textContent = fighter.personality;
 
     setActiveChip(state.character);
 
+    const variant = gymVariants[state.character];
+    const lastVariantId = gymTitle.dataset.variantId;
+    if (variant) {
+      gymTitle.textContent = `Gimnasio alterno · ${variant.label}`;
+      gymDescription.textContent = variant.description;
+      gymTitle.dataset.variantId = state.character;
+      gymTabButton.disabled = false;
+      gymIframeButton.disabled = false;
+
+      if (lastVariantId !== state.character) {
+        gymEmbedVisible = false;
+        gymEmbed.style.display = 'none';
+        gymIframeButton.textContent = 'Abrir en iframe';
+      } else if (gymEmbedVisible && gymIframe.src !== new URL(variant.href, window.location.href).href) {
+        gymIframe.src = variant.href;
+      }
+    } else {
+      gymTitle.textContent = 'Gimnasio alterno';
+      gymDescription.textContent = 'Selecciona un rival para ver su entorno asociado.';
+      gymTabButton.disabled = true;
+      gymIframeButton.disabled = true;
+      gymEmbedVisible = false;
+      gymEmbed.style.display = 'none';
+      gymIframeButton.textContent = 'Abrir en iframe';
+    }
+
     winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder} · Principal: ${progress.wins.entrenamiento.principal}`;
-      winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
-      winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
-      winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
-      progressNote.textContent = nextMilestone(progress);
-      milestoneCopy.textContent = nextMilestone(progress);
+    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
+    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
+    winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
+    progressNote.textContent = nextMilestone(progress);
+    milestoneCopy.textContent = nextMilestone(progress);
 
-      opponents.forEach((opponent) => {
-        const totalWins =
-          progress.wins.entrenamiento[opponent.id] +
-          progress.wins.amateur[opponent.id] +
-          progress.wins.pro[opponent.id] +
-          progress.wins.secreto[opponent.id];
-        opponent.total.textContent = `${totalWins} ${totalWins === 1 ? 'victoria' : 'victorias'}`;
-      });
+    opponents.forEach((opponent) => {
+      const totalWins =
+        progress.wins.entrenamiento[opponent.id] +
+        progress.wins.amateur[opponent.id] +
+        progress.wins.pro[opponent.id] +
+        progress.wins.secreto[opponent.id];
+      opponent.total.textContent = `${totalWins} ${totalWins === 1 ? 'victoria' : 'victorias'}`;
+    });
 
-      checklistItems.forEach((item) => {
-        const completed = item.done(progress);
+    checklistItems.forEach((item) => {
+      const completed = item.done(progress);
       item.element.classList.toggle('done', completed);
       if (item.icon) item.icon.textContent = completed ? '✔' : '•';
       if (item.text) item.text.textContent = item.label(progress);
