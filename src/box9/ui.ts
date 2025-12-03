@@ -158,6 +158,12 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
   const subtitle = document.createElement('p');
   subtitle.textContent = 'Selecciona un modo para entrar al ring o calentar.';
 
+  const playerState = document.createElement('p');
+  playerState.className = 'box9-progress-note';
+
+  const unlockHint = document.createElement('p');
+  unlockHint.className = 'box9-progress-note';
+
   const grid = document.createElement('div');
   grid.className = 'box9-mode-grid';
 
@@ -191,7 +197,7 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
     grid.appendChild(card);
   });
 
-  panel.append(title, subtitle, grid);
+  panel.append(title, subtitle, playerState, unlockHint, grid);
   overlay.appendChild(panel);
 
   return {
@@ -203,6 +209,20 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
         dummyButton.disabled = locked;
         dummyButton.title = locked ? 'Completa la ruta secreta para activar este modo.' : '';
       }
+
+      const gloveLabel = getGloveLabel(progress.activeGlove);
+      const stageCopy = progress.unlocks.secreto
+        ? 'Ruta secreta completada: set secreto disponible.'
+        : progress.unlocks.pro
+        ? 'Set PRO desbloqueado, avanza hacia el secreto.'
+        : progress.unlocks.amateur
+        ? 'Set amateur listo, reta a Tyson para conseguir el PRO.'
+        : 'Guantes de entrenamiento equipados.';
+
+      playerState.textContent = `Estado actual: ${gloveLabel}. ${stageCopy}`;
+      unlockHint.textContent = !progress.unlocks.secreto
+        ? nextMilestone(progress)
+        : 'Pista de desbloqueo: ya tienes acceso al dummy secreto, pruébalo para dominar los guantes negros/dorados.';
     }
   };
 }
