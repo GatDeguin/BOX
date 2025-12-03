@@ -1401,15 +1401,108 @@
       ['character', 'ring', 'glove'].forEach((type) => handleDebugChange(type));
     }
 
-    function createGloveInstances(prototype) {
-      if (!prototype) return;
-      const left = prototype.clone(true);
-      const right = prototype.clone(true);
+    function detectSideFromName(name = '') {
+      const value = name.toLowerCase();
+      const leftTokens = ['left', 'izq', 'izquierda', ' l ', '-l', '_l', ' l-', ' l_', 'handl', 'lhand'];
+      const rightTokens = ['right', 'der', 'derecha', ' r ', '-r', '_r', ' r-', ' r_', 'handr', 'rhand'];
+
+      if (leftTokens.some((token) => value.includes(token))) return 'left';
+      if (rightTokens.some((token) => value.includes(token))) return 'right';
+      return null;
+    }
+
+    function hasMeshChildren(obj) {
+      let hasMesh = false;
+      obj.traverse((child) => {
+        if (child.isMesh) hasMesh = true;
+      });
+      return hasMesh;
+    }
+
+    function findNamedGlovePair(root) {
+      const candidates = { left: null, right: null };
+
+      const countMeshes = (obj) => {
+        let count = 0;
+        obj.traverse((child) => {
+          if (child.isMesh) count += 1;
+        });
+        return count;
+      };
+
+      root.traverse((obj) => {
+        const side = detectSideFromName(obj.name);
+        if (!side || !hasMeshChildren(obj)) return;
+
+        const meshCount = countMeshes(obj);
+        const previous = candidates[side];
+        if (!previous || meshCount > previous.meshCount) {
+          candidates[side] = { node: obj, meshCount };
+        }
+      });
+
+      if (candidates.left?.node && candidates.right?.node) {
+        return { left: candidates.left.node, right: candidates.right.node };
+      }
+      return null;
+    }
+
+    function findSeparatedGlovePair(root) {
+      const meshes = [];
+      root.traverse((child) => {
+        if (child.isMesh) meshes.push(child);
+      });
+      if (meshes.length < 2) return null;
+
+      const globalBox = new THREE.Box3().setFromObject(root);
+      const width = globalBox.max.x - globalBox.min.x;
+      const threshold = Math.max(width * 0.1, 0.01);
+
+      const leftGroup = new THREE.Group();
+      const rightGroup = new THREE.Group();
+
+      meshes.forEach((mesh) => {
+        const bbox = new THREE.Box3().setFromObject(mesh);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        if (center.x < -threshold) leftGroup.attach(mesh);
+        else if (center.x > threshold) rightGroup.attach(mesh);
+      });
+
+      if (leftGroup.children.length && rightGroup.children.length) {
+        return { left: leftGroup, right: rightGroup };
+      }
+      return null;
+    }
+
+    function findPredefinedGlovePair(root) {
+      if (!root) return null;
+      return findNamedGlovePair(root) || findSeparatedGlovePair(root);
+    }
+
+    function createGloveInstances({ prototype, predefinedPair } = {}) {
+      if (!prototype && !predefinedPair) return;
+
+      let left = predefinedPair?.left || null;
+      let right = predefinedPair?.right || null;
+
+      if (!left || !right) {
+        if (!prototype) return;
+        left = prototype.clone(true);
+        right = prototype.clone(true);
+      }
+
       gloveMeshes = { left, right };
       left.visible = true;
       right.visible = true;
-      gloveAnchorGroup.add(left);
-      gloveAnchorGroup.add(right);
+
+      if (predefinedPair) {
+        gloveAnchorGroup.attach(left);
+        gloveAnchorGroup.attach(right);
+      } else {
+        gloveAnchorGroup.add(left);
+        gloveAnchorGroup.add(right);
+      }
     }
 
     function loadGloveById(gloveId) {
@@ -1456,7 +1549,14 @@
         bbox.getCenter(center);
         glovePrototype.position.sub(center);
 
-        createGloveInstances(glovePrototype);
+        glovePrototype.updateMatrixWorld(true);
+
+        const predefinedPair = findPredefinedGlovePair(glovePrototype);
+
+        createGloveInstances({
+          prototype: glovePrototype,
+          predefinedPair,
+        });
       };
 
       if (config.mtlUrl) {
