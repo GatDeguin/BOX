@@ -109,6 +109,14 @@ export function recordFightWin(store: Box9Store, opponent: CharacterId): Progres
   return next;
 }
 
+export function emitFightWin(opponent: CharacterId) {
+  window.dispatchEvent(
+    new CustomEvent('box9:fight-win', {
+      detail: { opponent }
+    })
+  );
+}
+
 export function getGloveLabel(level: GloveLevel): string {
   return GLOVE_LABELS[level] ?? level;
 }
