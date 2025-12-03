@@ -4,6 +4,9 @@ import {
   Mesh,
   Object3D,
   PerspectiveCamera,
+  PointLight,
+  Points,
+  PointsMaterial,
   Scene,
   AnimationMixer,
   AnimationClip,
@@ -12,6 +15,8 @@ import {
   SpotLight,
   Vector2,
   Vector3,
+  BufferGeometry,
+  Float32BufferAttribute,
   WebGLRenderer
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
@@ -59,6 +64,8 @@ interface SceneFlowContext {
   pendingResize: number | null;
   clock: Clock;
   selectionLight: SpotLight | null;
+  ringAccentLight: PointLight | null;
+  ringHighlightParticles: Points | null;
   eventHandlers: Record<string, EventListener>;
   ringModel: Object3D | null;
   fighterModel: Object3D | null;
@@ -142,10 +149,33 @@ const PHASE_EFFECTS: Record<ScenePhase, Record<RingId, EffectProfileName>> = {
 const ALL_RINGS: RingId[] = ['mmaGym', 'bodybuilderArena', 'tysonRing'];
 const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson', 'principal'];
 
-const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
-  mmaGym: { effectProfile: RING_EFFECT_PROFILES.mmaGym, selectionLight: { color: '#7ad8ff', intensity: 1.45 } },
-  bodybuilderArena: { effectProfile: RING_EFFECT_PROFILES.bodybuilderArena, selectionLight: { color: '#ffb55c', intensity: 1.5 } },
-  tysonRing: { effectProfile: RING_EFFECT_PROFILES.tysonRing, selectionLight: { color: '#ff6b81', intensity: 1.6 } }
+const RING_VISUALS: Record<
+  RingId,
+  {
+    effectProfile: EffectProfileName;
+    selectionLight: { color: string; intensity: number };
+    accentLight: { color: string; intensity: number; distance: number };
+    particles: { color: string; size: number };
+  }
+> = {
+  mmaGym: {
+    effectProfile: RING_EFFECT_PROFILES.mmaGym,
+    selectionLight: { color: '#7ad8ff', intensity: 1.45 },
+    accentLight: { color: '#9ad3ff', intensity: 0.85, distance: 22 },
+    particles: { color: '#7ad8ff', size: 0.1 }
+  },
+  bodybuilderArena: {
+    effectProfile: RING_EFFECT_PROFILES.bodybuilderArena,
+    selectionLight: { color: '#ffb55c', intensity: 1.5 },
+    accentLight: { color: '#ffcf85', intensity: 0.92, distance: 20 },
+    particles: { color: '#ffb55c', size: 0.12 }
+  },
+  tysonRing: {
+    effectProfile: RING_EFFECT_PROFILES.tysonRing,
+    selectionLight: { color: '#ff6b81', intensity: 1.6 },
+    accentLight: { color: '#ff9bad', intensity: 1, distance: 23 },
+    particles: { color: '#ff6b81', size: 0.11 }
+  }
 };
 
 let context: SceneFlowContext | null = null;
@@ -184,9 +214,63 @@ function applyRingVisualState(ring: RingId, options: { updateEffects?: boolean }
     context.selectionLight.intensity = visuals.selectionLight.intensity;
   }
 
+  const accentLight = ensureRingAccentLight();
+  if (accentLight) {
+    accentLight.color.set(visuals.accentLight.color);
+    accentLight.intensity = visuals.accentLight.intensity;
+    accentLight.distance = visuals.accentLight.distance;
+  }
+
+  const ringParticles = ensureRingHighlightParticles();
+  if (ringParticles) {
+    const material = ringParticles.material as PointsMaterial;
+    material.color.set(visuals.particles.color);
+    material.size = visuals.particles.size;
+  }
+
   if (updateEffects) {
     applyEffects(visuals.effectProfile);
   }
+}
+
+function ensureRingAccentLight(): PointLight | null {
+  if (!context) return null;
+  if (!context.ringAccentLight) {
+    const light = new PointLight('#ffffff', 0, 20, 2);
+    light.position.set(0, 3.2, 0);
+    context.scene.add(light);
+    context.ringAccentLight = light;
+  }
+
+  return context.ringAccentLight;
+}
+
+function ensureRingHighlightParticles(): Points | null {
+  if (!context) return null;
+  if (!context.ringHighlightParticles) {
+    const particleCount = 120;
+    const radius = 2.8;
+    const positions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const radialOffset = radius + Math.random() * 0.6;
+      const height = 0.3 + Math.random() * 0.35;
+      positions[i * 3] = Math.cos(angle) * radialOffset;
+      positions[i * 3 + 1] = height;
+      positions[i * 3 + 2] = Math.sin(angle) * radialOffset;
+    }
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    const material = new PointsMaterial({ size: 0.1, transparent: true, opacity: 0.6, depthWrite: false });
+    const particles = new Points(geometry, material);
+    particles.position.set(0, 0.2, 0);
+    context.scene.add(particles);
+    context.ringHighlightParticles = particles;
+  }
+
+  return context.ringHighlightParticles;
 }
 
 function ensureAnimationLoop() {
@@ -320,6 +404,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     pendingResize: null,
     clock: new Clock(),
     selectionLight,
+    ringAccentLight: null,
+    ringHighlightParticles: null,
     eventHandlers,
     ringModel: null,
     fighterModel: null,
@@ -482,6 +568,10 @@ function animate(_timestamp?: number) {
   }
 
   context.fighterMixer?.update(delta);
+
+  if (context.ringHighlightParticles) {
+    context.ringHighlightParticles.rotation.y += delta * 0.35;
+  }
 
   composer.render();
   context.animationFrame = requestAnimationFrame(animate);
@@ -960,6 +1050,19 @@ export function destroy(): void {
   if (context.selectionLight) {
     context.scene.remove(context.selectionLight);
     context.scene.remove(context.selectionLight.target);
+  }
+
+  if (context.ringHighlightParticles) {
+    context.scene.remove(context.ringHighlightParticles);
+    context.ringHighlightParticles.geometry.dispose();
+    const material = context.ringHighlightParticles.material as PointsMaterial | PointsMaterial[];
+    (Array.isArray(material) ? material : [material]).forEach((item) => item.dispose());
+    context.ringHighlightParticles = null;
+  }
+
+  if (context.ringAccentLight) {
+    context.scene.remove(context.ringAccentLight);
+    context.ringAccentLight = null;
   }
 
   if (context.renderer.domElement.parentElement === context.container) {
