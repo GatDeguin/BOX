@@ -131,6 +131,16 @@ function createStyles() {
     .box9-check-icon { width: 18px; height: 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #9aa3ba; background: rgba(255,255,255,0.04); flex-shrink: 0; }
     .box9-check-item.done .box9-check-icon { background: rgba(84,255,191,0.16); border-color: rgba(84,255,191,0.5); color: #c7ffe8; }
     .box9-check-item.done { color: #d8e2ff; }
+    .box9-progress-panel { background: rgba(0,0,0,0.32); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; max-width: 420px; pointer-events: auto; box-shadow: 0 18px 45px rgba(0,0,0,0.42); }
+    .box9-progress-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .box9-progress-title { display: flex; flex-direction: column; gap: 4px; }
+    .box9-progress-title strong { letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
+    .box9-progress-title small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
+    .box9-progress-chip { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(122,155,255,0.4); background: rgba(63,92,255,0.14); color: #dce2f5; letter-spacing: 0.04em; font-weight: 800; text-transform: uppercase; }
+    .box9-progress-wins { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .box9-progress-wins li { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; color: #cbd3e8; font-size: 13px; }
+    .box9-progress-wins small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
+    .box9-progress-milestone { margin: 0; color: #dce2f5; line-height: 1.5; font-size: 14px; }
   `;
   document.head.appendChild(style);
 }
@@ -675,32 +685,92 @@ function createHud(
 
   winsRow.append(winsMMA, winsBodybuilder, winsTyson, winsPrincipal);
   fighterCard.append(progressNote, checklist, tysonLockCopy, winsRow);
-  hud.append(topBar, chipsRow, fighterCard);
+  const progressPanel = document.createElement('div');
+  progressPanel.className = 'box9-progress-panel';
 
-  const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
-    const state = store.getState();
-    const progress = progressOverride ?? normalizeProgress(state.progress);
-    ringValue.textContent = ringOptions[state.ring];
-    cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
-    gloveValue.textContent = getGloveLabel(progress.activeGlove);
+  const progressHeader = document.createElement('div');
+  progressHeader.className = 'box9-progress-header';
 
-    const fighter = getFighterDetails(state.character);
-    fighterName.textContent = fighter.name;
-    weightValue.textContent = fighter.weight;
-    reachValue.textContent = fighter.reach;
+  const progressTitle = document.createElement('div');
+  progressTitle.className = 'box9-progress-title';
+  const progressTitleLabel = document.createElement('strong');
+  progressTitleLabel.textContent = 'Panel de progreso';
+  const progressSubtitle = document.createElement('small');
+  progressSubtitle.textContent = 'Resumen de campaña';
+  progressTitle.append(progressTitleLabel, progressSubtitle);
+
+  const activeGloveChip = document.createElement('span');
+  activeGloveChip.className = 'box9-progress-chip';
+  activeGloveChip.textContent = 'Guantes activos';
+
+  progressHeader.append(progressTitle, activeGloveChip);
+
+  const winsList = document.createElement('ul');
+  winsList.className = 'box9-progress-wins';
+
+  const opponents: { id: CharacterId; label: string; total: HTMLSpanElement }[] = [
+    { id: 'mma', label: 'MMA', total: document.createElement('span') },
+    { id: 'bodybuilder', label: 'Bodybuilder', total: document.createElement('span') },
+    { id: 'tyson', label: 'Tyson', total: document.createElement('span') },
+    { id: 'principal', label: 'Principal', total: document.createElement('span') }
+  ];
+
+  opponents.forEach((opponent) => {
+    const item = document.createElement('li');
+
+    const label = document.createElement('small');
+    label.textContent = opponent.label;
+
+    opponent.total.className = 'box9-progress-counter';
+    opponent.total.textContent = '0 victorias';
+
+    item.append(label, opponent.total);
+    winsList.appendChild(item);
+  });
+
+  const milestoneCopy = document.createElement('p');
+  milestoneCopy.className = 'box9-progress-milestone';
+  milestoneCopy.textContent = nextMilestone(normalizeProgress(store.getState().progress));
+
+  progressPanel.append(progressHeader, winsList, milestoneCopy);
+
+  hud.append(topBar, chipsRow, fighterCard, progressPanel);
+
+    const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
+      const state = store.getState();
+      const progress = progressOverride ?? normalizeProgress(state.progress);
+      ringValue.textContent = ringOptions[state.ring];
+      cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
+      gloveValue.textContent = getGloveLabel(progress.activeGlove);
+      activeGloveChip.textContent = getGloveLabel(progress.activeGlove);
+
+      const fighter = getFighterDetails(state.character);
+      fighterName.textContent = fighter.name;
+      weightValue.textContent = fighter.weight;
+      reachValue.textContent = fighter.reach;
     speedValue.textContent = fighter.speed;
     fighterPersonality.textContent = fighter.personality;
 
     setActiveChip(state.character);
 
     winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder} · Principal: ${progress.wins.entrenamiento.principal}`;
-    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
-    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
-    winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
-    progressNote.textContent = nextMilestone(progress);
+      winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
+      winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
+      winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
+      progressNote.textContent = nextMilestone(progress);
+      milestoneCopy.textContent = nextMilestone(progress);
 
-    checklistItems.forEach((item) => {
-      const completed = item.done(progress);
+      opponents.forEach((opponent) => {
+        const totalWins =
+          progress.wins.entrenamiento[opponent.id] +
+          progress.wins.amateur[opponent.id] +
+          progress.wins.pro[opponent.id] +
+          progress.wins.secreto[opponent.id];
+        opponent.total.textContent = `${totalWins} ${totalWins === 1 ? 'victoria' : 'victorias'}`;
+      });
+
+      checklistItems.forEach((item) => {
+        const completed = item.done(progress);
       item.element.classList.toggle('done', completed);
       if (item.icon) item.icon.textContent = completed ? '✔' : '•';
       if (item.text) item.text.textContent = item.label(progress);
