@@ -226,6 +226,7 @@ function createStyles() {
     .box9-progress-wins li { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; color: #cbd3e8; font-size: 13px; }
     .box9-progress-wins small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
     .box9-progress-milestone { margin: 0; color: #dce2f5; line-height: 1.5; font-size: 14px; }
+    .box9-secret-progress { margin: 0; color: #c7ffe8; background: rgba(84,255,191,0.12); border: 1px solid rgba(84,255,191,0.4); padding: 10px 12px; border-radius: 10px; line-height: 1.5; font-weight: 700; }
   `;
   document.head.appendChild(style);
 }
@@ -305,9 +306,12 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
         : 'Guantes de entrenamiento equipados.';
 
       playerState.textContent = `Estado actual: ${gloveLabel}. ${stageCopy}`;
-      unlockHint.textContent = !progress.unlocks.secreto
-        ? nextMilestone(progress)
-        : 'Pista de desbloqueo: ya tienes acceso al dummy secreto, pruébalo para dominar los guantes negros/dorados.';
+      const secretProgressCopy = `Ruta secreta con guantes PRO → MMA ${progress.wins.pro.mma}/1 · Bodybuilder ${progress.wins.pro.bodybuilder}/1 · Tyson ${progress.wins.pro.tyson}/1.`;
+      unlockHint.textContent = progress.unlocks.secreto
+        ? 'Pista de desbloqueo: ya tienes acceso al dummy secreto, pruébalo para dominar los guantes negros/dorados.'
+        : progress.unlocks.pro
+        ? secretProgressCopy
+        : nextMilestone(progress);
     }
   };
 }
@@ -942,11 +946,14 @@ function createHud(
     winsList.appendChild(item);
   });
 
+  const secretRouteProgress = document.createElement('p');
+  secretRouteProgress.className = 'box9-secret-progress';
+
   const milestoneCopy = document.createElement('p');
   milestoneCopy.className = 'box9-progress-milestone';
   milestoneCopy.textContent = nextMilestone(normalizeProgress(store.getState().progress));
 
-  progressPanel.append(progressHeader, winsList, milestoneCopy);
+  progressPanel.append(progressHeader, winsList, secretRouteProgress, milestoneCopy);
 
   hud.append(topBar, chipsRow, fighterCard, gymPanel, progressPanel);
 
@@ -1012,6 +1019,13 @@ function createHud(
         progress.wins.secreto[opponent.id];
       opponent.total.textContent = `${totalWins} ${totalWins === 1 ? 'victoria' : 'victorias'}`;
     });
+
+    const secretSteps: CharacterId[] = ['mma', 'bodybuilder', 'tyson'];
+    const proWins = progress.wins.pro;
+    const completedSecret = secretSteps.filter((id) => proWins[id] > 0).length;
+    secretRouteProgress.textContent = progress.unlocks.secreto
+      ? 'Ruta secreta completada: dummy secreto habilitado.'
+      : `Ruta secreta con guantes PRO: ${completedSecret}/3 · MMA ${proWins.mma}/1 · Bodybuilder ${proWins.bodybuilder}/1 · Tyson ${proWins.tyson}/1.`;
 
     checklistItems.forEach((item) => {
       const completed = item.done(progress);
