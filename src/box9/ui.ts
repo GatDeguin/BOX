@@ -1,4 +1,11 @@
-import { box9Store, Box9Store, RingId, CharacterId, GloveLevel } from './state';
+import {
+  box9Store,
+  Box9Store,
+  RingId,
+  CharacterId,
+  GloveLevel,
+  getDefaultRingForCharacter
+} from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
@@ -43,6 +50,12 @@ const ringOptions: Record<RingId, string> = {
   mmaGym: 'Gimnasio MMA',
   bodybuilderArena: 'Arena Bodybuilder',
   tysonRing: 'Ring Tyson'
+};
+
+const ringDescriptions: Record<RingId, string> = {
+  mmaGym: 'Octágono cerrado, rejas húmedas y presión constante cuerpo a cuerpo.',
+  bodybuilderArena: 'Arena luminosa con cadenas doradas, público cercano y golpes pesados.',
+  tysonRing: 'Ring oscuro con focos fríos, cuerdas tensas y ritmo agresivo a corta distancia.'
 };
 
 const gymVariants: Record<
@@ -123,6 +136,10 @@ function createStyles() {
     .box9-stat small { color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
     .box9-stat strong { color: #f6f7fb; }
     .box9-fighter-personality { margin: 0; color: #b4bed4; line-height: 1.5; }
+    .box9-fighter-meta { display: grid; gap: 6px; margin-top: 2px; }
+    .box9-meta-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 10px; }
+    .box9-meta-label { display: block; color: #9aa3ba; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; font-size: 11px; margin-bottom: 2px; }
+    .box9-meta-copy { margin: 0; color: #cbd3e8; line-height: 1.45; }
     .box9-gym-panel { background: rgba(0,0,0,0.32); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
     .box9-gym-panel h4 { margin: 0; letter-spacing: 0.06em; text-transform: uppercase; color: #e9ecf4; font-size: 13px; }
     .box9-gym-panel p { margin: 0; color: #cbd3e8; line-height: 1.4; font-size: 13px; }
@@ -684,6 +701,30 @@ function createHud(
   fighterPersonality.textContent = 'Competidor táctico, mezcla derribos con boxeo limpio y lee cada distancia.';
   fighterCard.appendChild(fighterPersonality);
 
+  const fighterMeta = document.createElement('div');
+  fighterMeta.className = 'box9-fighter-meta';
+
+  const gymMeta = document.createElement('div');
+  gymMeta.className = 'box9-meta-item';
+  const gymMetaLabel = document.createElement('small');
+  gymMetaLabel.className = 'box9-meta-label';
+  gymMetaLabel.textContent = 'Gimnasio';
+  const gymMetaCopy = document.createElement('p');
+  gymMetaCopy.className = 'box9-meta-copy';
+  gymMeta.append(gymMetaLabel, gymMetaCopy);
+
+  const ringMeta = document.createElement('div');
+  ringMeta.className = 'box9-meta-item';
+  const ringMetaLabel = document.createElement('small');
+  ringMetaLabel.className = 'box9-meta-label';
+  ringMetaLabel.textContent = 'Ring';
+  const ringMetaCopy = document.createElement('p');
+  ringMetaCopy.className = 'box9-meta-copy';
+  ringMeta.append(ringMetaLabel, ringMetaCopy);
+
+  fighterMeta.append(gymMeta, ringMeta);
+  fighterCard.appendChild(fighterMeta);
+
   const progressNote = document.createElement('div');
   progressNote.className = 'box9-progress-note';
   progressNote.textContent = 'Completa las peleas base para desbloquear a Tyson y los guantes secretos.';
@@ -873,6 +914,8 @@ function createHud(
     reachValue.textContent = fighter.reach;
     speedValue.textContent = fighter.speed;
     fighterPersonality.textContent = fighter.personality;
+    const defaultRing = getDefaultRingForCharacter(state.character);
+    ringMetaCopy.textContent = `${ringOptions[defaultRing]} · ${ringDescriptions[defaultRing]}`;
 
     setActiveChip(state.character);
 
@@ -882,6 +925,7 @@ function createHud(
       gymTitle.textContent = `Gimnasio alterno · ${variant.label}`;
       gymDescription.textContent = variant.description;
       gymTitle.dataset.variantId = state.character;
+      gymMetaCopy.textContent = `${variant.label} · ${variant.description}`;
       gymTabButton.disabled = false;
       gymIframeButton.disabled = false;
 
