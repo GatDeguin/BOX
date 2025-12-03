@@ -102,7 +102,8 @@ export function recordFightWin(store: Box9Store, opponent: CharacterId): Progres
   ledger[opponent] = (ledger[opponent] ?? 0) + 1;
 
   const unlocks = deriveUnlocks(wins);
-  const activeGlove = deriveActiveGlove(current.activeGlove, unlocks);
+  const proJustUnlocked = !current.unlocks.pro && unlocks.pro;
+  const activeGlove = proJustUnlocked ? 'pro' : deriveActiveGlove(current.activeGlove, unlocks);
 
   const next = { wins, unlocks, activeGlove };
   store.setState({ progress: next });
