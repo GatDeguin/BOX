@@ -477,6 +477,15 @@
             <input class="debug-input" type="number" step="0.01" id="debug_glove_scale" value="1" />
           </div>
           <div class="debug-row">
+            <label>Rotación base (X / Y / Z)</label>
+            <div class="debug-inputs">
+              <input class="debug-input" type="number" step="1" id="debug_glove_rot_x" value="0" />
+              <input class="debug-input" type="number" step="1" id="debug_glove_rot_y" value="0" />
+              <input class="debug-input" type="number" step="1" id="debug_glove_rot_z" value="0" />
+            </div>
+            <p class="debug-hint">Grados adicionales sobre la rotación base del modelo.</p>
+          </div>
+          <div class="debug-row">
             <label>Offset (X / Y / Z)</label>
             <div class="debug-inputs">
               <input class="debug-input" type="number" step="0.01" id="debug_glove_x" value="0" />
@@ -680,9 +689,20 @@
     let RING_OPTIONS = buildRingOptions(MODEL_OPTIONS);
     let DEFAULT_RING_ID = RING_OPTIONS.find((opt) => opt.id !== 'none')?.id || 'none';
     let ACTIVE_RING_ID = DEFAULT_RING_ID;
+    let ACTIVE_MODEL_ID = DEFAULT_MODEL_ID;
 
     const GLOVE_OPTIONS = [...STATIC_GLOVE_OPTIONS];
     let ACTIVE_GLOVE_ID = GLOVE_OPTIONS[0]?.id || 'none';
+
+    const MODEL_GLOVE_PRESETS = {
+      principal: {
+        rotation: new THREE.Euler(0, Math.PI / 2, 0),
+        offset: new THREE.Vector3(0.008, -0.006, -0.028),
+        scale: 0.01,
+      },
+    };
+
+    const gloveDebugStateByModel = new Map();
 
     const GLOVE_ATTACHMENT = { LANDMARKS: 'landmarks', MODEL: 'model' };
     let gloveAttachmentMode = GLOVE_ATTACHMENT.MODEL;
@@ -848,6 +868,9 @@
       },
       glove: {
         scale: document.getElementById('debug_glove_scale'),
+        rx: document.getElementById('debug_glove_rot_x'),
+        ry: document.getElementById('debug_glove_rot_y'),
+        rz: document.getElementById('debug_glove_rot_z'),
         x: document.getElementById('debug_glove_x'),
         y: document.getElementById('debug_glove_y'),
         z: document.getElementById('debug_glove_z'),
@@ -857,8 +880,11 @@
     const debugTransforms = {
       character: { scale: 1, position: new THREE.Vector3() },
       ring: { scale: 1, position: new THREE.Vector3() },
-      glove: { scale: 1, position: new THREE.Vector3() },
+      glove: { scale: 1, position: new THREE.Vector3(), rotation: new THREE.Euler() },
     };
+
+    const DEG2RAD = Math.PI / 180;
+    const RAD2DEG = 180 / Math.PI;
 
     let cameraMP = null;
     let capturing = false;
@@ -1104,6 +1130,7 @@
     let glovePrototype = null;
     let gloveMeshes = { left: null, right: null };
     let gloveLoadToken = 0;
+    let gloveBaseRotationConfig = new THREE.Quaternion();
     let gloveBaseRotation = new THREE.Quaternion();
     let gloveBaseScale = 1;
     let gloveBaseScaleConfig = 1;
@@ -1340,6 +1367,9 @@
         if (refs.x) refs.x.value = transform.position.x;
         if (refs.y) refs.y.value = transform.position.y;
         if (refs.z) refs.z.value = transform.position.z;
+        if (refs.rx) refs.rx.value = (transform.rotation?.x ?? 0) * RAD2DEG;
+        if (refs.ry) refs.ry.value = (transform.rotation?.y ?? 0) * RAD2DEG;
+        if (refs.rz) refs.rz.value = (transform.rotation?.z ?? 0) * RAD2DEG;
       });
     }
 
@@ -1361,9 +1391,14 @@
 
     function applyGloveDebugTransform() {
       gloveBaseScale = gloveBaseScaleConfig * (debugTransforms.glove.scale || 1);
+      const debugRotation = debugTransforms.glove.rotation || new THREE.Euler();
+      gloveBaseRotation = gloveBaseRotationConfig.clone().multiply(new THREE.Quaternion().setFromEuler(debugRotation));
       gloveOffset = gloveBaseOffset.clone().add(debugTransforms.glove.position);
       if (gloveMeshes.left) gloveMeshes.left.scale.setScalar(gloveBaseScale);
       if (gloveMeshes.right) gloveMeshes.right.scale.setScalar(gloveBaseScale);
+
+      const scale = getCalibrationScale(smoothedWorldLandmarks);
+      updateGloveAnchors(lastPoseLandmarks, scale);
     }
 
     function applyDebugTransform(type) {
@@ -1383,8 +1418,16 @@
         parseInputNumber(refs.y, 0),
         parseInputNumber(refs.z, 0)
       );
+      if (transform.rotation && refs.rx && refs.ry && refs.rz) {
+        transform.rotation.set(
+          parseInputNumber(refs.rx, 0) * DEG2RAD,
+          parseInputNumber(refs.ry, 0) * DEG2RAD,
+          parseInputNumber(refs.rz, 0) * DEG2RAD
+        );
+      }
 
       applyDebugTransform(type);
+      if (type === 'glove') persistGloveDebugState(ACTIVE_MODEL_ID);
     }
 
     function setupDebugInputs() {
@@ -1399,6 +1442,50 @@
 
       updateDebugInputsFromState();
       ['character', 'ring', 'glove'].forEach((type) => handleDebugChange(type));
+    }
+
+    function persistGloveDebugState(modelId) {
+      if (!modelId) return;
+      const transform = debugTransforms.glove;
+      gloveDebugStateByModel.set(modelId, {
+        position: transform.position.clone(),
+        rotation: transform.rotation.clone(),
+        scale: transform.scale,
+      });
+    }
+
+    function getGloveDebugStateForModel(modelId) {
+      if (!modelId) return null;
+      if (gloveDebugStateByModel.has(modelId)) {
+        const stored = gloveDebugStateByModel.get(modelId);
+        return {
+          position: stored.position.clone(),
+          rotation: stored.rotation.clone(),
+          scale: stored.scale,
+        };
+      }
+
+      const preset = MODEL_GLOVE_PRESETS[modelId];
+      if (!preset) return null;
+      return {
+        position: (preset.offset || new THREE.Vector3()).clone(),
+        rotation: (preset.rotation || new THREE.Euler()).clone(),
+        scale: preset.scale,
+      };
+    }
+
+    function applyGlovePresetForModel(modelId) {
+      const state = getGloveDebugStateForModel(modelId) || {};
+      if (state.position) debugTransforms.glove.position.copy(state.position);
+      else debugTransforms.glove.position.set(0, 0, 0);
+
+      if (state.rotation) debugTransforms.glove.rotation.copy(state.rotation);
+      else debugTransforms.glove.rotation.set(0, 0, 0);
+
+      if (typeof state.scale === 'number') debugTransforms.glove.scale = state.scale;
+
+      updateDebugInputsFromState();
+      applyGloveDebugTransform();
     }
 
     function detectSideFromName(name = '') {
@@ -1513,9 +1600,10 @@
 
       disposeGloves();
 
-      gloveBaseRotation = new THREE.Quaternion().setFromEuler(
+      gloveBaseRotationConfig = new THREE.Quaternion().setFromEuler(
         (config && config.baseRotation) || new THREE.Euler(-Math.PI / 2, 0, 0)
       );
+      gloveBaseRotation.copy(gloveBaseRotationConfig);
       gloveBaseScaleConfig = config?.scale ?? 1;
       gloveBaseOffset.copy(config?.offset || new THREE.Vector3());
       applyGloveDebugTransform();
@@ -1901,6 +1989,8 @@
       populateRingSelect();
       populateGloveSelect();
       const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
+      ACTIVE_MODEL_ID = initialModel?.id || DEFAULT_MODEL_ID;
+      applyGlovePresetForModel(ACTIVE_MODEL_ID);
       loadRingById(ringSelect ? ringSelect.value : DEFAULT_RING_ID);
       loadGloveById(gloveSelect ? gloveSelect.value : ACTIVE_GLOVE_ID);
       loadModel(initialModel);
@@ -1945,7 +2035,10 @@
 
     if (modelSelect) {
       modelSelect.addEventListener('change', () => {
+        persistGloveDebugState(ACTIVE_MODEL_ID);
         const config = getModelConfigById(modelSelect.value);
+        ACTIVE_MODEL_ID = config?.id || modelSelect.value;
+        applyGlovePresetForModel(ACTIVE_MODEL_ID);
         loadModel(config);
       });
     }
