@@ -2,7 +2,7 @@ import { box9Store, Box9Store, RingId, CharacterId, GloveLevel } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
-import { getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+import { getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 
 interface GloveRequirement {
   level: GloveLevel;
@@ -126,6 +126,11 @@ function createStyles() {
     .box9-glove-status.unlocked { background: rgba(63,92,255,0.16); color: #d8e2ff; border: 1px solid rgba(122,155,255,0.6); }
     .box9-glove-status.active { background: rgba(84,255,191,0.16); color: #c7ffe8; border: 1px solid rgba(84,255,191,0.6); }
     .box9-glove-condition { color: #cbd3e8; margin: 0; line-height: 1.5; position: relative; z-index: 1; }
+    .box9-checklist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+    .box9-check-item { display: flex; gap: 8px; align-items: flex-start; color: #cbd3e8; font-size: 13px; line-height: 1.4; }
+    .box9-check-icon { width: 18px; height: 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #9aa3ba; background: rgba(255,255,255,0.04); flex-shrink: 0; }
+    .box9-check-item.done .box9-check-icon { background: rgba(84,255,191,0.16); border-color: rgba(84,255,191,0.5); color: #c7ffe8; }
+    .box9-check-item.done { color: #d8e2ff; }
   `;
   document.head.appendChild(style);
 }
@@ -334,6 +339,22 @@ function isGloveUnlocked(level: GloveLevel, progress: ReturnType<typeof normaliz
   return progress.unlocks.secreto;
 }
 
+function getGloveRequirementCopy(level: GloveLevel, progress: ReturnType<typeof normalizeProgress>): string {
+  if (level === 'entrenamiento') {
+    return 'Guantes base disponibles desde el inicio de la campaña.';
+  }
+
+  if (level === 'amateur') {
+    return `Entrenamiento: gana a MMA (${progress.wins.entrenamiento.mma}/1) y Bodybuilder (${progress.wins.entrenamiento.bodybuilder}/1) con guantes base.`;
+  }
+
+  if (level === 'pro') {
+    return `Reto Tyson: derrótalo con los guantes amateur (${progress.wins.amateur.tyson}/1) para conseguir el set PRO.`;
+  }
+
+  return `Ruta secreta: vence con guantes PRO a MMA (${progress.wins.pro.mma}/1), Bodybuilder (${progress.wins.pro.bodybuilder}/1) y Tyson (${progress.wins.pro.tyson}/1).`;
+}
+
 function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => void) {
   const requirements: GloveRequirement[] = [
     { level: 'entrenamiento', condition: 'Guantes base disponibles desde el inicio de la campaña.' },
@@ -358,7 +379,10 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
   const list = document.createElement('div');
   list.className = 'box9-glove-list';
 
-  const cardRefs = new Map<GloveLevel, { card: HTMLDivElement; status: HTMLSpanElement; selectButton: HTMLButtonElement }>();
+  const cardRefs = new Map<
+    GloveLevel,
+    { card: HTMLDivElement; status: HTMLSpanElement; selectButton: HTMLButtonElement; condition: HTMLParagraphElement }
+  >();
 
   requirements.forEach((item) => {
     const card = document.createElement('div');
@@ -397,7 +421,7 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
 
     card.append(header, condition, actionRow);
     list.appendChild(card);
-    cardRefs.set(item.level, { card, status, selectButton });
+    cardRefs.set(item.level, { card, status, selectButton, condition });
   });
 
   const actions = document.createElement('div');
@@ -430,6 +454,8 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
 
         ref.selectButton.disabled = !unlocked;
         ref.selectButton.textContent = isActive ? 'Activo' : unlocked ? 'Activar' : 'Bloqueado';
+
+        ref.condition.textContent = getGloveRequirementCopy(item.level, progress);
       });
     }
   };
@@ -578,6 +604,61 @@ function createHud(
   progressNote.className = 'box9-progress-note';
   progressNote.textContent = 'Completa las peleas base para desbloquear a Tyson y los guantes secretos.';
 
+  const checklist = document.createElement('ul');
+  checklist.className = 'box9-checklist';
+
+  const checklistItems: {
+    id: GloveLevel | 'tyson';
+    element: HTMLLIElement;
+    icon?: HTMLSpanElement;
+    text?: HTMLSpanElement;
+    label: (progress: ReturnType<typeof normalizeProgress>) => string;
+    done: (progress: ReturnType<typeof normalizeProgress>) => boolean;
+  }[] = [
+    {
+      id: 'amateur',
+      element: document.createElement('li'),
+      label: (progress) =>
+        `Base completada: MMA (${progress.wins.entrenamiento.mma}/1) y Bodybuilder (${progress.wins.entrenamiento.bodybuilder}/1) con guantes de entrenamiento.`,
+      done: (progress) => progress.unlocks.amateur
+    },
+    {
+      id: 'tyson',
+      element: document.createElement('li'),
+      label: (progress) =>
+        `Desafío Tyson: repite las victorias con guantes amateur (MMA ${progress.wins.amateur.mma}/1, Bodybuilder ${progress.wins.amateur.bodybuilder}/1) para abrir el combate.`,
+      done: (progress) => progress.unlocks.tyson
+    },
+    {
+      id: 'pro',
+      element: document.createElement('li'),
+      label: (progress) => `Guantes PRO: vence a Tyson con guantes amateur (${progress.wins.amateur.tyson}/1).`,
+      done: (progress) => progress.unlocks.pro
+    },
+    {
+      id: 'secreto',
+      element: document.createElement('li'),
+      label: (progress) =>
+        `Ruta secreta: gana con guantes PRO a MMA (${progress.wins.pro.mma}/1), Bodybuilder (${progress.wins.pro.bodybuilder}/1) y Tyson (${progress.wins.pro.tyson}/1).`,
+      done: (progress) => progress.unlocks.secreto
+    }
+  ];
+
+  checklistItems.forEach((item) => {
+    item.element.className = 'box9-check-item';
+    const icon = document.createElement('span');
+    icon.className = 'box9-check-icon';
+    const text = document.createElement('span');
+    item.element.append(icon, text);
+    item.icon = icon;
+    item.text = text;
+    checklist.appendChild(item.element);
+  });
+
+  const tysonLockCopy = document.createElement('div');
+  tysonLockCopy.className = 'box9-progress-note';
+  tysonLockCopy.style.fontSize = '12px';
+
   const winsRow = document.createElement('div');
   winsRow.className = 'box9-row';
   winsRow.style.justifyContent = 'space-between';
@@ -593,7 +674,7 @@ function createHud(
   });
 
   winsRow.append(winsMMA, winsBodybuilder, winsTyson, winsPrincipal);
-  fighterCard.append(progressNote, winsRow);
+  fighterCard.append(progressNote, checklist, tysonLockCopy, winsRow);
   hud.append(topBar, chipsRow, fighterCard);
 
   const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
@@ -618,11 +699,23 @@ function createHud(
     winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
     progressNote.textContent = nextMilestone(progress);
 
+    checklistItems.forEach((item) => {
+      const completed = item.done(progress);
+      item.element.classList.toggle('done', completed);
+      if (item.icon) item.icon.textContent = completed ? '✔' : '•';
+      if (item.text) item.text.textContent = item.label(progress);
+    });
+
+    const tysonReason = getFightLockReason('tyson', progress);
+    tysonLockCopy.textContent = !progress.unlocks.tyson && tysonReason ? tysonReason : '';
+    tysonLockCopy.style.display = !progress.unlocks.tyson && tysonReason ? 'block' : 'none';
+
     chipList.querySelectorAll<HTMLElement>('.box9-chip').forEach((chip) => {
       const id = chip.dataset.character as CharacterId;
       const locked = id === 'tyson' && !progress.unlocks.tyson;
+      const lockReason = id === 'tyson' ? tysonReason : null;
       chip.classList.toggle('disabled', locked);
-      chip.title = locked ? 'Desbloquéalo ganando las peleas base.' : '';
+      chip.title = locked ? lockReason ?? 'Desbloquéalo ganando las peleas base.' : '';
     });
   };
 
