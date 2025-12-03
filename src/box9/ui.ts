@@ -391,7 +391,13 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
 
   const cardRefs = new Map<
     GloveLevel,
-    { card: HTMLDivElement; status: HTMLSpanElement; selectButton: HTMLButtonElement; condition: HTMLParagraphElement }
+    {
+      card: HTMLDivElement;
+      status: HTMLSpanElement;
+      selectButton: HTMLButtonElement;
+      condition: HTMLParagraphElement;
+      stateCopy: HTMLSpanElement;
+    }
   >();
 
   requirements.forEach((item) => {
@@ -429,9 +435,12 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
 
     actionRow.appendChild(selectButton);
 
-    card.append(header, condition, actionRow);
+    const stateCopy = document.createElement('small');
+    stateCopy.className = 'box9-progress-note';
+
+    card.append(header, condition, actionRow, stateCopy);
     list.appendChild(card);
-    cardRefs.set(item.level, { card, status, selectButton, condition });
+    cardRefs.set(item.level, { card, status, selectButton, condition, stateCopy });
   });
 
   const actions = document.createElement('div');
@@ -455,6 +464,7 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
 
         const unlocked = isGloveUnlocked(item.level, progress);
         const isActive = progress.activeGlove === item.level;
+        const label = getGloveLabel(item.level);
 
         ref.card.classList.toggle('active', isActive);
         ref.card.classList.toggle('locked', !unlocked);
@@ -462,8 +472,15 @@ function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => 
         ref.status.className = 'box9-glove-status ' + (isActive ? 'active' : unlocked ? 'unlocked' : 'locked');
         ref.status.textContent = isActive ? 'Activo' : unlocked ? 'Desbloqueado' : 'Bloqueado';
 
-        ref.selectButton.disabled = !unlocked;
-        ref.selectButton.textContent = isActive ? 'Activo' : unlocked ? 'Activar' : 'Bloqueado';
+        ref.selectButton.disabled = !unlocked || isActive;
+        ref.selectButton.textContent = isActive ? `${label} equipados` : `Equipar ${label}`;
+        ref.selectButton.style.display = unlocked && !isActive ? '' : 'none';
+
+        ref.stateCopy.textContent = isActive
+          ? `${label} activos`
+          : unlocked
+            ? `${label} desbloqueados`
+            : `${label} bloqueados`;
 
         ref.condition.textContent = getGloveRequirementCopy(item.level, progress);
       });
