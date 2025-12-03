@@ -17,7 +17,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import { AssetHooks, AssetManager, LoadedAsset } from './assets';
-import { box9Store, CharacterId, RingId } from './state';
+import { box9Store, CharacterId, RingId, getDefaultRingForCharacter } from './state';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
@@ -533,6 +533,12 @@ export function activateSelection(initialCharacter?: CharacterId): void {
 }
 
 export function confirmCharacterSelection(character: CharacterId): void {
+  const preferredRing = getDefaultRingForCharacter(character);
+  if (box9Store.getState().ring !== preferredRing) {
+    box9Store.setState({ ring: preferredRing });
+    window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: preferredRing } }));
+  }
+
   playPoseAnimation(character);
   window.dispatchEvent(new CustomEvent('box9:character-confirmed', { detail: { character } }));
 }
