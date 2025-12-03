@@ -198,6 +198,28 @@ function createStyles() {
     .box9-asset-section ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .box9-asset-section li { color: #dce2f5; line-height: 1.4; font-size: 14px; }
     .box9-asset-section small { display: block; color: #9aa3ba; font-size: 12px; }
+    .box9-dummy { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 18px; background: radial-gradient(circle at 50% 20%, rgba(255,255,255,0.05), rgba(3,5,8,0.9)); pointer-events: auto; }
+    .box9-dummy.visible { display: flex; }
+    .box9-dummy-panel { width: min(1080px, 100%); background: rgba(5,7,12,0.92); border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.55); display: grid; gap: 12px; padding: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .box9-dummy-hero { display: grid; gap: 10px; }
+    .box9-dummy-hero h2 { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-dummy-hero p { margin: 0; color: #cbd3e8; line-height: 1.5; }
+    .box9-dummy-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,215,0,0.4); color: #ffe8a3; background: rgba(255,215,0,0.08); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .box9-dummy-embed { width: 100%; height: 320px; border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); background: #05070c; }
+    .box9-dummy-embed iframe { width: 100%; height: 100%; border: 0; background: #05070c; }
+    .box9-dummy-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .box9-dummy-controls .box9-button { flex: 1; min-width: 180px; }
+    .box9-dummy-progress { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+    .box9-dummy-bar { position: relative; height: 12px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.14); }
+    .box9-dummy-bar .indicator { position: absolute; top: 0; bottom: 0; width: 8px; background: linear-gradient(135deg, #7a9bff, #3f5cff); border-radius: 6px; box-shadow: 0 0 10px rgba(122,155,255,0.6); transform: translateX(-50%); left: calc(var(--progress, 0) * 100%); transition: left 60ms linear; }
+    .box9-dummy-bar .window { position: absolute; top: 1px; bottom: 1px; width: 12px; background: rgba(84,255,191,0.3); border-radius: 6px; transform: translateX(-50%); left: calc(var(--window, 0) * 100%); border: 1px solid rgba(84,255,191,0.6); }
+    .box9-dummy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+    .box9-dummy-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px; display: grid; gap: 6px; }
+    .box9-dummy-card h4 { margin: 0; letter-spacing: 0.06em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-dummy-card p { margin: 0; color: #cbd3e8; line-height: 1.45; }
+    .box9-dummy-score { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-weight: 700; color: #e9ecf4; }
+    .box9-dummy-score span { padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); }
+    .box9-dummy-alert { padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,215,0,0.35); background: rgba(255,215,0,0.08); color: #ffe8a3; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; text-align: center; }
     .box9-glove-modal { width: min(540px, 95vw); background: linear-gradient(135deg, rgba(12,17,29,0.96), rgba(16,23,42,0.92)); }
     .box9-glove-list { display: grid; gap: 10px; margin: 12px 0; }
     .box9-glove-card { border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px; display: grid; gap: 6px; position: relative; overflow: hidden; }
@@ -449,6 +471,236 @@ function createAssetModal(onClose: () => void) {
   backdrop.appendChild(modal);
 
   return { backdrop };
+}
+
+function createDummyExperience(onClose: () => void) {
+  const overlay = document.createElement('div');
+  overlay.className = 'box9-dummy';
+
+  const panel = document.createElement('div');
+  panel.className = 'box9-dummy-panel';
+
+  const hero = document.createElement('div');
+  hero.className = 'box9-dummy-hero';
+
+  const badge = document.createElement('div');
+  badge.className = 'box9-dummy-badge';
+  badge.textContent = 'Ruta secreta · Timing drills';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Dummy de precisión';
+
+  const copy = document.createElement('p');
+  copy.textContent =
+    'Ritmos cortos, ventanas de impacto y combos encadenados. Practica el timing del set negro/dorado sobre un dummy inspirado en BOX8.';
+
+  const alert = document.createElement('div');
+  alert.className = 'box9-dummy-alert';
+  alert.textContent = 'Solo disponible con los guantes secretos activos.';
+
+  hero.append(badge, title, copy, alert);
+
+  const embed = document.createElement('div');
+  embed.className = 'box9-dummy-embed';
+  const iframe = document.createElement('iframe');
+  iframe.src = 'sacobox8.html';
+  iframe.title = 'BOX8 Dummy';
+  iframe.loading = 'lazy';
+  embed.appendChild(iframe);
+
+  const controls = document.createElement('div');
+  controls.className = 'box9-dummy-controls';
+
+  const startButton = document.createElement('button');
+  startButton.className = 'box9-button';
+  startButton.textContent = 'Iniciar reto de timing';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'box9-button box9-secondary';
+  closeButton.textContent = 'Volver a BOX9';
+
+  const progressPanel = document.createElement('div');
+  progressPanel.className = 'box9-dummy-progress';
+
+  const status = document.createElement('div');
+  status.className = 'box9-progress-note';
+  status.textContent = 'Pulsa Espacio cuando el indicador cruce las ventanas verdes.';
+
+  const bar = document.createElement('div');
+  bar.className = 'box9-dummy-bar';
+  const indicator = document.createElement('div');
+  indicator.className = 'indicator';
+  bar.appendChild(indicator);
+
+  const targetWindows = [0.18, 0.52, 0.82];
+  targetWindows.forEach((position) => {
+    const windowMarker = document.createElement('div');
+    windowMarker.className = 'window';
+    windowMarker.style.setProperty('--window', position.toString());
+    bar.appendChild(windowMarker);
+  });
+
+  const score = document.createElement('div');
+  score.className = 'box9-dummy-score';
+  const hits = document.createElement('span');
+  const streak = document.createElement('span');
+  const fails = document.createElement('span');
+  score.append(hits, streak, fails);
+
+  const cardGrid = document.createElement('div');
+  cardGrid.className = 'box9-dummy-grid';
+
+  const cards: { title: string; copy: string }[] = [
+    {
+      title: 'Timing corto',
+      copy: 'Ciclos de 1.4s basados en la escena BOX8. Imagina que el dummy te devuelve el golpe.'
+    },
+    {
+      title: 'Ventanas secretas',
+      copy: 'Tres ventanas verdes (jab, cross, upper). Pulsa en el centro para sumar precisión y mantener el ritmo.'
+    },
+    {
+      title: 'Cadena final',
+      copy: 'Completa 9 impactos seguidos para marcar el drill. Reinicia si pierdes el pulso o rompes la racha.'
+    }
+  ];
+
+  cards.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'box9-dummy-card';
+    const cardTitle = document.createElement('h4');
+    cardTitle.textContent = item.title;
+    const cardCopy = document.createElement('p');
+    cardCopy.textContent = item.copy;
+    card.append(cardTitle, cardCopy);
+    cardGrid.appendChild(card);
+  });
+
+  progressPanel.append(status, bar, score);
+
+  controls.append(startButton, closeButton);
+  panel.append(hero, embed, controls, progressPanel, cardGrid);
+  overlay.appendChild(panel);
+
+  const cycleDuration = 1400;
+  const tolerance = 0.07;
+  const targetScore = 9;
+  let animationFrame: number | null = null;
+  let startTime = 0;
+  let totalHits = 0;
+  let totalFails = 0;
+  let currentStreak = 0;
+  let visible = false;
+  let running = false;
+
+  const refreshScore = () => {
+    hits.textContent = `Aciertos: ${totalHits}/${targetScore}`;
+    streak.textContent = `Racha: ${currentStreak}`;
+    fails.textContent = `Fallos: ${totalFails}`;
+  };
+
+  const stopLoop = () => {
+    if (animationFrame !== null) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    }
+  };
+
+  const updateIndicator = (timestamp: number) => {
+    if (!running) return;
+    const elapsed = (timestamp - startTime) % cycleDuration;
+    const progress = Math.max(0, Math.min(1, elapsed / cycleDuration));
+    indicator.style.setProperty('--progress', progress.toString());
+    animationFrame = requestAnimationFrame(updateIndicator);
+  };
+
+  const startChallenge = () => {
+    totalHits = 0;
+    totalFails = 0;
+    currentStreak = 0;
+    refreshScore();
+    status.textContent = 'Pulsa Espacio cuando el indicador cruce las ventanas verdes.';
+    startTime = performance.now();
+    running = true;
+    stopLoop();
+    animationFrame = requestAnimationFrame(updateIndicator);
+  };
+
+  const finishChallenge = () => {
+    running = false;
+    stopLoop();
+    status.textContent = 'Drill completado: ritmo de dummy dominado. Puedes reiniciar para afinar más.';
+  };
+
+  const handleTimingInput = (cycleProgress: number) => {
+    const bestWindow = targetWindows.reduce(
+      (best, windowPosition) => {
+        const diff = Math.min(Math.abs(cycleProgress - windowPosition), 1 - Math.abs(cycleProgress - windowPosition));
+        if (diff < best.diff) {
+          return { diff, windowPosition };
+        }
+        return best;
+      },
+      { diff: Number.POSITIVE_INFINITY, windowPosition: targetWindows[0] }
+    );
+
+    if (bestWindow.diff <= tolerance) {
+      totalHits += 1;
+      currentStreak += 1;
+      status.textContent = 'Timing limpio, mantén el flujo.';
+      if (totalHits >= targetScore) {
+        finishChallenge();
+      }
+    } else {
+      totalFails += 1;
+      currentStreak = 0;
+      status.textContent = 'Te adelantaste o llegaste tarde. Respira y ajusta el ritmo.';
+    }
+
+    refreshScore();
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (!visible || !running) return;
+    if (event.code !== 'Space' && event.code !== 'Enter') return;
+    event.preventDefault();
+    const elapsed = (performance.now() - startTime) % cycleDuration;
+    const cycleProgress = elapsed / cycleDuration;
+    handleTimingInput(cycleProgress);
+  };
+
+  startButton.addEventListener('click', () => {
+    running = true;
+    startChallenge();
+  });
+
+  closeButton.addEventListener('click', () => {
+    visible = false;
+    running = false;
+    stopLoop();
+    overlay.classList.remove('visible');
+    document.removeEventListener('keydown', handleKeydown);
+    onClose();
+  });
+
+  const open = () => {
+    if (visible) return;
+    visible = true;
+    overlay.classList.add('visible');
+    startChallenge();
+    document.addEventListener('keydown', handleKeydown);
+  };
+
+  const close = () => {
+    visible = false;
+    running = false;
+    stopLoop();
+    overlay.classList.remove('visible');
+    document.removeEventListener('keydown', handleKeydown);
+    onClose();
+  };
+
+  return { overlay, open, close };
 }
 
 function isGloveUnlocked(level: GloveLevel, progress: ReturnType<typeof normalizeProgress>): boolean {
@@ -1055,6 +1307,9 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
   window.box9RegisterWin = (opponent: CharacterId) => emitFightWin(opponent);
 
+  let dummyActive = false;
+  let openDummyScene: (() => void) | null = null;
+
   const container = document.createElement('div');
   container.className = 'box9-ui';
 
@@ -1108,7 +1363,13 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
   const { overlay, updateLocks } = createOverlay((mode) => {
     const progress = normalizeProgress(store.getState().progress);
-    if (mode === 'dummy' && !progress.unlocks.secreto) return;
+    if (mode === 'dummy') {
+      if (!progress.unlocks.secreto) return;
+      dummyActive = true;
+      syncLayout();
+      openDummyScene?.();
+      return;
+    }
 
     emitSceneEvent('mode-selected', { mode });
     store.setState({ selectionStarted: true });
@@ -1174,6 +1435,22 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       emitSceneEvent('character-selected', { character });
     }
   );
+
+  const { overlay: dummyOverlay, open: openDummy } = createDummyExperience(() => {
+    dummyActive = false;
+    syncLayout();
+  });
+
+  openDummyScene = () => {
+    dummyActive = true;
+    syncLayout();
+    openDummy();
+  };
+
+  const syncLayout = (state: Box9State = store.getState()) => {
+    overlay.style.display = !dummyActive && !state.selectionStarted ? 'flex' : 'none';
+    hud.style.display = !dummyActive && state.selectionStarted ? 'flex' : 'none';
+  };
 
   const lockWarning = document.createElement('div');
   lockWarning.className = 'box9-warning';
@@ -1281,8 +1558,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
 
     updateLocks(progress);
-    overlay.style.display = state.selectionStarted ? 'none' : 'flex';
-    hud.style.display = state.selectionStarted ? 'flex' : 'none';
+    syncLayout(state);
     updateHud(progress);
     updateGlovePanel(progress);
 
@@ -1295,19 +1571,21 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
 
     helpPanels.forEach((panel) => {
-      panel.style.display = state.selectionStarted ? 'none' : '';
-      panel.toggleAttribute('aria-hidden', state.selectionStarted);
+      const hidden = state.selectionStarted || dummyActive;
+      panel.style.display = hidden ? 'none' : '';
+      panel.toggleAttribute('aria-hidden', hidden);
     });
 
     cardPanels.forEach((panel) => {
-      panel.style.display = state.selectionStarted ? '' : 'none';
-      panel.toggleAttribute('aria-hidden', !state.selectionStarted);
+      const visible = state.selectionStarted && !dummyActive;
+      panel.style.display = visible ? '' : 'none';
+      panel.toggleAttribute('aria-hidden', !visible);
     });
 
     lastProgress = progress;
   });
 
-  container.append(overlay, hud, backdrop, assetBackdrop, gloveBackdrop, loadingOverlay);
+  container.append(overlay, hud, backdrop, assetBackdrop, gloveBackdrop, loadingOverlay, dummyOverlay);
   root.appendChild(container);
   initSelectionControls(store, {
     onStartSelection: (character) => {
