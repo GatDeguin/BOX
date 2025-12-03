@@ -33,10 +33,18 @@ function deriveUnlocks(wins: WinLedger) {
 }
 
 function deriveActiveGlove(current: GloveLevel, unlocks: ProgressionState['unlocks']): GloveLevel {
+  const isUnlocked = (level: GloveLevel) => {
+    if (level === 'entrenamiento') return true;
+    if (level === 'amateur') return unlocks.amateur;
+    if (level === 'pro') return unlocks.pro;
+    return unlocks.secreto;
+  };
+
+  if (isUnlocked(current)) return current;
   if (unlocks.secreto) return 'secreto';
   if (unlocks.pro) return 'pro';
   if (unlocks.amateur) return 'amateur';
-  return current ?? 'entrenamiento';
+  return 'entrenamiento';
 }
 
 export function normalizeProgress(progress?: ProgressionState): ProgressionState {
