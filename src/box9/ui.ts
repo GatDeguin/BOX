@@ -334,7 +334,7 @@ function isGloveUnlocked(level: GloveLevel, progress: ReturnType<typeof normaliz
   return progress.unlocks.secreto;
 }
 
-function createGlovePanel(onClose: () => void) {
+function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => void) {
   const requirements: GloveRequirement[] = [
     { level: 'entrenamiento', condition: 'Guantes base disponibles desde el inicio de la campaña.' },
     { level: 'amateur', condition: 'Gana a MMA y Bodybuilder con los guantes de entrenamiento para desbloquearlos.' },
@@ -358,7 +358,7 @@ function createGlovePanel(onClose: () => void) {
   const list = document.createElement('div');
   list.className = 'box9-glove-list';
 
-  const cardRefs = new Map<GloveLevel, { card: HTMLDivElement; status: HTMLSpanElement }>();
+  const cardRefs = new Map<GloveLevel, { card: HTMLDivElement; status: HTMLSpanElement; selectButton: HTMLButtonElement }>();
 
   requirements.forEach((item) => {
     const card = document.createElement('div');
@@ -382,9 +382,22 @@ function createGlovePanel(onClose: () => void) {
     condition.className = 'box9-glove-condition';
     condition.textContent = item.condition;
 
-    card.append(header, condition);
+    const actionRow = document.createElement('div');
+    actionRow.className = 'box9-row';
+
+    const selectButton = document.createElement('button');
+    selectButton.className = 'box9-button box9-secondary';
+    selectButton.textContent = 'Activar';
+    selectButton.addEventListener('click', () => {
+      if (selectButton.disabled) return;
+      onSelect(item.level);
+    });
+
+    actionRow.appendChild(selectButton);
+
+    card.append(header, condition, actionRow);
     list.appendChild(card);
-    cardRefs.set(item.level, { card, status });
+    cardRefs.set(item.level, { card, status, selectButton });
   });
 
   const actions = document.createElement('div');
@@ -414,6 +427,9 @@ function createGlovePanel(onClose: () => void) {
 
         ref.status.className = 'box9-glove-status ' + (isActive ? 'active' : unlocked ? 'unlocked' : 'locked');
         ref.status.textContent = isActive ? 'Activo' : unlocked ? 'Desbloqueado' : 'Bloqueado';
+
+        ref.selectButton.disabled = !unlocked;
+        ref.selectButton.textContent = isActive ? 'Activo' : unlocked ? 'Activar' : 'Bloqueado';
       });
     }
   };
@@ -694,9 +710,17 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     assetBackdrop.style.display = 'none';
   });
 
-  const { backdrop: gloveBackdrop, update: updateGlovePanel } = createGlovePanel(() => {
-    gloveBackdrop.style.display = 'none';
-  });
+  const { backdrop: gloveBackdrop, update: updateGlovePanel } = createGlovePanel(
+    () => {
+      gloveBackdrop.style.display = 'none';
+    },
+    (level) => {
+      const progress = normalizeProgress(store.getState().progress);
+      if (!isGloveUnlocked(level, progress)) return;
+      const nextProgress = normalizeProgress({ ...progress, activeGlove: level });
+      store.setState({ progress: nextProgress });
+    }
+  );
 
   const { hud, update: updateHud } = createHud(
     store,
