@@ -9,7 +9,13 @@ import {
 import { getFighterDetails, initSelectionControls } from './selection';
 import { subscribeAssetManager } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
-import { getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+import { emitFightWin, getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+
+declare global {
+  interface Window {
+    box9RegisterWin?: (opponent: CharacterId) => void;
+  }
+}
 
 interface GloveRequirement {
   level: GloveLevel;
@@ -95,6 +101,13 @@ const characterOptions: Record<CharacterId, string> = {
   principal: 'Principal'
 };
 
+const WIN_DIALOGUES: Record<CharacterId, string> = {
+  mma: 'MMA baja la guardia y asiente: "Buen timing, la jaula te espera cuando quieras."',
+  bodybuilder: 'El Bodybuilder respira hondo: "Ok, hoy fuiste más rápido. Mañana nos vemos en la banca."',
+  tyson: 'Tyson suelta una media sonrisa: "Aguantaste mi fuego. Sigue puliendo esa defensa."',
+  principal: 'El principal levanta las manos: "Clase suspendida. Has ganado esta ronda."'
+};
+
 function emitSceneEvent(name: string, detail?: unknown) {
   window.dispatchEvent(new CustomEvent(`box9:${name}`, { detail }));
 }
@@ -129,6 +142,9 @@ function createStyles() {
     .box9-status strong { color: #f6f7fb; }
     .box9-progress-note { color: #b4bed4; font-size: 13px; line-height: 1.4; }
     .box9-warning { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(255, 107, 129, 0.16); border: 1px solid rgba(255, 107, 129, 0.45); color: #ffd4dc; padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); pointer-events: none; opacity: 0; transition: opacity 160ms ease; max-width: 520px; text-align: center; }
+    .box9-dialogue { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.4); color: #d7ffe6; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); pointer-events: none; opacity: 0; transition: opacity 160ms ease; max-width: 640px; display: grid; gap: 4px; text-align: center; backdrop-filter: blur(6px); }
+    .box9-dialogue strong { letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; }
+    .box9-dialogue.visible { opacity: 1; }
     .box9-fighter-card { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; max-width: 320px; pointer-events: auto; box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
     .box9-fighter-name { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; color: #e9ecf4; }
     .box9-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -607,6 +623,15 @@ function createHud(
   freeCamButton.textContent = 'Cam. libre';
   freeCamButton.addEventListener('click', () => onToggleFreeCam());
 
+  const victoryButton = document.createElement('button');
+  victoryButton.className = 'box9-button box9-secondary';
+  victoryButton.textContent = 'Registrar victoria';
+  victoryButton.title = 'Marca al rival actual como derrotado para desbloquear progresión.';
+  victoryButton.addEventListener('click', () => {
+    const opponent = store.getState().character;
+    emitFightWin(opponent);
+  });
+
   const optionsButton = document.createElement('button');
   optionsButton.className = 'box9-button';
   optionsButton.textContent = 'Opciones';
@@ -622,7 +647,7 @@ function createHud(
   glovesButton.textContent = 'Guantes';
   glovesButton.addEventListener('click', () => onOpenGlovePanel());
 
-  actions.append(freeCamButton, optionsButton, assetsButton, glovesButton);
+  actions.append(freeCamButton, victoryButton, optionsButton, assetsButton, glovesButton);
   topBar.append(status, actions);
 
   const chipsRow = document.createElement('div');
@@ -988,6 +1013,8 @@ function createHud(
 export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   createStyles();
 
+  window.box9RegisterWin = (opponent: CharacterId) => emitFightWin(opponent);
+
   const container = document.createElement('div');
   container.className = 'box9-ui';
 
@@ -1112,6 +1139,31 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   lockWarning.className = 'box9-warning';
   container.appendChild(lockWarning);
 
+  const winDialogue = document.createElement('div');
+  winDialogue.className = 'box9-dialogue';
+  const winTitle = document.createElement('strong');
+  winTitle.textContent = 'Victoria registrada';
+  const winCopy = document.createElement('p');
+  winCopy.textContent = 'Tu rival comenta algo sobre la derrota.';
+  winCopy.style.margin = '0';
+  winDialogue.append(winTitle, winCopy);
+  container.appendChild(winDialogue);
+
+  let winDialogueTimeout: number | null = null;
+  const showWinDialogue = (opponent: CharacterId) => {
+    const fighter = getFighterDetails(opponent);
+    winTitle.textContent = `${fighter.name} derrotado`;
+    winCopy.textContent = WIN_DIALOGUES[opponent] ?? 'Victoria registrada.';
+    winDialogue.classList.add('visible');
+    if (winDialogueTimeout !== null) {
+      window.clearTimeout(winDialogueTimeout);
+    }
+    winDialogueTimeout = window.setTimeout(() => {
+      winDialogue.classList.remove('visible');
+      winDialogueTimeout = null;
+    }, 2600);
+  };
+
   let lockWarningTimeout: number | null = null;
   const showLockWarning = (message: string) => {
     lockWarning.textContent = message;
@@ -1129,6 +1181,12 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     const detail = (event as CustomEvent<{ character?: CharacterId; reason?: string }>).detail;
     if (!detail?.character) return;
     showLockWarning(detail.reason ?? 'Necesitas más victorias para desbloquear este combate.');
+  });
+
+  window.addEventListener('box9:fight-win', (event) => {
+    const detail = (event as CustomEvent<{ opponent?: CharacterId }>).detail;
+    if (!detail?.opponent) return;
+    showWinDialogue(detail.opponent);
   });
 
   let lastSelectionStarted = store.getState().selectionStarted;
