@@ -127,19 +127,25 @@ const DEFAULT_OPTIONS: Required<Pick<SceneFlowOptions, 'backgroundColor' | 'focu
   maxBlur: 0.01
 };
 
-const PHASE_EFFECTS: Record<ScenePhase, EffectProfileName> = {
-  intro: 'championNight',
-  selection: 'mmaGym',
-  free: 'ironShow'
+const RING_EFFECT_PROFILES: Record<RingId, EffectProfileName> = {
+  mmaGym: 'mmaGym',
+  bodybuilderArena: 'ironShow',
+  tysonRing: 'championNight'
+};
+
+const PHASE_EFFECTS: Record<ScenePhase, Record<RingId, EffectProfileName>> = {
+  intro: { ...RING_EFFECT_PROFILES },
+  selection: { ...RING_EFFECT_PROFILES },
+  free: { ...RING_EFFECT_PROFILES }
 };
 
 const ALL_RINGS: RingId[] = ['mmaGym', 'bodybuilderArena', 'tysonRing'];
 const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson', 'principal'];
 
 const RING_VISUALS: Record<RingId, { effectProfile: EffectProfileName; selectionLight: { color: string; intensity: number } }> = {
-  mmaGym: { effectProfile: 'mmaGym', selectionLight: { color: '#7ad8ff', intensity: 1.45 } },
-  bodybuilderArena: { effectProfile: 'ironShow', selectionLight: { color: '#ffb55c', intensity: 1.5 } },
-  tysonRing: { effectProfile: 'championNight', selectionLight: { color: '#ff6b81', intensity: 1.6 } }
+  mmaGym: { effectProfile: RING_EFFECT_PROFILES.mmaGym, selectionLight: { color: '#7ad8ff', intensity: 1.45 } },
+  bodybuilderArena: { effectProfile: RING_EFFECT_PROFILES.bodybuilderArena, selectionLight: { color: '#ffb55c', intensity: 1.5 } },
+  tysonRing: { effectProfile: RING_EFFECT_PROFILES.tysonRing, selectionLight: { color: '#ff6b81', intensity: 1.6 } }
 };
 
 let context: SceneFlowContext | null = null;
@@ -160,8 +166,10 @@ let currentFighterModel: Object3D | null = null;
 
 function applyPhaseEffects(phase: ScenePhase) {
   const ring = box9Store.getState().ring;
-  const profile = RING_VISUALS[ring]?.effectProfile ?? PHASE_EFFECTS[phase];
-  applyEffects(profile);
+  const profile = PHASE_EFFECTS[phase]?.[ring] ?? RING_VISUALS[ring]?.effectProfile;
+  if (profile) {
+    applyEffects(profile);
+  }
 }
 
 function applyRingVisualState(ring: RingId, options: { updateEffects?: boolean } = {}) {
