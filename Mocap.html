@@ -2812,6 +2812,28 @@
       });
     }
 
+    const povInputElements = [
+      povInputRefs.offsetX,
+      povInputRefs.offsetY,
+      povInputRefs.offsetZ,
+      povInputRefs.rotXDeg,
+      povInputRefs.rotYDeg,
+      povInputRefs.rotZDeg,
+    ].filter(Boolean);
+
+    if (povInputElements.length) {
+      const handlePovInputChange = () => {
+        syncPovConfigFromInputs();
+        applyPovConfig();
+        if (povActive) updatePovCamera(true);
+      };
+
+      povInputElements.forEach((inputEl) => {
+        inputEl.addEventListener('input', handlePovInputChange);
+        inputEl.addEventListener('change', handlePovInputChange);
+      });
+    }
+
     if (glovePresetSaveButton) {
       glovePresetSaveButton.addEventListener('click', () => {
         persistGloveDebugState(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
