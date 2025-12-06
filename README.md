@@ -1,9 +1,18 @@
 # BOX
 
 ## Requisitos previos
-- Node.js 18+ y npm
+- Node.js 18+ y npm (solo necesarios para trabajar con el bundle de BOX9).
 
-## Construir y servir BOX9
+## Entradas disponibles
+- `index.html`: hub principal con enlaces a todas las escenas y demos.
+- `box9.html`: juego principal BOX9 (requiere `npm run build` para regenerar `public/box9.js`).
+- `box10.html`, `box11.html`, `box12.html`, `box13.html`: variaciones y pruebas de ring/bolsa.
+- `Mocap.html`, `RING.html`, `sacobox8.html`: escenas de mocap, recorrido de gimnasio y POV de saco.
+
+## Cómo servir el proyecto
+La mayoría de las escenas son HTML estáticos. Basta con servir la raíz del proyecto con tu servidor favorito (por ejemplo `npx http-server .`) y abrir `index.html`.
+
+### Construir y ejecutar BOX9
 1. Instala dependencias:
    ```bash
    npm install
@@ -12,8 +21,8 @@
    ```bash
    npm run build
    ```
-3. Sirve la carpeta del proyecto con tu servidor estático preferido (por ejemplo, `npx http-server .`) y abre `box9.html` en el navegador.
+3. Sirve la carpeta del proyecto y abre `box9.html` desde el navegador.
 
-### Desarrollo
+### Desarrollo de BOX9
 - `npm run dev` levanta el servidor de Vite para trabajar en caliente sobre `src/box9`.
 - `npm run preview` sirve la carpeta de salida (`public/`) tras ejecutar un build.
