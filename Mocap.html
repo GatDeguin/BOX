@@ -192,10 +192,36 @@
       outline: none;
     }
 
-    .pov-hint {
-      max-width: 520px;
-      line-height: 1.2;
-    }
+      .pov-hint {
+        max-width: 520px;
+        line-height: 1.2;
+      }
+
+      .lens-controls {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 260px;
+      }
+
+      .lens-row {
+        display: grid;
+        grid-template-columns: 1.2fr 2fr 0.8fr;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .lens-slider {
+        width: 100%;
+        accent-color: #60a5fa;
+      }
+
+      .lens-value {
+        font-variant-numeric: tabular-nums;
+        font-size: 0.75rem;
+        opacity: 0.9;
+        text-align: right;
+      }
 
     .toggle-active {
       background: #16a34a;
@@ -502,11 +528,11 @@
           <div class="control-group">
             <button id="chin_pov_btn" type="button">Cam. mentón/POV</button>
           </div>
-          <div class="control-group pov-controls">
-            <div class="pov-input-row">
-              <label class="hint" for="pov_offset_x">Offset POV (m):</label>
-              <input id="pov_offset_x" class="pov-input" type="number" step="0.01" />
-              <input id="pov_offset_y" class="pov-input" type="number" step="0.01" />
+            <div class="control-group pov-controls">
+              <div class="pov-input-row">
+                <label class="hint" for="pov_offset_x">Offset POV (m):</label>
+                <input id="pov_offset_x" class="pov-input" type="number" step="0.01" />
+                <input id="pov_offset_y" class="pov-input" type="number" step="0.01" />
               <input id="pov_offset_z" class="pov-input" type="number" step="0.01" />
             </div>
             <div class="pov-input-row">
@@ -517,14 +543,68 @@
               <button id="chin_pov_save_btn" type="button">Guardar POV</button>
             </div>
             <div class="hint pov-hint">
-              Valores por defecto: offset (0, -0.08, -0.25), rotación (X: 0°, Y: 180°, Z: 0°) en orden YXZ. Tocá "Guardar
-              POV" para persistir y re-aplicar tu vista.
+                Valores por defecto: offset (0, -0.08, -0.25), rotación (X: 0°, Y: 180°, Z: 0°) en orden YXZ. Tocá "Guardar
+                POV" para persistir y re-aplicar tu vista.
+              </div>
             </div>
-          </div>
-          <div class="control-group">
-            <label class="hint" for="glove_select">Guantes:</label>
-            <select id="glove_select" class="select"></select>
-            <button id="glove_attach_btn" type="button">Agregar guantes al personaje</button>
+            <div class="control-group lens-controls">
+              <div class="pov-input-row">
+                <label class="hint">Lente/DOF:</label>
+              </div>
+              <div class="lens-row">
+                <label class="hint" for="lens_fstop">Apertura (f-stop)</label>
+                <input id="lens_fstop" class="lens-slider" type="range" min="1.2" max="16" step="0.1" value="2.8" />
+                <span class="lens-value" data-lens-value="lens_fstop">f/2.8</span>
+              </div>
+              <div class="lens-row">
+                <label class="hint" for="lens_focus_distance">Distancia foco (m)</label>
+                <input
+                  id="lens_focus_distance"
+                  class="lens-slider"
+                  type="range"
+                  min="0.5"
+                  max="15"
+                  step="0.1"
+                  value="3.5"
+                />
+                <span class="lens-value" data-lens-value="lens_focus_distance">3.5 m</span>
+              </div>
+              <div class="lens-row">
+                <label class="hint" for="lens_focal_length">Distancia focal (mm)</label>
+                <input
+                  id="lens_focal_length"
+                  class="lens-slider"
+                  type="range"
+                  min="20"
+                  max="85"
+                  step="1"
+                  value="35"
+                />
+                <span class="lens-value" data-lens-value="lens_focal_length">35 mm</span>
+              </div>
+              <div class="lens-row">
+                <label class="hint" for="lens_blades">Bokeh / blades</label>
+                <input id="lens_blades" class="lens-slider" type="range" min="1" max="6" step="1" value="3" />
+                <span class="lens-value" data-lens-value="lens_blades">3</span>
+              </div>
+              <div class="lens-row">
+                <label class="hint" for="lens_aberration">Aberración</label>
+                <input
+                  id="lens_aberration"
+                  class="lens-slider"
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                  value="0.7"
+                />
+                <span class="lens-value" data-lens-value="lens_aberration">0.70</span>
+              </div>
+            </div>
+            <div class="control-group">
+              <label class="hint" for="glove_select">Guantes:</label>
+              <select id="glove_select" class="select"></select>
+              <button id="glove_attach_btn" type="button">Agregar guantes al personaje</button>
             <button id="fist_toggle_btn" type="button">Cerrar puños</button>
           </div>
           <div class="control-group">
@@ -638,7 +718,8 @@
   <!-- Lógica principal -->
   <script type="module">
     import * as THREE from 'three';
-    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js';
+      import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js';
+      import { CinematicCamera } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/cameras/CinematicCamera.js';
     import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
     import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/FBXLoader.js';
     import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/OBJLoader.js';
@@ -1120,15 +1201,27 @@
 
     const animationSelect = document.getElementById('animation_select');
     const modelSelect = document.getElementById('model_select');
-    const ringSelect = document.getElementById('ring_select');
-    const gloveSelect = document.getElementById('glove_select');
-    const chinPovButton = document.getElementById('chin_pov_btn');
-    const chinPovSaveButton = document.getElementById('chin_pov_save_btn');
-    const povInputRefs = {
-      offsetX: document.getElementById('pov_offset_x'),
-      offsetY: document.getElementById('pov_offset_y'),
-      offsetZ: document.getElementById('pov_offset_z'),
-      rotXDeg: document.getElementById('pov_rot_x'),
+      const ringSelect = document.getElementById('ring_select');
+      const gloveSelect = document.getElementById('glove_select');
+      const chinPovButton = document.getElementById('chin_pov_btn');
+      const chinPovSaveButton = document.getElementById('chin_pov_save_btn');
+      const lensInputRefs = {
+        fstop: document.getElementById('lens_fstop'),
+        focusDistance: document.getElementById('lens_focus_distance'),
+        focalLength: document.getElementById('lens_focal_length'),
+        aberration: document.getElementById('lens_aberration'),
+        blades: document.getElementById('lens_blades'),
+      };
+      const lensValueElements = {};
+      document.querySelectorAll('[data-lens-value]').forEach((el) => {
+        const key = el.getAttribute('data-lens-value');
+        if (key) lensValueElements[key] = el;
+      });
+      const povInputRefs = {
+        offsetX: document.getElementById('pov_offset_x'),
+        offsetY: document.getElementById('pov_offset_y'),
+        offsetZ: document.getElementById('pov_offset_z'),
+        rotXDeg: document.getElementById('pov_rot_x'),
       rotYDeg: document.getElementById('pov_rot_y'),
       rotZDeg: document.getElementById('pov_rot_z'),
     };
@@ -1603,8 +1696,8 @@
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f7fb);
 
-    const camera3D = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    camera3D.position.set(0, 1.6, 3.5);
+      const camera3D = new CinematicCamera(45, 1, 0.1, 100);
+      camera3D.position.set(0, 1.6, 3.5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -1616,11 +1709,20 @@
     controls.target.set(0, 1.3, 0);
     controls.update();
 
-    const initialCameraState = {
-      position: camera3D.position.clone(),
-      quaternion: camera3D.quaternion.clone(),
-      target: controls.target.clone(),
-    };
+      const initialCameraState = {
+        position: camera3D.position.clone(),
+        quaternion: camera3D.quaternion.clone(),
+        target: controls.target.clone(),
+      };
+
+      const lensConfigDefaults = {
+        fstop: 2.8,
+        focusDistance: 3.5,
+        focalLength: 35,
+        aberration: 0.7,
+        blades: 3,
+      };
+      let lensConfig = { ...lensConfigDefaults };
 
     let povActive = false;
     const POV_STORAGE_KEY = 'chinPovConfig';
@@ -1639,29 +1741,32 @@
       rotation: new THREE.Quaternion(),
     };
 
-    function loadPovConfig() {
-      try {
-        const stored = localStorage.getItem(POV_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          const { rotationDeg, tiltDeg } = parsed || {};
-          povConfig = {
-            ...povConfigDefaults,
-            ...parsed,
-            rotXDeg: parsed?.rotXDeg ?? tiltDeg ?? povConfigDefaults.rotXDeg,
-            rotYDeg: parsed?.rotYDeg ?? rotationDeg ?? povConfigDefaults.rotYDeg,
-            rotZDeg: parsed?.rotZDeg ?? povConfigDefaults.rotZDeg,
-          };
+      function loadPovConfig() {
+        try {
+          const stored = localStorage.getItem(POV_STORAGE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const { rotationDeg, tiltDeg, lens: storedLens, ...rest } = parsed || {};
+            povConfig = {
+              ...povConfigDefaults,
+              ...rest,
+              rotXDeg: rest?.rotXDeg ?? tiltDeg ?? povConfigDefaults.rotXDeg,
+              rotYDeg: rest?.rotYDeg ?? rotationDeg ?? povConfigDefaults.rotYDeg,
+              rotZDeg: rest?.rotZDeg ?? povConfigDefaults.rotZDeg,
+            };
+            lensConfig = { ...lensConfigDefaults, ...(storedLens || {}) };
+          }
+        } catch (error) {
+          console.warn('No se pudo leer el POV guardado', error);
+          povConfig = { ...povConfigDefaults };
+          lensConfig = { ...lensConfigDefaults };
         }
-      } catch (error) {
-        console.warn('No se pudo leer el POV guardado', error);
-        povConfig = { ...povConfigDefaults };
       }
-    }
 
-    function persistPovConfig() {
-      localStorage.setItem(POV_STORAGE_KEY, JSON.stringify(povConfig));
-    }
+      function persistPovConfig() {
+        const payload = { ...povConfig, lens: lensConfig };
+        localStorage.setItem(POV_STORAGE_KEY, JSON.stringify(payload));
+      }
 
     function syncPovInputsFromConfig() {
       if (!povInputRefs.offsetX) return;
@@ -1674,36 +1779,124 @@
       povInputRefs.rotZDeg.value = rotZDeg;
     }
 
-    function syncPovConfigFromInputs() {
-      if (!povInputRefs.offsetX) return;
-      povConfig = {
-        offsetX: parseFloat(povInputRefs.offsetX?.value ?? povConfigDefaults.offsetX) || povConfigDefaults.offsetX,
-        offsetY: parseFloat(povInputRefs.offsetY?.value ?? povConfigDefaults.offsetY) || povConfigDefaults.offsetY,
-        offsetZ: parseFloat(povInputRefs.offsetZ?.value ?? povConfigDefaults.offsetZ) || povConfigDefaults.offsetZ,
-        rotXDeg: parseFloat(povInputRefs.rotXDeg?.value ?? povConfigDefaults.rotXDeg) || povConfigDefaults.rotXDeg,
-        rotYDeg: parseFloat(povInputRefs.rotYDeg?.value ?? povConfigDefaults.rotYDeg) || povConfigDefaults.rotYDeg,
-        rotZDeg: parseFloat(povInputRefs.rotZDeg?.value ?? povConfigDefaults.rotZDeg) || povConfigDefaults.rotZDeg,
-      };
-    }
+      function syncPovConfigFromInputs() {
+        if (!povInputRefs.offsetX) return;
+        povConfig = {
+          offsetX: parseFloat(povInputRefs.offsetX?.value ?? povConfigDefaults.offsetX) || povConfigDefaults.offsetX,
+          offsetY: parseFloat(povInputRefs.offsetY?.value ?? povConfigDefaults.offsetY) || povConfigDefaults.offsetY,
+          offsetZ: parseFloat(povInputRefs.offsetZ?.value ?? povConfigDefaults.offsetZ) || povConfigDefaults.offsetZ,
+          rotXDeg: parseFloat(povInputRefs.rotXDeg?.value ?? povConfigDefaults.rotXDeg) || povConfigDefaults.rotXDeg,
+          rotYDeg: parseFloat(povInputRefs.rotYDeg?.value ?? povConfigDefaults.rotYDeg) || povConfigDefaults.rotYDeg,
+          rotZDeg: parseFloat(povInputRefs.rotZDeg?.value ?? povConfigDefaults.rotZDeg) || povConfigDefaults.rotZDeg,
+        };
+      }
 
-    function applyPovConfig(activate = false) {
-      const rotX = THREE.MathUtils.degToRad(povConfig.rotXDeg);
-      const rotY = THREE.MathUtils.degToRad(povConfig.rotYDeg);
-      const rotZ = THREE.MathUtils.degToRad(povConfig.rotZDeg);
-      povOffsets.position.set(povConfig.offsetX, povConfig.offsetY, povConfig.offsetZ);
+      function formatLensValue(key, value) {
+        const normalized = Number.isFinite(value) ? value : 0;
+        switch (key) {
+          case 'fstop':
+            return `f/${normalized.toFixed(1)}`;
+          case 'focusDistance':
+            return `${normalized.toFixed(2)} m`;
+          case 'focalLength':
+            return `${normalized.toFixed(0)} mm`;
+          case 'aberration':
+            return normalized.toFixed(2);
+          case 'blades':
+            return `${Math.round(normalized)}`;
+          default:
+            return normalized.toFixed(2);
+        }
+      }
+
+      function syncLensInputsFromConfig() {
+        Object.entries(lensInputRefs).forEach(([key, input]) => {
+          if (!input) return;
+          const value = lensConfig[key] ?? lensConfigDefaults[key];
+          input.value = value;
+          if (lensValueElements[key]) {
+            lensValueElements[key].textContent = formatLensValue(key, value);
+          }
+        });
+      }
+
+      function syncLensConfigFromInputs() {
+        lensConfig = {
+          fstop: parseFloat(lensInputRefs.fstop?.value ?? lensConfigDefaults.fstop) || lensConfigDefaults.fstop,
+          focusDistance:
+            parseFloat(lensInputRefs.focusDistance?.value ?? lensConfigDefaults.focusDistance) ||
+            lensConfigDefaults.focusDistance,
+          focalLength:
+            parseFloat(lensInputRefs.focalLength?.value ?? lensConfigDefaults.focalLength) ||
+            lensConfigDefaults.focalLength,
+          aberration:
+            parseFloat(lensInputRefs.aberration?.value ?? lensConfigDefaults.aberration) ||
+            lensConfigDefaults.aberration,
+          blades: parseFloat(lensInputRefs.blades?.value ?? lensConfigDefaults.blades) || lensConfigDefaults.blades,
+        };
+
+        Object.entries(lensValueElements).forEach(([key, el]) => {
+          const value = lensConfig[key];
+          if (el) el.textContent = formatLensValue(key, value);
+        });
+      }
+
+      function applyPovConfig(activate = false) {
+        const rotX = THREE.MathUtils.degToRad(povConfig.rotXDeg);
+        const rotY = THREE.MathUtils.degToRad(povConfig.rotYDeg);
+        const rotZ = THREE.MathUtils.degToRad(povConfig.rotZDeg);
+        povOffsets.position.set(povConfig.offsetX, povConfig.offsetY, povConfig.offsetZ);
       povOffsets.rotation.setFromEuler(new THREE.Euler(rotX, rotY, rotZ, 'YXZ'));
 
       if (activate) {
-        povActive = true;
-        updateChinPovButtonState();
-        updatePovCamera(true);
+          povActive = true;
+          updateChinPovButtonState();
+          updatePovCamera(true);
+        }
       }
-    }
 
-    loadPovConfig();
-    syncPovInputsFromConfig();
-    applyPovConfig();
-    updateChinPovButtonState();
+      function applyLensConfig() {
+        if (!camera3D) return;
+
+        const { fstop, focusDistance, focalLength, aberration, blades } = lensConfig;
+
+        if (typeof camera3D.setLens === 'function') {
+          camera3D.setLens(focalLength, undefined, fstop);
+        } else if (typeof camera3D.setFocalLength === 'function') {
+          camera3D.setFocalLength(focalLength);
+        }
+
+        if (typeof camera3D.focusAt === 'function') {
+          camera3D.focusAt(focusDistance);
+        }
+
+        const uniforms = camera3D.postprocessing?.bokeh_uniforms;
+        if (uniforms) {
+          uniforms.fstop.value = fstop;
+          uniforms.focalLength.value = camera3D.getFocalLength();
+          uniforms.focalDepth.value = camera3D.ldistance ?? uniforms.focalDepth.value;
+          uniforms.znear.value = camera3D.near;
+          uniforms.zfar.value = camera3D.far;
+          uniforms.fringe.value = aberration;
+          uniforms.pentagon.value = blades >= 5 ? 1 : 0;
+        }
+
+        if (camera3D.postprocessing?.materialBokeh) {
+          const rings = Math.max(1, Math.round(blades));
+          if (camera3D.postprocessing.materialBokeh.defines.RINGS !== rings) {
+            camera3D.postprocessing.materialBokeh.defines.RINGS = rings;
+            camera3D.shaderSettings.rings = rings;
+            camera3D.postprocessing.materialBokeh.needsUpdate = true;
+          }
+        }
+      }
+
+      loadPovConfig();
+      syncPovInputsFromConfig();
+      syncLensInputsFromConfig();
+      applyPovConfig();
+      applyLensConfig();
+      updateChinPovButtonState();
 
     function getHeadTransform() {
       const headBone = getBone('Head') || getBone('Neck');
@@ -1772,10 +1965,12 @@
       chinPovButton.textContent = povActive ? 'Cam. normal' : 'Cam. mentón/POV';
     }
 
-    function activateChinPOV() {
-      syncPovConfigFromInputs();
-      applyPovConfig(true);
-    }
+      function activateChinPOV() {
+        syncPovConfigFromInputs();
+        syncLensConfigFromInputs();
+        applyLensConfig();
+        applyPovConfig(true);
+      }
 
     function deactivateChinPOV() {
       povActive = false;
@@ -1783,14 +1978,16 @@
       restoreInitialCamera(true);
     }
 
-    function toggleChinPOV() {
-      if (povActive) {
-        deactivateChinPOV();
-      } else {
-        syncPovConfigFromInputs();
-        applyPovConfig(true);
+      function toggleChinPOV() {
+        if (povActive) {
+          deactivateChinPOV();
+        } else {
+          syncPovConfigFromInputs();
+          syncLensConfigFromInputs();
+          applyLensConfig();
+          applyPovConfig(true);
+        }
       }
-    }
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8e3, 0.6);
     scene.add(hemiLight);
@@ -2734,11 +2931,11 @@
       activeAction = null;
     }
 
-    async function bootstrapModelOptions() {
-      await loadModelManifest();
-      populateModelSelect();
-      populateRingSelect();
-      populateGloveSelect();
+      async function bootstrapModelOptions() {
+        await loadModelManifest();
+        populateModelSelect();
+        populateRingSelect();
+        populateGloveSelect();
       const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
       ACTIVE_MODEL_ID = initialModel?.id || DEFAULT_MODEL_ID;
       applyGlovePresetForModel(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
@@ -2747,21 +2944,40 @@
       loadModel(initialModel);
 
       // Cargar animaciones por defecto (por ejemplo: animaciones/descanso/Action Idle To Fight Idle.fbx)
-      DEFAULT_ANIMATIONS.forEach((entry) => {
-        loadAnimationFBXFromURL(entry.url, entry.name, entry.loop);
-      });
-    }
+        DEFAULT_ANIMATIONS.forEach((entry) => {
+          loadAnimationFBXFromURL(entry.url, entry.name, entry.loop);
+        });
+      }
 
-    setupDebugInputs();
-    bootstrapModelOptions();
+      setupDebugInputs();
+      bootstrapModelOptions();
 
-    function onWindowResize() {
-      const width = threeContainer.clientWidth || 640;
-      const height = threeContainer.clientHeight || 360;
-      camera3D.aspect = width / height;
-      camera3D.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    }
+      function resizeCinematicPostprocessing(width, height) {
+        if (!camera3D.postprocessing) return;
+        const pp = camera3D.postprocessing;
+        pp.camera.left = width / -2;
+        pp.camera.right = width / 2;
+        pp.camera.top = height / 2;
+        pp.camera.bottom = height / -2;
+        pp.camera.updateProjectionMatrix();
+        if (pp.rtTextureDepth && pp.rtTextureColor) {
+          pp.rtTextureDepth.setSize(width, height);
+          pp.rtTextureColor.setSize(width, height);
+        }
+        if (pp.bokeh_uniforms) {
+          pp.bokeh_uniforms.textureWidth.value = width;
+          pp.bokeh_uniforms.textureHeight.value = height;
+        }
+      }
+
+      function onWindowResize() {
+        const width = threeContainer.clientWidth || 640;
+        const height = threeContainer.clientHeight || 360;
+        camera3D.aspect = width / height;
+        camera3D.updateProjectionMatrix();
+        renderer.setSize(width, height);
+        resizeCinematicPostprocessing(width, height);
+      }
     window.addEventListener('resize', onWindowResize);
 
     // ==============================
@@ -2804,35 +3020,51 @@
       chinPovButton.addEventListener('click', toggleChinPOV);
     }
 
-    if (chinPovSaveButton) {
-      chinPovSaveButton.addEventListener('click', () => {
-        syncPovConfigFromInputs();
-        persistPovConfig();
-        activateChinPOV();
-      });
-    }
+      if (chinPovSaveButton) {
+        chinPovSaveButton.addEventListener('click', () => {
+          syncPovConfigFromInputs();
+          syncLensConfigFromInputs();
+          persistPovConfig();
+          activateChinPOV();
+        });
+      }
 
-    const povInputElements = [
-      povInputRefs.offsetX,
-      povInputRefs.offsetY,
-      povInputRefs.offsetZ,
-      povInputRefs.rotXDeg,
-      povInputRefs.rotYDeg,
-      povInputRefs.rotZDeg,
-    ].filter(Boolean);
+      const povInputElements = [
+        povInputRefs.offsetX,
+        povInputRefs.offsetY,
+        povInputRefs.offsetZ,
+        povInputRefs.rotXDeg,
+        povInputRefs.rotYDeg,
+        povInputRefs.rotZDeg,
+      ].filter(Boolean);
 
-    if (povInputElements.length) {
-      const handlePovInputChange = () => {
-        syncPovConfigFromInputs();
-        applyPovConfig();
-        if (povActive) updatePovCamera(true);
-      };
+      if (povInputElements.length) {
+        const handlePovInputChange = () => {
+          syncPovConfigFromInputs();
+          applyPovConfig();
+          if (povActive) updatePovCamera(true);
+        };
 
-      povInputElements.forEach((inputEl) => {
-        inputEl.addEventListener('input', handlePovInputChange);
-        inputEl.addEventListener('change', handlePovInputChange);
-      });
-    }
+        povInputElements.forEach((inputEl) => {
+          inputEl.addEventListener('input', handlePovInputChange);
+          inputEl.addEventListener('change', handlePovInputChange);
+        });
+      }
+
+      const lensInputElements = Object.values(lensInputRefs).filter(Boolean);
+
+      if (lensInputElements.length) {
+        const handleLensInputChange = () => {
+          syncLensConfigFromInputs();
+          applyLensConfig();
+          if (povActive) updatePovCamera(true);
+        };
+
+        lensInputElements.forEach((inputEl) => {
+          inputEl.addEventListener('input', handleLensInputChange);
+          inputEl.addEventListener('change', handleLensInputChange);
+        });
+      }
 
     if (glovePresetSaveButton) {
       glovePresetSaveButton.addEventListener('click', () => {
@@ -3319,13 +3551,19 @@
 
       // Mantener los guantes pegados a los huesos de la mano (o a los landmarks si se usa ese modo)
       const gloveScale = getCalibrationScale(smoothedWorldLandmarks);
-      updateGloveAnchors(lastPoseLandmarks, gloveScale);
+        updateGloveAnchors(lastPoseLandmarks, gloveScale);
 
-      if (povActive) {
-        updatePovCamera();
+        if (povActive) {
+          updatePovCamera();
+        }
+        applyLensConfig();
+
+        if (camera3D.type === 'CinematicCamera' && camera3D.postprocessing?.enabled) {
+          camera3D.renderCinematic(scene, renderer);
+        } else {
+          renderer.render(scene, camera3D);
+        }
       }
-      renderer.render(scene, camera3D);
-    }
     animate();
 
     onWindowResize();
