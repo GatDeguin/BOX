@@ -2,12 +2,19 @@ import { WebGLRenderer, Vector2 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
+import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
+import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader';
 
 interface EffectsContext {
   renderer: WebGLRenderer;
   composer: EffectComposer;
+  renderPass: RenderPass;
   bokehPass: BokehPass;
+  filmPass: FilmPass;
+  vignettePass: ShaderPass;
   outputPass: OutputPass;
 }
 
@@ -35,8 +42,8 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
     rendererScale: 1.1,
     bloom: {
       strength: 0.95,
-      threshold: 0.24,
-      radius: 0.22
+      threshold: 0.62,
+      radius: 0.2
     }
   },
   gimnasio: {
@@ -45,9 +52,9 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
     maxBlur: 0.008,
     rendererScale: 0.95,
     bloom: {
-      strength: 0.4,
-      threshold: 0.3,
-      radius: 0.15
+      strength: 0.52,
+      threshold: 0.64,
+      radius: 0.16
     }
   },
   mmaGym: {
@@ -56,9 +63,9 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
     maxBlur: 0.01,
     rendererScale: 1,
     bloom: {
-      strength: 0.55,
-      threshold: 0.28,
-      radius: 0.18
+      strength: 0.72,
+      threshold: 0.66,
+      radius: 0.19
     }
   },
   ironShow: {
@@ -67,9 +74,9 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
     maxBlur: 0.009,
     rendererScale: 1.05,
     bloom: {
-      strength: 0.8,
-      threshold: 0.26,
-      radius: 0.2
+      strength: 0.98,
+      threshold: 0.68,
+      radius: 0.22
     }
   },
   championNight: {
@@ -79,8 +86,8 @@ const EFFECT_PROFILES: Record<EffectProfileName, EffectProfile> = {
     rendererScale: 1.08,
     bloom: {
       strength: 1.05,
-      threshold: 0.22,
-      radius: 0.24
+      threshold: 0.7,
+      radius: 0.25
     }
   }
 };
@@ -89,6 +96,7 @@ let context: EffectsContext | null = null;
 let bloomPass: UnrealBloomPass | null = null;
 let performanceMode = false;
 let currentProfile: EffectProfile | null = null;
+let bloomStrengthMultiplier = 1;
 
 export function registerEffectsContext(effectsContext: EffectsContext): void {
   context = effectsContext;
@@ -100,32 +108,46 @@ function removeBloomPass(): void {
   bloomPass = null;
 }
 
+function rebuildPassChain(includeBloom: boolean): void {
+  if (!context) return;
+  const { composer, renderPass, bokehPass, filmPass, vignettePass, outputPass } = context;
+  const passes = composer.passes.slice();
+  passes.forEach((pass) => composer.removePass(pass));
+
+  composer.addPass(renderPass);
+  composer.addPass(bokehPass);
+  if (includeBloom && bloomPass) {
+    composer.addPass(bloomPass);
+  }
+  composer.addPass(filmPass);
+  composer.addPass(vignettePass);
+  composer.addPass(outputPass);
+}
+
 function applyBloom(settings: BloomSettings | undefined, scale: number): void {
   if (!context) return;
   if (!settings || performanceMode) {
     removeBloomPass();
+    rebuildPassChain(false);
     return;
   }
 
-  const { composer, outputPass } = context;
   const size = context.renderer.getSize(new Vector2());
   if (!bloomPass) {
-    bloomPass = new UnrealBloomPass(new Vector2(size.x * scale, size.y * scale), settings.strength, settings.radius, settings.threshold);
-    composer.removePass(outputPass);
-    composer.addPass(bloomPass);
-    composer.addPass(outputPass);
+    bloomPass = new UnrealBloomPass(
+      new Vector2(size.x * scale, size.y * scale),
+      settings.strength * bloomStrengthMultiplier,
+      settings.radius,
+      settings.threshold
+    );
   } else {
-    bloomPass.strength = settings.strength;
+    bloomPass.strength = settings.strength * bloomStrengthMultiplier;
     bloomPass.threshold = settings.threshold;
     bloomPass.radius = settings.radius;
     bloomPass.setSize(size.x * scale, size.y * scale);
-
-    if (!composer.passes.includes(bloomPass)) {
-      composer.removePass(outputPass);
-      composer.addPass(bloomPass);
-      composer.addPass(outputPass);
-    }
   }
+
+  rebuildPassChain(true);
 }
 
 function applyRendererScale(scale: number): void {
@@ -163,4 +185,22 @@ export function togglePerformanceMode(lowSpec: boolean): void {
   if (currentProfile) {
     applyEffects(currentProfile);
   }
+}
+
+export function setBloomStrengthMultiplier(multiplier: number): void {
+  bloomStrengthMultiplier = multiplier;
+  if (currentProfile) {
+    applyEffects(currentProfile);
+  }
+}
+
+export function createFilmPass(): FilmPass {
+  return new FilmPass(0.45, 0.65, 648, false);
+}
+
+export function createVignettePass(): ShaderPass {
+  const pass = new ShaderPass(VignetteShader);
+  pass.uniforms.offset.value = 1.1;
+  pass.uniforms.darkness.value = 1.35;
+  return pass;
 }
