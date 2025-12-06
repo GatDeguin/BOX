@@ -331,7 +331,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675467017/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.4.1633558788/pose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469242/hands.js"></script>
 
   <!-- Import map para usar three como módulo -->
   <script type="importmap">
@@ -512,7 +512,12 @@
     import { MTLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/MTLLoader.js';
 
     const MEDIAPIPE_POSE_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.4.1633558788/';
-    const MEDIAPIPE_HANDS_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/';
+    const MEDIAPIPE_HANDS_VERSION = '0.4.1675469242';
+    const MEDIAPIPE_HANDS_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/hands@${MEDIAPIPE_HANDS_VERSION}/`;
+    const MEDIAPIPE_HANDS_LOCAL_BASE = '/mediapipe/hands/';
+    // Usa el CDN por defecto; define window.MEDIAPIPE_HANDS_ASSET_BASE para forzar assets locales opcionales.
+    const MEDIAPIPE_HANDS_ASSET_BASE =
+      window.MEDIAPIPE_HANDS_ASSET_BASE || MEDIAPIPE_HANDS_BASE;
 
     // ==============================
     // 0. Sanity checks
@@ -1083,7 +1088,7 @@
       }
 
       handsInstance = new Hands({
-        locateFile: (file) => `${MEDIAPIPE_HANDS_BASE}${file}`,
+        locateFile: (file) => `${MEDIAPIPE_HANDS_ASSET_BASE}${file}`,
       });
       handsInstance.setOptions({
         maxNumHands: 2,
