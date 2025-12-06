@@ -2598,27 +2598,38 @@
     function getGloveFlipQuaternion(side = 'left') {
       const flip = cloneGloveFlipState(debugTransforms.glove.flip);
       const flags = flip[side] || {};
-      const flipQuat = new THREE.Quaternion();
 
-      if (flags.x) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI));
-      if (flags.y) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-      if (flags.z) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI));
+      const flipScale = new THREE.Vector3(
+        flags.x ? -1 : 1,
+        flags.y ? -1 : 1,
+        flags.z ? -1 : 1,
+      );
 
-      return flipQuat;
+      return {
+        matrix: new THREE.Matrix4().makeScale(flipScale.x, flipScale.y, flipScale.z),
+        scale: flipScale,
+      };
     }
 
     function applyGloveTransform(target, transform, side = 'left') {
       if (!target || !transform) return;
 
-      const baseQuat = transform.quaternion.clone().multiply(getGloveFlipQuaternion(side));
+      const flip = getGloveFlipQuaternion(side);
 
-      const finalQuat = baseQuat.clone().multiply(gloveBaseRotation);
-      const offset = gloveOffset.clone().applyQuaternion(baseQuat);
+      const baseMatrix = new THREE.Matrix4().makeRotationFromQuaternion(transform.quaternion);
+      baseMatrix.multiply(flip.matrix);
+
+      const offset = gloveOffset.clone().applyMatrix4(baseMatrix);
       const desiredPos = transform.position.clone().add(offset);
+
+      const finalMatrix = baseMatrix.clone().multiply(new THREE.Matrix4().makeRotationFromQuaternion(gloveBaseRotation));
+      const finalQuat = new THREE.Quaternion();
+      const finalScale = new THREE.Vector3();
+      finalMatrix.decompose(new THREE.Vector3(), finalQuat, finalScale);
 
       target.position.lerp(desiredPos, 0.35);
       target.quaternion.slerp(finalQuat, 0.35);
-      target.scale.setScalar(gloveBaseScale);
+      target.scale.copy(finalScale.multiplyScalar(gloveBaseScale));
     }
 
     function updateGloveAnchors(landmarks, scaleOverride) {
