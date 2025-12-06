@@ -497,6 +497,13 @@
             </div>
             <p class="debug-hint">Se suma al offset actual relativo a la mano.</p>
           </div>
+          <div class="debug-row">
+            <label for="debug_glove_flip_left">Espejar guante izquierdo</label>
+            <div class="debug-inputs">
+              <input type="checkbox" id="debug_glove_flip_left" />
+            </div>
+            <p class="debug-hint">Invierte el guante izquierdo para rotar la orientación del pulgar.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -912,13 +919,14 @@
         x: document.getElementById('debug_glove_x'),
         y: document.getElementById('debug_glove_y'),
         z: document.getElementById('debug_glove_z'),
+        flipLeft: document.getElementById('debug_glove_flip_left'),
       },
     };
 
     const debugTransforms = {
       character: { scale: 1, position: new THREE.Vector3() },
       ring: { scale: 1, position: new THREE.Vector3() },
-      glove: { scale: 1, position: new THREE.Vector3(), rotation: new THREE.Euler() },
+      glove: { scale: 1, position: new THREE.Vector3(), rotation: new THREE.Euler(), flipLeft: false },
     };
 
     const DEG2RAD = Math.PI / 180;
@@ -1497,6 +1505,7 @@
         if (refs.rx) refs.rx.value = (transform.rotation?.x ?? 0) * RAD2DEG;
         if (refs.ry) refs.ry.value = (transform.rotation?.y ?? 0) * RAD2DEG;
         if (refs.rz) refs.rz.value = (transform.rotation?.z ?? 0) * RAD2DEG;
+        if (refs.flipLeft) refs.flipLeft.checked = !!transform.flipLeft;
       });
     }
 
@@ -1545,6 +1554,9 @@
         parseInputNumber(refs.y, 0),
         parseInputNumber(refs.z, 0)
       );
+      if (typeof transform.flipLeft !== 'undefined' && refs.flipLeft) {
+        transform.flipLeft = !!refs.flipLeft.checked;
+      }
       if (transform.rotation && refs.rx && refs.ry && refs.rz) {
         transform.rotation.set(
           parseInputNumber(refs.rx, 0) * DEG2RAD,
@@ -1578,6 +1590,7 @@
         position: transform.position.clone(),
         rotation: transform.rotation.clone(),
         scale: transform.scale,
+        flipLeft: transform.flipLeft,
       });
     }
 
@@ -1589,6 +1602,7 @@
           position: stored.position.clone(),
           rotation: stored.rotation.clone(),
           scale: stored.scale,
+          flipLeft: stored.flipLeft,
         };
       }
 
@@ -1598,6 +1612,7 @@
         position: (preset.offset || new THREE.Vector3()).clone(),
         rotation: (preset.rotation || new THREE.Euler()).clone(),
         scale: preset.scale,
+        flipLeft: preset.flipLeft,
       };
     }
 
@@ -1610,6 +1625,7 @@
       else debugTransforms.glove.rotation.set(0, 0, 0);
 
       if (typeof state.scale === 'number') debugTransforms.glove.scale = state.scale;
+      debugTransforms.glove.flipLeft = !!state.flipLeft;
 
       updateDebugInputsFromState();
       applyGloveDebugTransform();
@@ -2464,11 +2480,16 @@
       return { position, quaternion };
     }
 
-    function applyGloveTransform(target, transform) {
+    function applyGloveTransform(target, transform, side = 'left') {
       if (!target || !transform) return;
 
-      const finalQuat = transform.quaternion.clone().multiply(gloveBaseRotation);
-      const offset = gloveOffset.clone().applyQuaternion(transform.quaternion);
+      const baseQuat = transform.quaternion.clone();
+      if (side === 'left' && debugTransforms.glove.flipLeft) {
+        baseQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+      }
+
+      const finalQuat = baseQuat.clone().multiply(gloveBaseRotation);
+      const offset = gloveOffset.clone().applyQuaternion(baseQuat);
       const desiredPos = transform.position.clone().add(offset);
 
       target.position.lerp(desiredPos, 0.35);
@@ -2527,8 +2548,8 @@
             scale
           );
 
-      applyGloveTransform(gloveMeshes.left, leftTransform);
-      applyGloveTransform(gloveMeshes.right, rightTransform);
+      applyGloveTransform(gloveMeshes.left, leftTransform, 'left');
+      applyGloveTransform(gloveMeshes.right, rightTransform, 'right');
     }
 
     function updateModelFromPose(landmarks) {
