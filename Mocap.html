@@ -1214,6 +1214,7 @@
     let smoothedDepth = null;
     let poseInstance = null;
     let handsInstance = null;
+    let handsUnavailable = false;
 
     // Flag para cortar el retarget y dejar que las animaciones FBX manden.
     let retargetEnabled = true;
@@ -1301,7 +1302,8 @@
     function setStatus(live, text) {
       if (live) statusIndicator.classList.add('live');
       else statusIndicator.classList.remove('live');
-      statusLabel.textContent = text;
+      const shouldAppendHandsNote = handsUnavailable && text && !text.toLowerCase().includes('manos');
+      statusLabel.textContent = shouldAppendHandsNote ? `${text} · Manos deshabilitadas` : text;
     }
 
     function resizeCanvasToVideo() {
@@ -1431,13 +1433,45 @@
       poseInstance.onResults(onResultsPose);
     }
 
-    function initHands() {
-      const Hands = window.Hands;
-      if (!Hands) {
-        console.warn('MediaPipe Hands no está disponible');
-        return;
+    async function loadHandsBundle() {
+      if (window.Hands) return true;
+
+      try {
+        await import('/mediapipe/hands/hands.js');
+      } catch (err) {
+        console.warn('Fallo al importar MediaPipe Hands como módulo:', err);
       }
 
+      if (window.Hands) return true;
+
+      try {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = '/mediapipe/hands/hands.js';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('No se pudo cargar el script de manos')); 
+          document.head.appendChild(script);
+        });
+      } catch (err) {
+        console.warn('Fallo al insertar script de MediaPipe Hands:', err);
+      }
+
+      return Boolean(window.Hands);
+    }
+
+    async function initHands() {
+      const handsReady = await loadHandsBundle();
+      if (!handsReady) {
+        console.warn('MediaPipe Hands no está disponible tras intentar el fallback');
+        setStatus(false, 'Detección de manos deshabilitada');
+        handsInstance = null;
+        handsUnavailable = true;
+        return null;
+      }
+
+      handsUnavailable = false;
+      const Hands = window.Hands;
       handsInstance = new Hands({
         locateFile: (file) => `${MEDIAPIPE_HANDS_ASSET_BASE}${file}`,
       });
@@ -1448,12 +1482,13 @@
         minTrackingConfidence: 0.5,
       });
       handsInstance.onResults(onResultsHands);
+      return handsInstance;
     }
 
     async function startCapture() {
       if (!poseInstance) initPose();
       if (!poseInstance) return;
-      if (!handsInstance) initHands();
+      if (!handsInstance) await initHands();
 
       const drawingReady = await ensureDrawingUtils();
       if (!drawingReady) {
