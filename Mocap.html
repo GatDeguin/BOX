@@ -1378,7 +1378,12 @@
     controls.target.set(0, 1.3, 0);
     controls.update();
 
-    let chinPovActive = false;
+    let povActive = false;
+    const povOffsets = {
+      position: new THREE.Vector3(0, -0.08, -0.25),
+      target: new THREE.Vector3(0, 0, 0),
+      rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
+    };
 
     function getHeadTransform() {
       const headBone = getBone('Head') || getBone('Neck');
@@ -1388,6 +1393,27 @@
       if (headBone) {
         headBone.getWorldPosition(headPosition);
         headBone.getWorldQuaternion(headQuaternion);
+        return { headPosition, headQuaternion };
+      }
+
+      const headLm = smoothedLandmarks?.[POSE_LM.NOSE];
+      const leftShoulderLm = smoothedLandmarks?.[POSE_LM.LEFT_SHOULDER];
+      const rightShoulderLm = smoothedLandmarks?.[POSE_LM.RIGHT_SHOULDER];
+
+      if (headLm && leftShoulderLm && rightShoulderLm) {
+        const scale = getCalibrationScale(smoothedWorldLandmarks);
+        const vHead = lmToVec3(headLm, smoothedWorldLandmarks?.[POSE_LM.NOSE], scale);
+        const vLS = lmToVec3(leftShoulderLm, smoothedWorldLandmarks?.[POSE_LM.LEFT_SHOULDER], scale);
+        const vRS = lmToVec3(rightShoulderLm, smoothedWorldLandmarks?.[POSE_LM.RIGHT_SHOULDER], scale);
+        const shoulderMid = vLS.clone().add(vRS).multiplyScalar(0.5);
+
+        headPosition.copy(vHead);
+
+        const upDir = vHead.clone().sub(shoulderMid).normalize();
+        const rightDir = vRS.clone().sub(vLS).normalize();
+        const forwardDir = new THREE.Vector3().crossVectors(rightDir, upDir).normalize();
+        const headBasis = new THREE.Matrix4().makeBasis(rightDir, upDir, forwardDir);
+        headQuaternion.setFromRotationMatrix(headBasis);
       }
 
       return { headPosition, headQuaternion };
@@ -1395,25 +1421,33 @@
 
     function computeChinCameraTransform() {
       const { headPosition, headQuaternion } = getHeadTransform();
-      const chinOffset = new THREE.Vector3(0, -0.08, -0.25).applyQuaternion(headQuaternion);
-      const cameraPosition = headPosition.clone().add(chinOffset);
-      const flipYQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
-      const cameraOrientation = headQuaternion.clone().multiply(flipYQuat);
+      const cameraPosition = headPosition.clone().add(povOffsets.position.clone().applyQuaternion(headQuaternion));
+      const cameraOrientation = headQuaternion.clone().multiply(povOffsets.rotation);
+      const povTarget = headPosition.clone().add(povOffsets.target.clone().applyQuaternion(headQuaternion));
 
-      return { headPosition, cameraPosition, cameraOrientation };
+      return { headPosition, cameraPosition, cameraOrientation, povTarget };
+    }
+
+    function updatePovCamera(immediate = false) {
+      const { povTarget, cameraPosition, cameraOrientation } = computeChinCameraTransform();
+      const lerpAlpha = immediate ? 1 : 0.35;
+
+      camera3D.position.lerp(cameraPosition, lerpAlpha);
+      camera3D.quaternion.slerp(cameraOrientation, lerpAlpha);
+      controls.target.lerp(povTarget, lerpAlpha);
+      controls.update();
     }
 
     function setChinPOV() {
-      const { headPosition, cameraPosition, cameraOrientation } = computeChinCameraTransform();
-      const previousDamping = controls.enableDamping;
+      const { headPosition, headQuaternion } = getHeadTransform();
+      const inverseHeadQuat = headQuaternion.clone().invert();
 
-      controls.enableDamping = false;
-      camera3D.position.copy(cameraPosition);
-      camera3D.quaternion.copy(cameraOrientation);
-      controls.target.copy(headPosition);
-      controls.update();
-      controls.enableDamping = previousDamping;
-      chinPovActive = true;
+      povOffsets.position.copy(camera3D.position.clone().sub(headPosition).applyQuaternion(inverseHeadQuat));
+      povOffsets.target.copy(controls.target.clone().sub(headPosition).applyQuaternion(inverseHeadQuat));
+      povOffsets.rotation.copy(inverseHeadQuat.multiply(camera3D.quaternion));
+
+      povActive = true;
+      updatePovCamera(true);
     }
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8e3, 0.6);
@@ -2888,12 +2922,8 @@
       const gloveScale = getCalibrationScale(smoothedWorldLandmarks);
       updateGloveAnchors(lastPoseLandmarks, gloveScale);
 
-      if (chinPovActive) {
-        const { headPosition, cameraPosition, cameraOrientation } = computeChinCameraTransform();
-        camera3D.position.copy(cameraPosition);
-        camera3D.quaternion.copy(cameraOrientation);
-        controls.target.copy(headPosition);
-        controls.update();
+      if (povActive) {
+        updatePovCamera();
       }
       renderer.render(scene, camera3D);
     }
