@@ -1614,6 +1614,12 @@
     controls.target.set(0, 1.3, 0);
     controls.update();
 
+    const initialCameraState = {
+      position: camera3D.position.clone(),
+      quaternion: camera3D.quaternion.clone(),
+      target: controls.target.clone(),
+    };
+
     let povActive = false;
     const POV_STORAGE_KEY = 'chinPovConfig';
     const povConfigDefaults = {
@@ -1677,6 +1683,7 @@
 
       if (activate) {
         povActive = true;
+        updateChinPovButtonState();
         updatePovCamera(true);
       }
     }
@@ -1684,6 +1691,7 @@
     loadPovConfig();
     syncPovInputsFromConfig();
     applyPovConfig();
+    updateChinPovButtonState();
 
     function getHeadTransform() {
       const headBone = getBone('Head') || getBone('Neck');
@@ -1738,9 +1746,38 @@
       controls.update();
     }
 
-    function setChinPOV() {
+    function restoreInitialCamera(immediate = true) {
+      const lerpAlpha = immediate ? 1 : 0.35;
+      camera3D.position.lerp(initialCameraState.position, lerpAlpha);
+      camera3D.quaternion.slerp(initialCameraState.quaternion, lerpAlpha);
+      controls.target.lerp(initialCameraState.target, lerpAlpha);
+      controls.update();
+    }
+
+    function updateChinPovButtonState() {
+      if (!chinPovButton) return;
+      chinPovButton.classList.toggle('toggle-active', povActive);
+      chinPovButton.textContent = povActive ? 'Cam. normal' : 'Cam. mentón/POV';
+    }
+
+    function activateChinPOV() {
       syncPovConfigFromInputs();
       applyPovConfig(true);
+    }
+
+    function deactivateChinPOV() {
+      povActive = false;
+      updateChinPovButtonState();
+      restoreInitialCamera(true);
+    }
+
+    function toggleChinPOV() {
+      if (povActive) {
+        deactivateChinPOV();
+      } else {
+        syncPovConfigFromInputs();
+        applyPovConfig(true);
+      }
     }
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8e3, 0.6);
@@ -2752,14 +2789,14 @@
     }
 
     if (chinPovButton) {
-      chinPovButton.addEventListener('click', setChinPOV);
+      chinPovButton.addEventListener('click', toggleChinPOV);
     }
 
     if (chinPovSaveButton) {
       chinPovSaveButton.addEventListener('click', () => {
         syncPovConfigFromInputs();
         persistPovConfig();
-        setChinPOV();
+        activateChinPOV();
       });
     }
 
