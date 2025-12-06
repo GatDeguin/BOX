@@ -854,6 +854,7 @@ function createHud(
   onOpenModal: () => void,
   onOpenAssets: () => void,
   onToggleFreeCam: () => void,
+  onPreviewFromChin: () => void,
   onOpenGlovePanel: () => void,
   onSelectCharacter: (character: CharacterId) => void
 ) {
@@ -861,6 +862,8 @@ function createHud(
   hud.className = 'box9-hud';
 
   let currentProgress = normalizeProgress(store.getState().progress);
+  let chinPreviewActive = false;
+  let lastCharacter = store.getState().character;
 
   const topBar = document.createElement('div');
   topBar.className = 'box9-topbar';
@@ -894,7 +897,20 @@ function createHud(
   const freeCamButton = document.createElement('button');
   freeCamButton.className = 'box9-button box9-secondary';
   freeCamButton.textContent = 'Cam. libre';
-  freeCamButton.addEventListener('click', () => onToggleFreeCam());
+  freeCamButton.addEventListener('click', () => {
+    chinPreviewActive = false;
+    onToggleFreeCam();
+  });
+
+  const chinPreviewButton = document.createElement('button');
+  chinPreviewButton.className = 'box9-button box9-secondary';
+  chinPreviewButton.textContent = 'Cam. mentón';
+  chinPreviewButton.title = 'Coloca la cámara debajo del mentón para una vista POV.';
+  chinPreviewButton.addEventListener('click', () => {
+    chinPreviewActive = true;
+    onPreviewFromChin();
+    update(currentProgress);
+  });
 
   const victoryButton = document.createElement('button');
   victoryButton.className = 'box9-button box9-secondary';
@@ -920,7 +936,7 @@ function createHud(
   glovesButton.textContent = 'Guantes';
   glovesButton.addEventListener('click', () => onOpenGlovePanel());
 
-  actions.append(freeCamButton, victoryButton, optionsButton, assetsButton, glovesButton);
+  actions.append(freeCamButton, chinPreviewButton, victoryButton, optionsButton, assetsButton, glovesButton);
   topBar.append(status, actions);
 
   const chipsRow = document.createElement('div');
@@ -961,6 +977,7 @@ function createHud(
         );
         return;
       }
+      chinPreviewActive = false;
       setActiveChip(character);
       onSelectCharacter(character);
     });
@@ -1213,8 +1230,18 @@ function createHud(
     const state = store.getState();
     const progress = progressOverride ?? normalizeProgress(state.progress);
     currentProgress = progress;
+    if (state.character !== lastCharacter) {
+      chinPreviewActive = false;
+      lastCharacter = state.character;
+    }
+
+    if (state.freeCamera && chinPreviewActive) {
+      chinPreviewActive = false;
+    }
+
     ringValue.textContent = ringOptions[state.ring];
-    cameraValue.textContent = state.freeCamera ? 'Libre' : 'Viaje guiado';
+    const cameraLabel = state.freeCamera ? 'Libre' : chinPreviewActive ? 'POV mentón' : 'Viaje guiado';
+    cameraValue.textContent = cameraLabel;
     gloveValue.textContent = getGloveLabel(progress.activeGlove);
     activeGloveChip.textContent = getGloveLabel(progress.activeGlove);
 
@@ -1424,6 +1451,14 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       const next = !store.getState().freeCamera;
       store.setState({ freeCamera: next });
       emitSceneEvent('freecam-change', { enabled: next });
+    },
+    () => {
+      const state = store.getState();
+      if (state.freeCamera) {
+        store.setState({ freeCamera: false });
+        emitSceneEvent('freecam-change', { enabled: false });
+      }
+      emitSceneEvent('chin-preview', { character: state.character });
     },
     () => {
       const progress = normalizeProgress(store.getState().progress);

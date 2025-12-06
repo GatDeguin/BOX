@@ -85,6 +85,12 @@ interface FighterAnchor {
   rotation: Vector3;
 }
 
+interface ChinPreviewOptions {
+  distance?: number;
+  verticalOffset?: number;
+  lookAtLift?: number;
+}
+
 const SELECTION_FOCUS: Record<CharacterId, SelectionTarget> = {
   mma: {
     camera: new Vector3(-3.5, 2.8, 8),
@@ -148,6 +154,38 @@ const PHASE_EFFECTS: Record<ScenePhase, Record<RingId, EffectProfileName>> = {
 
 const ALL_RINGS: RingId[] = ['mmaGym', 'bodybuilderArena', 'tysonRing'];
 const ALL_FIGHTERS: CharacterId[] = ['mma', 'bodybuilder', 'tyson', 'principal'];
+
+function createChinPreviewTarget(
+  character: CharacterId,
+  options: ChinPreviewOptions = {}
+): SelectionTarget | null {
+  const base = SELECTION_FOCUS[character];
+  if (!base) return null;
+
+  const distance = options.distance ?? CHIN_PREVIEW_DEFAULTS.distance;
+  const verticalOffset = options.verticalOffset ?? CHIN_PREVIEW_DEFAULTS.verticalOffset;
+  const lookAtLift = options.lookAtLift ?? CHIN_PREVIEW_DEFAULTS.lookAtLift;
+
+  const cameraDirection = base.camera.clone().sub(base.lookAt).normalize();
+  const camera = base.lookAt
+    .clone()
+    .add(cameraDirection.multiplyScalar(distance))
+    .add(new Vector3(0, verticalOffset, 0));
+
+  const lookAt = base.lookAt.clone().add(new Vector3(0, lookAtLift, 0));
+
+  return {
+    camera,
+    lookAt,
+    highlight: base.highlight.clone()
+  };
+}
+
+const CHIN_PREVIEW_DEFAULTS: Required<ChinPreviewOptions> = {
+  distance: 1.35,
+  verticalOffset: -0.28,
+  lookAtLift: 0.12
+};
 
 const RING_VISUALS: Record<
   RingId,
@@ -475,6 +513,10 @@ function registerSceneEvents(): Record<string, EventListener> {
       const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
       toggleFreeCamera(detail?.enabled);
     },
+    'box9:chin-preview': (event: Event) => {
+      const detail = (event as CustomEvent<{ character?: CharacterId }>).detail;
+      previewUnderChin(detail?.character);
+    },
     'box9:selection-ended': () => {
       if (!context) return;
       context.selectionTarget = null;
@@ -649,6 +691,21 @@ export function toggleFreeCamera(enabled?: boolean): void {
     enableFreeCam();
   } else {
     enterSelection();
+  }
+}
+
+export function previewUnderChin(character?: CharacterId): void {
+  if (!context) return;
+
+  const targetCharacter = character ?? box9Store.getState().character;
+  const chinTarget = createChinPreviewTarget(targetCharacter);
+  if (!chinTarget) return;
+
+  enterSelection();
+  context.selectionTarget = chinTarget;
+
+  if (box9Store.getState().freeCamera) {
+    box9Store.setState({ freeCamera: false });
   }
 }
 
