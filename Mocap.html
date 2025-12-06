@@ -353,6 +353,34 @@
       gap: 6px;
     }
 
+    .debug-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .debug-save-button {
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(59,130,246,0.1);
+      color: #e5e7eb;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .debug-save-button:hover {
+      background: rgba(59,130,246,0.2);
+      border-color: rgba(59,130,246,0.4);
+    }
+
+    .debug-save-status {
+      font-size: 0.8rem;
+      opacity: 0.9;
+    }
+
     .debug-check-group {
       display: flex;
       align-items: center;
@@ -595,6 +623,12 @@
             </div>
             <p class="debug-hint">Activa la inversión de orientación por eje de cada mano.</p>
           </div>
+          <div class="debug-row">
+            <div class="debug-actions">
+              <button class="debug-save-button" id="debug_glove_save">Guardar preset</button>
+              <span class="debug-save-status" id="debug_glove_save_status" aria-live="polite"></span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -811,7 +845,69 @@
       },
     };
 
+    const GLOVE_PRESET_STORAGE_KEY = 'mocap_glove_debug_presets';
     const gloveDebugStateByModel = new Map();
+
+    function getGlovePresetKey(modelId, gloveId) {
+      const safeModel = modelId || 'unknown';
+      const safeGlove = gloveId || 'none';
+      return `${safeModel}__${safeGlove}`;
+    }
+
+    function serializeGloveDebugState(state) {
+      if (!state) return null;
+      return {
+        position: state.position?.toArray?.() || [0, 0, 0],
+        rotation: state.rotation
+          ? { x: state.rotation.x, y: state.rotation.y, z: state.rotation.z, order: state.rotation.order }
+          : null,
+        scale: state.scale,
+        flip: state.flip,
+      };
+    }
+
+    function persistGloveDebugStateMap() {
+      try {
+        const serialized = {};
+        gloveDebugStateByModel.forEach((value, key) => {
+          const data = serializeGloveDebugState(value);
+          if (data) serialized[key] = data;
+        });
+        localStorage.setItem(GLOVE_PRESET_STORAGE_KEY, JSON.stringify(serialized));
+      } catch (err) {
+        console.warn('No se pudo guardar el preset de guantes en localStorage', err);
+      }
+    }
+
+    function loadPersistedGloveDebugStates() {
+      try {
+        const raw = localStorage.getItem(GLOVE_PRESET_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+
+        Object.entries(parsed).forEach(([key, value]) => {
+          if (!value) return;
+          const position = Array.isArray(value.position)
+            ? new THREE.Vector3(value.position[0] ?? 0, value.position[1] ?? 0, value.position[2] ?? 0)
+            : new THREE.Vector3();
+          const rotation = value.rotation
+            ? new THREE.Euler(
+                value.rotation.x ?? 0,
+                value.rotation.y ?? 0,
+                value.rotation.z ?? 0,
+                value.rotation.order || 'XYZ'
+              )
+            : new THREE.Euler();
+          const scale = typeof value.scale === 'number' ? value.scale : 1;
+          const flip = cloneGloveFlipState(value.flip);
+
+          gloveDebugStateByModel.set(key, { position, rotation, scale, flip });
+        });
+      } catch (err) {
+        console.warn('No se pudieron cargar los presets de guantes persistidos', err);
+      }
+    }
 
     const GLOVE_ATTACHMENT = { LANDMARKS: 'landmarks', MODEL: 'model' };
     let gloveAttachmentMode = GLOVE_ATTACHMENT.MODEL;
@@ -999,6 +1095,8 @@
     const animFileInput = document.getElementById('anim_file_input');
     const gloveAttachButton = document.getElementById('glove_attach_btn');
     const fistToggleButton = document.getElementById('fist_toggle_btn');
+    const glovePresetSaveButton = document.getElementById('debug_glove_save');
+    const glovePresetStatus = document.getElementById('debug_glove_save_status');
     const debugInputRefs = {
       character: {
         scale: document.getElementById('debug_character_scale'),
@@ -1060,6 +1158,8 @@
       });
       return safe;
     }
+
+    loadPersistedGloveDebugStates();
 
     const DEG2RAD = Math.PI / 180;
     const RAD2DEG = 180 / Math.PI;
@@ -1911,7 +2011,19 @@
       }
 
       applyDebugTransform(type);
-      if (type === 'glove') persistGloveDebugState(ACTIVE_MODEL_ID);
+      if (type === 'glove') persistGloveDebugState(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
+    }
+
+    let glovePresetStatusTimeout = null;
+
+    function showGlovePresetStatus(message) {
+      if (!glovePresetStatus) return;
+      glovePresetStatus.textContent = message;
+      if (glovePresetStatusTimeout) window.clearTimeout(glovePresetStatusTimeout);
+      glovePresetStatusTimeout = window.setTimeout(() => {
+        glovePresetStatus.textContent = '';
+        glovePresetStatusTimeout = null;
+      }, 1800);
     }
 
     function setupDebugInputs() {
@@ -1928,21 +2040,27 @@
       ['character', 'ring', 'glove'].forEach((type) => handleDebugChange(type));
     }
 
-    function persistGloveDebugState(modelId) {
+    function persistGloveDebugState(modelId, gloveId) {
       if (!modelId) return;
       const transform = debugTransforms.glove;
-      gloveDebugStateByModel.set(modelId, {
+      const presetKey = getGlovePresetKey(modelId, gloveId || ACTIVE_GLOVE_ID);
+      gloveDebugStateByModel.set(presetKey, {
         position: transform.position.clone(),
         rotation: transform.rotation.clone(),
         scale: transform.scale,
         flip: cloneGloveFlipState(transform.flip),
       });
+      persistGloveDebugStateMap();
     }
 
-    function getGloveDebugStateForModel(modelId) {
+    function getGloveDebugStateForModel(modelId, gloveId) {
       if (!modelId) return null;
-      if (gloveDebugStateByModel.has(modelId)) {
-        const stored = gloveDebugStateByModel.get(modelId);
+      const key = getGlovePresetKey(modelId, gloveId || ACTIVE_GLOVE_ID);
+      const fallbackKey = getGlovePresetKey(modelId, 'none');
+      const legacyKey = modelId;
+
+      const stored = gloveDebugStateByModel.get(key) || gloveDebugStateByModel.get(fallbackKey) || gloveDebugStateByModel.get(legacyKey);
+      if (stored) {
         const flip = cloneGloveFlipState(stored.flip);
         if (stored.flipLeft) flip.left.y = true;
         return {
@@ -1965,8 +2083,8 @@
       };
     }
 
-    function applyGlovePresetForModel(modelId) {
-      const state = getGloveDebugStateForModel(modelId) || {};
+    function applyGlovePresetForModel(modelId, gloveId = ACTIVE_GLOVE_ID) {
+      const state = getGloveDebugStateForModel(modelId, gloveId) || {};
       if (state.position) debugTransforms.glove.position.copy(state.position);
       else debugTransforms.glove.position.set(0, 0, 0);
 
@@ -2492,7 +2610,7 @@
       populateGloveSelect();
       const initialModel = getModelConfigById(modelSelect ? modelSelect.value : DEFAULT_MODEL_ID);
       ACTIVE_MODEL_ID = initialModel?.id || DEFAULT_MODEL_ID;
-      applyGlovePresetForModel(ACTIVE_MODEL_ID);
+      applyGlovePresetForModel(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
       loadRingById(ringSelect ? ringSelect.value : DEFAULT_RING_ID);
       loadGloveById(gloveSelect ? gloveSelect.value : ACTIVE_GLOVE_ID);
       loadModel(initialModel);
@@ -2537,10 +2655,10 @@
 
     if (modelSelect) {
       modelSelect.addEventListener('change', () => {
-        persistGloveDebugState(ACTIVE_MODEL_ID);
+        persistGloveDebugState(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
         const config = getModelConfigById(modelSelect.value);
         ACTIVE_MODEL_ID = config?.id || modelSelect.value;
-        applyGlovePresetForModel(ACTIVE_MODEL_ID);
+        applyGlovePresetForModel(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
         loadModel(config);
       });
     }
@@ -2563,8 +2681,17 @@
       });
     }
 
+    if (glovePresetSaveButton) {
+      glovePresetSaveButton.addEventListener('click', () => {
+        persistGloveDebugState(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
+        showGlovePresetStatus('Preset guardado');
+      });
+    }
+
     if (gloveSelect) {
       gloveSelect.addEventListener('change', () => {
+        persistGloveDebugState(ACTIVE_MODEL_ID, ACTIVE_GLOVE_ID);
+        applyGlovePresetForModel(ACTIVE_MODEL_ID, gloveSelect.value);
         loadGloveById(gloveSelect.value);
       });
     }
