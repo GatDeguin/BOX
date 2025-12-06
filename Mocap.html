@@ -520,6 +520,7 @@
               <input id="pov_rot_x" class="pov-input" type="number" step="1" />
               <input id="pov_rot_y" class="pov-input" type="number" step="1" />
               <input id="pov_rot_z" class="pov-input" type="number" step="1" />
+              <button id="pov_edit_btn" type="button">POV edit</button>
               <button id="chin_pov_save_btn" type="button">Guardar POV</button>
             </div>
             <div class="hint pov-hint">
@@ -1129,6 +1130,7 @@
     const ringSelect = document.getElementById('ring_select');
     const gloveSelect = document.getElementById('glove_select');
     const chinPovButton = document.getElementById('chin_pov_btn');
+    const povEditButton = document.getElementById('pov_edit_btn');
     const chinPovSaveButton = document.getElementById('chin_pov_save_btn');
     const povHidePartsToggle = document.getElementById('pov_hide_parts_toggle');
     const povInputRefs = {
@@ -1622,6 +1624,7 @@
     const controls = new OrbitControls(camera3D, renderer.domElement);
     controls.target.set(0, 1.3, 0);
     controls.update();
+    controls.enabled = false;
 
     const initialCameraState = {
       position: camera3D.position.clone(),
@@ -1630,6 +1633,7 @@
     };
 
     let povActive = false;
+    let povEditing = false;
     const POV_STORAGE_KEY = 'chinPovConfig';
     const povConfigDefaults = {
       offsetX: 0,
@@ -1705,6 +1709,7 @@
 
       if (activate) {
         povActive = true;
+        povEditing = false;
         updateChinPovButtonState();
         updatePovCamera(true);
       }
@@ -1785,6 +1790,48 @@
       chinPovButton.textContent = povActive ? 'Cam. normal' : 'Cam. mentón/POV';
     }
 
+    function setPovEditMode(enabled) {
+      povEditing = enabled;
+      controls.enabled = enabled;
+
+      if (povEditButton) {
+        povEditButton.textContent = enabled ? 'Confirmar POV edit' : 'POV edit';
+        povEditButton.classList.toggle('toggle-active', enabled);
+      }
+    }
+
+    function startPovEditMode() {
+      activateChinPOV();
+      const { headPosition } = getHeadTransform();
+      controls.target.copy(headPosition);
+      controls.update();
+      setPovEditMode(true);
+    }
+
+    function confirmPovEditMode() {
+      const { headPosition, headQuaternion } = getHeadTransform();
+      const headQuatInv = headQuaternion.clone().invert();
+
+      const relativePosition = camera3D.position.clone().sub(headPosition).applyQuaternion(headQuatInv);
+      const relativeRotation = headQuatInv.multiply(camera3D.quaternion.clone());
+      const euler = new THREE.Euler().setFromQuaternion(relativeRotation, 'YXZ');
+
+      povConfig = {
+        ...povConfigDefaults,
+        offsetX: relativePosition.x,
+        offsetY: relativePosition.y,
+        offsetZ: relativePosition.z,
+        rotXDeg: THREE.MathUtils.radToDeg(euler.x),
+        rotYDeg: THREE.MathUtils.radToDeg(euler.y),
+        rotZDeg: THREE.MathUtils.radToDeg(euler.z),
+      };
+
+      syncPovInputsFromConfig();
+      persistPovConfig();
+      applyPovConfig(true);
+      setPovEditMode(false);
+    }
+
     function clearPovHiddenState() {
       povHideTargets = [];
       povOriginalVisibility.clear();
@@ -1849,6 +1896,7 @@
 
     function deactivateChinPOV() {
       povActive = false;
+      setPovEditMode(false);
       updateChinPovButtonState();
       restorePovVisibility();
       restoreInitialCamera(true);
@@ -2880,6 +2928,17 @@
       chinPovButton.addEventListener('click', toggleChinPOV);
     }
 
+    if (povEditButton) {
+      setPovEditMode(false);
+      povEditButton.addEventListener('click', () => {
+        if (povEditing) {
+          confirmPovEditMode();
+        } else {
+          startPovEditMode();
+        }
+      });
+    }
+
     if (povHidePartsToggle) {
       povHidePartsEnabled = !!povHidePartsToggle.checked;
       povHidePartsToggle.addEventListener('change', () => {
@@ -3405,7 +3464,7 @@
       const gloveScale = getCalibrationScale(smoothedWorldLandmarks);
       updateGloveAnchors(lastPoseLandmarks, gloveScale);
 
-      if (povActive) {
+      if (povActive && !povEditing) {
         updatePovCamera();
       }
       renderer.render(scene, camera3D);
