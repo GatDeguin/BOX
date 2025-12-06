@@ -109,17 +109,27 @@
     import { FBXLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/FBXLoader.js';
     import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
     import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
+    import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+    import { FilmPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/FilmPass.js';
+    import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+    import { VignetteShader } from 'https://unpkg.com/three@0.160.0/examples/jsm/shaders/VignetteShader.js';
 
     const canvas = document.getElementById('scene');
     const overlay = document.getElementById('overlay');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#030712');
+    scene.fog = new THREE.FogExp2('#0b1b2f', 0.05);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
 
     const povCamera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight - 66), 0.1, 100);
     povCamera.position.set(0, 1.6, 0.35);
@@ -135,11 +145,11 @@
     controls.enabled = false;
     controls.target.set(0, 1, 0);
 
-    const hemiLight = new THREE.HemisphereLight('#dbeafe', '#0f172a', 0.6);
+    const hemiLight = new THREE.HemisphereLight('#dbeafe', '#0f172a', 0.35);
     hemiLight.position.set(0, 8, 0);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight('#ffffff', 1.0);
+    const dirLight = new THREE.DirectionalLight('#bcd7ff', 0.55);
     dirLight.position.set(4, 8, 2);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(2048, 2048);
@@ -151,7 +161,28 @@
     dirLight.shadow.camera.bottom = -10;
     scene.add(dirLight);
 
-    const ambient = new THREE.AmbientLight('#ffffff', 0.25);
+    const spotGroup = new THREE.Group();
+    const spotConfig = [
+      { position: new THREE.Vector3(0, 8, 0), angle: 0.5 },
+      { position: new THREE.Vector3(4, 7.5, 2), angle: 0.45 },
+      { position: new THREE.Vector3(-4, 7.2, -2), angle: 0.45 },
+      { position: new THREE.Vector3(2, 7.6, -4), angle: 0.45 },
+    ];
+
+    spotConfig.forEach(({ position, angle }) => {
+      const spot = new THREE.SpotLight('#dff3ff', 2.8, 18, angle, 0.55, 1.5);
+      spot.position.copy(position);
+      spot.target.position.set(0, 1.2, 0);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(1024, 1024);
+      spot.shadow.bias = -0.0004;
+      spot.penumbra = 0.65;
+      spotGroup.add(spot);
+      spotGroup.add(spot.target);
+    });
+    scene.add(spotGroup);
+
+    const ambient = new THREE.AmbientLight('#a5b4fc', 0.16);
     scene.add(ambient);
 
     const mixers = [];
@@ -206,10 +237,37 @@
       }
     }
 
+    const params = {
+      camara: 'POV',
+      pausarAnimaciones: false,
+      luzDireccional: dirLight.intensity,
+      hemi: hemiLight.intensity,
+      espectadores: 1200,
+      niebla: scene.fog.density,
+      bloom: 1.2,
+      bloomUmbral: 0.82,
+    };
+
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, activeCamera);
+    const unrealBloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), params.bloom, 0.9, params.bloomUmbral);
+    unrealBloomPass.threshold = params.bloomUmbral;
+    unrealBloomPass.strength = params.bloom;
+    const filmPass = new FilmPass(0.22, 0.35, 648, false);
+    const vignettePass = new ShaderPass(VignetteShader);
+    vignettePass.uniforms['offset'].value = 1.1;
+    vignettePass.uniforms['darkness'].value = 1.3;
+    composer.addPass(renderPass);
+    composer.addPass(unrealBloomPass);
+    composer.addPass(filmPass);
+    composer.addPass(vignettePass);
+
     function resize() {
       const width = window.innerWidth;
       const height = window.innerHeight - 66;
       renderer.setSize(width, height, false);
+      composer.setSize(width, height);
+      unrealBloomPass.setSize(width, height);
       [povCamera, orbitCamera].forEach((cam) => {
         cam.aspect = width / height;
         cam.updateProjectionMatrix();
@@ -222,18 +280,11 @@
     const gui = new GUI({ width: 320, container: overlay });
     gui.domElement.style.pointerEvents = 'auto';
 
-    const params = {
-      camara: 'POV',
-      pausarAnimaciones: false,
-      luzDireccional: dirLight.intensity,
-      hemi: hemiLight.intensity,
-      espectadores: 1200,
-    };
-
     gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange((value) => {
       const useOrbit = value === 'Orbital';
       controls.enabled = useOrbit;
       activeCamera = useOrbit ? orbitCamera : povCamera;
+      renderPass.camera = activeCamera;
       if (!useOrbit) {
         povCamera.position.set(0, 1.6, 0.35);
         povCamera.lookAt(0, 1.4, -1);
@@ -243,6 +294,9 @@
     gui.add(params, 'pausarAnimaciones').name('Pausar animaciones');
     gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
     gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
+    gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
+    gui.add(params, 'bloomUmbral', 0.4, 1.5, 0.01).name('Umbral bloom').onChange((v) => unrealBloomPass.threshold = v);
+    gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
     gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => rebuildSpectators());
 
     const status = document.createElement('div');
@@ -350,7 +404,8 @@
         spectatorsMesh.instanceMatrix.needsUpdate = true;
       }
       controls.update();
-      renderer.render(scene, activeCamera);
+      renderPass.camera = activeCamera;
+      composer.render();
     }
 
     render();
