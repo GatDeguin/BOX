@@ -1,9 +1,10 @@
 # Inventario exhaustivo de assets
 
 ## Entradas web y bundle generado
-- `index.html`: punto de entrada principal para la app basada en Vite.
-- `box9.html`: página que carga el bundle compilado de BOX9.
-- `Cyber_boxing.html`, `Mocap.html`, `Neon_Fight.html`, `sacobox5.html`, `sacobox6.html`, `sacobox7.html`, `sacobox8.html`: páginas HTML adicionales de experiencias o pruebas.
+- `index.html`: hub principal con tarjetas hacia todas las escenas.
+- `box9.html`: página que carga el bundle compilado de BOX9 (`public/box9.js`).
+- `box10.html`, `box11.html`, `box12.html`, `box13.html`: variaciones del ring y flujos de sparring/bolsa.
+- `Mocap.html`, `RING.html`, `sacobox8.html`: escenas de mocap, recorrido de gimnasio y POV de saco.
 - `public/box9.js`: bundle JavaScript generado por `npm run build` a partir del código en `src/box9`.
 
 ## Código fuente de BOX9
@@ -20,6 +21,10 @@
 - `docs/box9/rfc.md`: especificación funcional de BOX9.
 - `docs/box9/test-plan.md`: plan de pruebas asociado a BOX9.
 - `docs/sacobox7_spec.md`: especificación para la experiencia "sacobox7".
+- `docs/progresion-hitos.md`: hitos y fases de progreso del proyecto.
+- `docs/gimnasios-ambientacion.md`: notas de ambientación para gimnasios y escenarios.
+- `docs/personajes.md`: catálogo de personajes, estilos y referencias visuales.
+- `docs/progress-panel-mockups.md`: mockups y checklist de panel de progreso.
 
 ## Modelos 3D (`modelos/`)
 - `modelos/Ring.glb`, `modelos/Ring 2.glb`, `modelos/Ring 3.glb`: variantes de ring/arena en formato GLB.
