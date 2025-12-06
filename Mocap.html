@@ -647,9 +647,47 @@
     const MEDIAPIPE_HANDS_VERSION = '0.4.1675469242';
     const MEDIAPIPE_HANDS_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/hands@${MEDIAPIPE_HANDS_VERSION}/`;
     const MEDIAPIPE_HANDS_LOCAL_BASE = '/mediapipe/hands/';
+    const MEDIAPIPE_DRAWING_UTILS_CDN =
+      'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675467017/drawing_utils.js';
     // Usa el CDN por defecto; define window.MEDIAPIPE_HANDS_ASSET_BASE para forzar assets locales opcionales.
     const MEDIAPIPE_HANDS_ASSET_BASE =
       window.MEDIAPIPE_HANDS_ASSET_BASE || MEDIAPIPE_HANDS_BASE;
+
+    let drawingUtilsLoaded = Boolean(window.drawConnectors && window.drawLandmarks);
+    let drawingUtilsReadyPromise = null;
+
+    async function ensureDrawingUtils() {
+      if (drawingUtilsLoaded) return true;
+      if (drawingUtilsReadyPromise) return drawingUtilsReadyPromise;
+
+      drawingUtilsReadyPromise = (async () => {
+        try {
+          const module = await import(MEDIAPIPE_DRAWING_UTILS_CDN);
+          if (module) {
+            if (!window.drawConnectors && module.drawConnectors) {
+              window.drawConnectors = module.drawConnectors;
+            }
+            if (!window.drawLandmarks && module.drawLandmarks) {
+              window.drawLandmarks = module.drawLandmarks;
+            }
+            if (!window.POSE_CONNECTIONS && module.POSE_CONNECTIONS) {
+              window.POSE_CONNECTIONS = module.POSE_CONNECTIONS;
+            }
+            if (!window.HAND_CONNECTIONS && module.HAND_CONNECTIONS) {
+              window.HAND_CONNECTIONS = module.HAND_CONNECTIONS;
+            }
+          }
+
+          drawingUtilsLoaded = Boolean(window.drawConnectors && window.drawLandmarks);
+          return drawingUtilsLoaded;
+        } catch (error) {
+          console.error('No se pudo cargar drawing_utils desde CDN', error);
+          return false;
+        }
+      })();
+
+      return drawingUtilsReadyPromise;
+    }
 
     // ==============================
     // 0. Sanity checks
@@ -1281,6 +1319,8 @@
     });
 
     function drawHandsOnCanvas() {
+      if (!drawingUtilsLoaded || !window.drawConnectors || !window.drawLandmarks) return;
+
       const HAND_CONNECTIONS = window.HAND_CONNECTIONS;
       if (!HAND_CONNECTIONS || !smoothedHandLandmarks) return;
 
@@ -1349,17 +1389,19 @@
           }
         }
 
-        window.drawConnectors(canvasCtx, smoothedLandmarks, window.POSE_CONNECTIONS, {
-          color: '#22c55e',
-          lineWidth: 2,
-        });
-        window.drawLandmarks(canvasCtx, smoothedLandmarks, {
-          color: '#60a5fa',
-          lineWidth: 1,
-          radius: 2,
-        });
+        if (drawingUtilsLoaded && window.drawConnectors && window.drawLandmarks) {
+          window.drawConnectors(canvasCtx, smoothedLandmarks, window.POSE_CONNECTIONS, {
+            color: '#22c55e',
+            lineWidth: 2,
+          });
+          window.drawLandmarks(canvasCtx, smoothedLandmarks, {
+            color: '#60a5fa',
+            lineWidth: 1,
+            radius: 2,
+          });
 
-        drawHandsOnCanvas();
+          drawHandsOnCanvas();
+        }
 
         updateModelFromPose(smoothedLandmarks);
       }
@@ -1412,6 +1454,11 @@
       if (!poseInstance) initPose();
       if (!poseInstance) return;
       if (!handsInstance) initHands();
+
+      const drawingReady = await ensureDrawingUtils();
+      if (!drawingReady) {
+        console.warn('Funciones de dibujo de MediaPipe no disponibles');
+      }
 
       // Reiniciar estado de suavizado y calibración para evitar arrastrar
       // offsets o escalas de sesiones anteriores.
