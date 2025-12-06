@@ -502,6 +502,12 @@
           <div class="control-group">
             <button id="chin_pov_btn" type="button">Cam. mentón/POV</button>
           </div>
+          <div class="control-group">
+            <label class="hint">
+              <input type="checkbox" id="pov_hide_parts_toggle" checked />
+              Ocultar cabeza/cuerpo en POV
+            </label>
+          </div>
           <div class="control-group pov-controls">
             <div class="pov-input-row">
               <label class="hint" for="pov_offset_x">Offset POV (m):</label>
@@ -1124,6 +1130,7 @@
     const gloveSelect = document.getElementById('glove_select');
     const chinPovButton = document.getElementById('chin_pov_btn');
     const chinPovSaveButton = document.getElementById('chin_pov_save_btn');
+    const povHidePartsToggle = document.getElementById('pov_hide_parts_toggle');
     const povInputRefs = {
       offsetX: document.getElementById('pov_offset_x'),
       offsetY: document.getElementById('pov_offset_y'),
@@ -1633,6 +1640,9 @@
       rotZDeg: 0,
     };
     let povConfig = { ...povConfigDefaults };
+    let povHidePartsEnabled = true;
+    let povHideTargets = [];
+    const povOriginalVisibility = new Map();
     const povOffsets = {
       position: new THREE.Vector3(),
       target: new THREE.Vector3(0, 0, 0),
@@ -1749,6 +1759,9 @@
     }
 
     function updatePovCamera(immediate = false) {
+      updatePovHiddenParts();
+      if (!povActive) return;
+
       const { povTarget, cameraPosition, cameraOrientation } = computeChinCameraTransform();
       const lerpAlpha = immediate ? 1 : 0.35;
 
@@ -1772,6 +1785,63 @@
       chinPovButton.textContent = povActive ? 'Cam. normal' : 'Cam. mentón/POV';
     }
 
+    function clearPovHiddenState() {
+      povHideTargets = [];
+      povOriginalVisibility.clear();
+    }
+
+    function refreshPovHideTargets() {
+      clearPovHiddenState();
+      if (!modelRoot) return;
+
+      const headBone = getBone('Head') || getBone('Neck');
+      const headBones = new Set();
+      if (headBone?.traverse) headBone.traverse((bone) => headBones.add(bone));
+
+      modelRoot.traverse((child) => {
+        if (!(child.isMesh || child.isSkinnedMesh || child.isBone || child.type === 'Bone')) return;
+
+        const nameLc = (child.name || '').toLowerCase();
+        const nameMatches = ['head', 'face', 'neck', 'cabeza', 'rostro', 'cuerpo', 'body'].some((token) =>
+          nameLc.includes(token)
+        );
+
+        let influencedByHead = false;
+        if (child.isSkinnedMesh && headBones.size && child.skeleton?.bones) {
+          influencedByHead = child.skeleton.bones.some((bone) => headBones.has(bone));
+        }
+
+        if (nameMatches || influencedByHead || (headBone && child === headBone)) {
+          povHideTargets.push(child);
+        }
+      });
+    }
+
+    function restorePovVisibility() {
+      povOriginalVisibility.forEach((visible, obj) => {
+        obj.visible = visible;
+      });
+      povOriginalVisibility.clear();
+    }
+
+    function updatePovHiddenParts() {
+      if (!povActive || !povHidePartsEnabled) {
+        restorePovVisibility();
+        return;
+      }
+
+      if (!povHideTargets.length) {
+        refreshPovHideTargets();
+      }
+
+      povHideTargets.forEach((obj) => {
+        if (!povOriginalVisibility.has(obj)) {
+          povOriginalVisibility.set(obj, obj.visible);
+        }
+        obj.visible = false;
+      });
+    }
+
     function activateChinPOV() {
       syncPovConfigFromInputs();
       applyPovConfig(true);
@@ -1780,6 +1850,7 @@
     function deactivateChinPOV() {
       povActive = false;
       updateChinPovButtonState();
+      restorePovVisibility();
       restoreInitialCamera(true);
     }
 
@@ -2434,6 +2505,8 @@
 
       stopAllAnimations();
       clearBones();
+      restorePovVisibility();
+      clearPovHiddenState();
       if (modelRoot) {
         scene.remove(modelRoot);
         modelRoot.traverse((child) => {
@@ -2523,6 +2596,9 @@
 
           setStatus(capturing, capturing ? 'Capturando pose…' : 'Modelo listo. Mocap en vivo');
           console.log(`Modelo cargado (${config.name}). Huesos detectados:`, Object.keys(bonesByName));
+
+          refreshPovHideTargets();
+          if (povActive) updatePovHiddenParts();
         },
         (xhr) => {
           if (xhr.total) {
@@ -2802,6 +2878,14 @@
 
     if (chinPovButton) {
       chinPovButton.addEventListener('click', toggleChinPOV);
+    }
+
+    if (povHidePartsToggle) {
+      povHidePartsEnabled = !!povHidePartsToggle.checked;
+      povHidePartsToggle.addEventListener('change', () => {
+        povHidePartsEnabled = !!povHidePartsToggle.checked;
+        updatePovHiddenParts();
+      });
     }
 
     if (chinPovSaveButton) {
