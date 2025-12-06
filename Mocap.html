@@ -2103,6 +2103,10 @@
       // Usamos landmarks en mundo para estabilidad de escala/profundidad cuando estén disponibles.
       if (worldLm) {
         const scale = scaleOverride ?? getCalibrationScale(smoothedWorldLandmarks);
+        // Alineamos coordenadas del mundo de MediaPipe con el espacio 3D:
+        //  - MediaPipe entrega Y positivo hacia abajo, lo invertimos para que Y apunte hacia arriba.
+        //  - Mantener Z en el mismo sentido que el fallback 2D (negativo hacia la cámara).
+        const worldY = -(worldLm.y ?? 0) * scale;
         const rawZ = -(worldLm.z ?? 0) * scale;
         const shouldSmoothDepth =
           smoothedWorldLandmarks &&
@@ -2114,7 +2118,7 @@
           ? (smoothedDepth = smoothedDepth == null ? rawZ : lerp(smoothedDepth, rawZ, 0.08))
           : rawZ;
 
-        return new THREE.Vector3(worldLm.x * scale, worldLm.y * scale, depthValue);
+        return new THREE.Vector3(worldLm.x * scale, worldY, depthValue);
       }
 
       const scale = scaleOverride ?? 1;
