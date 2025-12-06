@@ -314,6 +314,31 @@
       opacity: 0.7;
     }
 
+    .debug-checks {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .debug-check-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+    }
+
+    .debug-check-group span {
+      opacity: 0.75;
+    }
+
+    .debug-check-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
     @media (max-width: 960px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
@@ -498,11 +523,22 @@
             <p class="debug-hint">Se suma al offset actual relativo a la mano.</p>
           </div>
           <div class="debug-row">
-            <label for="debug_glove_flip_left">Espejar guante izquierdo</label>
-            <div class="debug-inputs">
-              <input type="checkbox" id="debug_glove_flip_left" />
+            <label>Espejar guantes (X / Y / Z)</label>
+            <div class="debug-checks">
+              <div class="debug-check-group">
+                <span>Izquierdo:</span>
+                <label><input type="checkbox" id="debug_glove_flip_left_x" />X</label>
+                <label><input type="checkbox" id="debug_glove_flip_left_y" />Y</label>
+                <label><input type="checkbox" id="debug_glove_flip_left_z" />Z</label>
+              </div>
+              <div class="debug-check-group">
+                <span>Derecho:</span>
+                <label><input type="checkbox" id="debug_glove_flip_right_x" />X</label>
+                <label><input type="checkbox" id="debug_glove_flip_right_y" />Y</label>
+                <label><input type="checkbox" id="debug_glove_flip_right_z" />Z</label>
+              </div>
             </div>
-            <p class="debug-hint">Invierte el guante izquierdo para rotar la orientación del pulgar.</p>
+            <p class="debug-hint">Activa la inversión de orientación por eje de cada mano.</p>
           </div>
         </div>
       </div>
@@ -919,15 +955,46 @@
         x: document.getElementById('debug_glove_x'),
         y: document.getElementById('debug_glove_y'),
         z: document.getElementById('debug_glove_z'),
-        flipLeft: document.getElementById('debug_glove_flip_left'),
+        flipLeftX: document.getElementById('debug_glove_flip_left_x'),
+        flipLeftY: document.getElementById('debug_glove_flip_left_y'),
+        flipLeftZ: document.getElementById('debug_glove_flip_left_z'),
+        flipRightX: document.getElementById('debug_glove_flip_right_x'),
+        flipRightY: document.getElementById('debug_glove_flip_right_y'),
+        flipRightZ: document.getElementById('debug_glove_flip_right_z'),
       },
     };
 
     const debugTransforms = {
       character: { scale: 1, position: new THREE.Vector3() },
       ring: { scale: 1, position: new THREE.Vector3() },
-      glove: { scale: 1, position: new THREE.Vector3(), rotation: new THREE.Euler(), flipLeft: false },
+      glove: {
+        scale: 1,
+        position: new THREE.Vector3(),
+        rotation: new THREE.Euler(),
+        flip: {
+          left: { x: false, y: false, z: false },
+          right: { x: false, y: false, z: false },
+        },
+      },
     };
+
+    function createDefaultGloveFlipState() {
+      return {
+        left: { x: false, y: false, z: false },
+        right: { x: false, y: false, z: false },
+      };
+    }
+
+    function cloneGloveFlipState(flip = createDefaultGloveFlipState()) {
+      const safe = createDefaultGloveFlipState();
+      ['left', 'right'].forEach((side) => {
+        if (!flip[side]) return;
+        ['x', 'y', 'z'].forEach((axis) => {
+          safe[side][axis] = !!flip[side][axis];
+        });
+      });
+      return safe;
+    }
 
     const DEG2RAD = Math.PI / 180;
     const RAD2DEG = 180 / Math.PI;
@@ -1505,7 +1572,15 @@
         if (refs.rx) refs.rx.value = (transform.rotation?.x ?? 0) * RAD2DEG;
         if (refs.ry) refs.ry.value = (transform.rotation?.y ?? 0) * RAD2DEG;
         if (refs.rz) refs.rz.value = (transform.rotation?.z ?? 0) * RAD2DEG;
-        if (refs.flipLeft) refs.flipLeft.checked = !!transform.flipLeft;
+        if (key === 'glove') {
+          const flip = cloneGloveFlipState(transform.flip);
+          if (refs.flipLeftX) refs.flipLeftX.checked = !!flip.left.x;
+          if (refs.flipLeftY) refs.flipLeftY.checked = !!flip.left.y;
+          if (refs.flipLeftZ) refs.flipLeftZ.checked = !!flip.left.z;
+          if (refs.flipRightX) refs.flipRightX.checked = !!flip.right.x;
+          if (refs.flipRightY) refs.flipRightY.checked = !!flip.right.y;
+          if (refs.flipRightZ) refs.flipRightZ.checked = !!flip.right.z;
+        }
       });
     }
 
@@ -1554,15 +1629,22 @@
         parseInputNumber(refs.y, 0),
         parseInputNumber(refs.z, 0)
       );
-      if (typeof transform.flipLeft !== 'undefined' && refs.flipLeft) {
-        transform.flipLeft = !!refs.flipLeft.checked;
-      }
       if (transform.rotation && refs.rx && refs.ry && refs.rz) {
         transform.rotation.set(
           parseInputNumber(refs.rx, 0) * DEG2RAD,
           parseInputNumber(refs.ry, 0) * DEG2RAD,
           parseInputNumber(refs.rz, 0) * DEG2RAD
         );
+      }
+
+      if (type === 'glove') {
+        transform.flip = transform.flip ? cloneGloveFlipState(transform.flip) : createDefaultGloveFlipState();
+        if (refs.flipLeftX) transform.flip.left.x = !!refs.flipLeftX.checked;
+        if (refs.flipLeftY) transform.flip.left.y = !!refs.flipLeftY.checked;
+        if (refs.flipLeftZ) transform.flip.left.z = !!refs.flipLeftZ.checked;
+        if (refs.flipRightX) transform.flip.right.x = !!refs.flipRightX.checked;
+        if (refs.flipRightY) transform.flip.right.y = !!refs.flipRightY.checked;
+        if (refs.flipRightZ) transform.flip.right.z = !!refs.flipRightZ.checked;
       }
 
       applyDebugTransform(type);
@@ -1590,7 +1672,7 @@
         position: transform.position.clone(),
         rotation: transform.rotation.clone(),
         scale: transform.scale,
-        flipLeft: transform.flipLeft,
+        flip: cloneGloveFlipState(transform.flip),
       });
     }
 
@@ -1598,21 +1680,25 @@
       if (!modelId) return null;
       if (gloveDebugStateByModel.has(modelId)) {
         const stored = gloveDebugStateByModel.get(modelId);
+        const flip = cloneGloveFlipState(stored.flip);
+        if (stored.flipLeft) flip.left.y = true;
         return {
           position: stored.position.clone(),
           rotation: stored.rotation.clone(),
           scale: stored.scale,
-          flipLeft: stored.flipLeft,
+          flip,
         };
       }
 
       const preset = MODEL_GLOVE_PRESETS[modelId];
       if (!preset) return null;
+      const presetFlip = cloneGloveFlipState(preset.flip);
+      if (preset.flipLeft) presetFlip.left.y = true;
       return {
         position: (preset.offset || new THREE.Vector3()).clone(),
         rotation: (preset.rotation || new THREE.Euler()).clone(),
         scale: preset.scale,
-        flipLeft: preset.flipLeft,
+        flip: presetFlip,
       };
     }
 
@@ -1625,7 +1711,7 @@
       else debugTransforms.glove.rotation.set(0, 0, 0);
 
       if (typeof state.scale === 'number') debugTransforms.glove.scale = state.scale;
-      debugTransforms.glove.flipLeft = !!state.flipLeft;
+      debugTransforms.glove.flip = cloneGloveFlipState(state.flip);
 
       updateDebugInputsFromState();
       applyGloveDebugTransform();
@@ -2480,13 +2566,22 @@
       return { position, quaternion };
     }
 
+    function getGloveFlipQuaternion(side = 'left') {
+      const flip = cloneGloveFlipState(debugTransforms.glove.flip);
+      const flags = flip[side] || {};
+      const flipQuat = new THREE.Quaternion();
+
+      if (flags.x) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI));
+      if (flags.y) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+      if (flags.z) flipQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI));
+
+      return flipQuat;
+    }
+
     function applyGloveTransform(target, transform, side = 'left') {
       if (!target || !transform) return;
 
-      const baseQuat = transform.quaternion.clone();
-      if (side === 'left' && debugTransforms.glove.flipLeft) {
-        baseQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-      }
+      const baseQuat = transform.quaternion.clone().multiply(getGloveFlipQuaternion(side));
 
       const finalQuat = baseQuat.clone().multiply(gloveBaseRotation);
       const offset = gloveOffset.clone().applyQuaternion(baseQuat);
