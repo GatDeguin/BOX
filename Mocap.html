@@ -330,6 +330,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
   <!-- Import map para usar three como módulo -->
   <script type="importmap">
@@ -361,6 +362,7 @@
           <div class="chip-row">
             <div class="chip">Pose 33 puntos</div>
             <div class="chip">Suavizado</div>
+            <div class="chip">Hands 21 puntos</div>
           </div>
         </div>
         <div class="video-wrapper">
@@ -743,6 +745,12 @@
       RIGHT_FOOT_INDEX: 32,
     };
 
+    const HAND_LM = {
+      WRIST: 0,
+      INDEX_MCP: 5,
+      PINKY_MCP: 17,
+    };
+
     function lerp(a, b, t) { return a + (b - a) * t; }
 
     function lerpLandmark(prev, curr, factor) {
@@ -752,6 +760,15 @@
         y: lerp(prev.y, curr.y, factor),
         z: lerp(prev.z ?? 0, curr.z ?? 0, factor),
         visibility: lerp(prev.visibility ?? 1, curr.visibility ?? 1, factor),
+      };
+    }
+
+    function lerpHandLandmark(prev, curr, factor) {
+      if (!prev) return curr;
+      return {
+        x: lerp(prev.x, curr.x, factor),
+        y: lerp(prev.y, curr.y, factor),
+        z: lerp(prev.z ?? 0, curr.z ?? 0, factor),
       };
     }
 
@@ -834,6 +851,18 @@
       return calibrationRef.baseScale * ratio;
     }
 
+    function normalizeHandedness(label = '') {
+      const value = label.toLowerCase();
+      if (value.includes('left') || value.includes('izq')) return 'left';
+      if (value.includes('right') || value.includes('der')) return 'right';
+      return null;
+    }
+
+    function resetHandState() {
+      lastHandLandmarks = {};
+      smoothedHandLandmarks = {};
+    }
+
     // ==============================
     // 2. MediaPipe Pose + Cámara
     // ==============================
@@ -892,9 +921,12 @@
     let smoothedLandmarks = null;
     let lastWorldLandmarks = null;
     let smoothedWorldLandmarks = null;
+    let lastHandLandmarks = {};
+    let smoothedHandLandmarks = {};
     let calibrationRef = null;
     let smoothedDepth = null;
     let poseInstance = null;
+    let handsInstance = null;
 
     // Flag para cortar el retarget y dejar que las animaciones FBX manden.
     let retargetEnabled = true;
@@ -929,6 +961,41 @@
     window.addEventListener('resize', () => {
       if (videoElement.videoWidth > 0) resizeCanvasToVideo();
     });
+
+    function drawHandsOnCanvas() {
+      const HAND_CONNECTIONS = window.HAND_CONNECTIONS;
+      if (!HAND_CONNECTIONS || !smoothedHandLandmarks) return;
+
+      Object.values(smoothedHandLandmarks).forEach((landmarks) => {
+        if (!landmarks?.length) return;
+        window.drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
+          color: '#f97316',
+          lineWidth: 1.5,
+        });
+        window.drawLandmarks(canvasCtx, landmarks, {
+          color: '#fbbf24',
+          lineWidth: 1,
+          radius: 2,
+        });
+      });
+    }
+
+    function onResultsHands(results) {
+      const { multiHandLandmarks = [], multiHandedness = [] } = results || {};
+
+      const updated = {};
+      multiHandLandmarks.forEach((lmSet, idx) => {
+        const label = multiHandedness[idx]?.label || '';
+        const side = normalizeHandedness(label);
+        if (!side) return;
+
+        const prev = smoothedHandLandmarks?.[side];
+        updated[side] = lmSet.map((lm, i) => lerpHandLandmark(prev ? prev[i] : null, lm, 0.35));
+      });
+
+      smoothedHandLandmarks = updated;
+      lastHandLandmarks = updated;
+    }
 
     function onResultsPose(results) {
       canvasCtx.save();
@@ -974,6 +1041,8 @@
           radius: 2,
         });
 
+        drawHandsOnCanvas();
+
         updateModelFromPose(smoothedLandmarks);
       }
 
@@ -1002,9 +1071,29 @@
       poseInstance.onResults(onResultsPose);
     }
 
+    function initHands() {
+      const Hands = window.Hands;
+      if (!Hands) {
+        console.warn('MediaPipe Hands no está disponible');
+        return;
+      }
+
+      handsInstance = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      });
+      handsInstance.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      handsInstance.onResults(onResultsHands);
+    }
+
     async function startCapture() {
       if (!poseInstance) initPose();
       if (!poseInstance) return;
+      if (!handsInstance) initHands();
 
       // Reiniciar estado de suavizado y calibración para evitar arrastrar
       // offsets o escalas de sesiones anteriores.
@@ -1014,6 +1103,7 @@
       smoothedLandmarks = null;
       lastWorldLandmarks = null;
       smoothedWorldLandmarks = null;
+      resetHandState();
 
       capturing = true;
       btnIcon.textContent = '⏸';
@@ -1046,7 +1136,9 @@
         cameraMP = new Camera(videoElement, {
           onFrame: async () => {
             if (!capturing) return;
-            await poseInstance.send({ image: videoElement });
+            const tasks = [poseInstance.send({ image: videoElement })];
+            if (handsInstance) tasks.push(handsInstance.send({ image: videoElement }));
+            await Promise.all(tasks);
           },
           width: videoElement.videoWidth,
           height: videoElement.videoHeight,
@@ -1066,6 +1158,7 @@
       btnIcon.textContent = '▶';
       btnLabel.textContent = 'Iniciar captura';
       setStatus(false, 'Pausa');
+      resetHandState();
 
       if (cameraMP) {
         cameraMP.stop();
@@ -2275,6 +2368,26 @@
       bone.quaternion.slerp(targetLocal, slerp);
     }
 
+    function computeHandTransformFromHandLm(handLandmarks, scaleOverride) {
+      if (!handLandmarks?.length) return null;
+      const wrist = lmToVec3(handLandmarks[HAND_LM.WRIST], null, scaleOverride);
+      const index = lmToVec3(handLandmarks[HAND_LM.INDEX_MCP], null, scaleOverride);
+      const pinky = lmToVec3(handLandmarks[HAND_LM.PINKY_MCP], null, scaleOverride);
+      if (!wrist || !index || !pinky) return null;
+
+      const forward = index.clone().sub(wrist).normalize();
+      const side = pinky.clone().sub(wrist).normalize();
+      if (forward.lengthSq() < 1e-6 || side.lengthSq() < 1e-6) return null;
+
+      const up = new THREE.Vector3().crossVectors(forward, side).normalize();
+      if (up.lengthSq() < 1e-6) up.set(0, 1, 0);
+
+      const basis = new THREE.Matrix4().makeBasis(side, up, forward);
+      const quat = new THREE.Quaternion().setFromRotationMatrix(basis);
+
+      return { position: wrist, quaternion: quat };
+    }
+
     function computeHandTransform(landmarks, wristIdx, indexIdx, pinkyIdx, scaleOverride) {
       const lmWrist = landmarks[wristIdx];
       const lmIndex = landmarks[indexIdx];
@@ -2343,9 +2456,13 @@
 
       const useModelHands = gloveAttachmentMode === GLOVE_ATTACHMENT.MODEL;
       const scale = scaleOverride;
+      const leftHandLm = smoothedHandLandmarks?.left;
+      const rightHandLm = smoothedHandLandmarks?.right;
 
       const leftTransform = useModelHands
-        ? (computeSkeletonHandTransform('left') || (landmarks
+        ? (computeSkeletonHandTransform('left') || (leftHandLm
+            ? computeHandTransformFromHandLm(leftHandLm, scale)
+            : landmarks
             ? computeHandTransform(
                 landmarks,
                 POSE_LM.LEFT_WRIST,
@@ -2354,6 +2471,8 @@
                 scale
               )
             : null))
+        : leftHandLm
+        ? computeHandTransformFromHandLm(leftHandLm, scale)
         : computeHandTransform(
             landmarks,
             POSE_LM.LEFT_WRIST,
@@ -2362,7 +2481,9 @@
             scale
           );
       const rightTransform = useModelHands
-        ? (computeSkeletonHandTransform('right') || (landmarks
+        ? (computeSkeletonHandTransform('right') || (rightHandLm
+            ? computeHandTransformFromHandLm(rightHandLm, scale)
+            : landmarks
             ? computeHandTransform(
                 landmarks,
                 POSE_LM.RIGHT_WRIST,
@@ -2371,6 +2492,8 @@
                 scale
               )
             : null))
+        : rightHandLm
+        ? computeHandTransformFromHandLm(rightHandLm, scale)
         : computeHandTransform(
             landmarks,
             POSE_LM.RIGHT_WRIST,
