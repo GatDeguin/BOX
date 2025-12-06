@@ -439,6 +439,9 @@
             <select id="ring_select" class="select"></select>
           </div>
           <div class="control-group">
+            <button id="chin_pov_btn" type="button">Cam. mentón/POV</button>
+          </div>
+          <div class="control-group">
             <label class="hint" for="glove_select">Guantes:</label>
             <select id="glove_select" class="select"></select>
             <button id="glove_attach_btn" type="button">Agregar guantes al personaje</button>
@@ -932,6 +935,7 @@
     const modelSelect = document.getElementById('model_select');
     const ringSelect = document.getElementById('ring_select');
     const gloveSelect = document.getElementById('glove_select');
+    const chinPovButton = document.getElementById('chin_pov_btn');
     const animFileInput = document.getElementById('anim_file_input');
     const gloveAttachButton = document.getElementById('glove_attach_btn');
     const debugInputRefs = {
@@ -1297,6 +1301,27 @@
     const controls = new OrbitControls(camera3D, renderer.domElement);
     controls.target.set(0, 1.3, 0);
     controls.update();
+
+    function setChinPOV() {
+      const headBone = getBone('Head') || getBone('Neck');
+      const headPosition = new THREE.Vector3();
+
+      if (headBone) {
+        headBone.getWorldPosition(headPosition);
+      } else {
+        headPosition.set(0, 1.65, 0.05);
+      }
+
+      const chinOffset = new THREE.Vector3(0, -0.08, 0.25);
+      const desiredCameraPos = headPosition.clone().add(chinOffset);
+      const previousDamping = controls.enableDamping;
+
+      controls.enableDamping = false;
+      camera3D.position.copy(desiredCameraPos);
+      controls.target.copy(headPosition);
+      controls.update();
+      controls.enableDamping = previousDamping;
+    }
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8e3, 0.6);
     scene.add(hemiLight);
@@ -2276,6 +2301,10 @@
       ringSelect.addEventListener('change', () => {
         loadRingById(ringSelect.value);
       });
+    }
+
+    if (chinPovButton) {
+      chinPovButton.addEventListener('click', setChinPOV);
     }
 
     if (gloveSelect) {
