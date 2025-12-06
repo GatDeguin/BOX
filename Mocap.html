@@ -169,6 +169,11 @@
       flex-wrap: wrap;
     }
 
+    .toggle-active {
+      background: #16a34a;
+      box-shadow: 0 10px 25px rgba(22, 163, 74, 0.45);
+    }
+
     button {
       border-radius: 999px;
       border: 0;
@@ -427,7 +432,7 @@
         <div class="control-bar">
           <div class="control-group">
             <span class="hint">
-              Elegí el modelo del selector (Tyson, BodyBuilder, MMA o Training Dummy con sus texturas) y dejá tus .fbx de animación dentro de <code>animaciones/</code> (ahora organizadas en <code>ataque</code>, <code>descanso</code>, <code>movimiento</code> y <code>daño</code>).
+              Elegí el modelo del selector (Tyson, BodyBuilder, MMA o Training Dummy con sus texturas), cargá tus .fbx en <code>animaciones/</code> (carpetas <code>ataque</code>, <code>descanso</code>, <code>movimiento</code> y <code>daño</code>) y usá el botón de "Cerrar puños" para forzar el puño si el modelo tiene huesos de dedos.
             </span>
           </div>
           <div class="control-group">
@@ -445,6 +450,7 @@
             <label class="hint" for="glove_select">Guantes:</label>
             <select id="glove_select" class="select"></select>
             <button id="glove_attach_btn" type="button">Agregar guantes al personaje</button>
+            <button id="fist_toggle_btn" type="button">Cerrar puños</button>
           </div>
           <div class="control-group">
             <label class="hint" for="animation_select">Animación FBX:</label>
@@ -938,6 +944,7 @@
     const chinPovButton = document.getElementById('chin_pov_btn');
     const animFileInput = document.getElementById('anim_file_input');
     const gloveAttachButton = document.getElementById('glove_attach_btn');
+    const fistToggleButton = document.getElementById('fist_toggle_btn');
     const debugInputRefs = {
       character: {
         scale: document.getElementById('debug_character_scale'),
@@ -1018,6 +1025,22 @@
 
     // Flag para cortar el retarget y dejar que las animaciones FBX manden.
     let retargetEnabled = true;
+    let fistsClosed = false;
+
+    const originalFingerRotations = new Map();
+    let lastMissingFingerBonesKey = null;
+    const fingerBoneNames = [
+      'LeftHandThumb1', 'LeftHandThumb2', 'LeftHandThumb3',
+      'LeftHandIndex1', 'LeftHandIndex2', 'LeftHandIndex3',
+      'LeftHandMiddle1', 'LeftHandMiddle2', 'LeftHandMiddle3',
+      'LeftHandRing1', 'LeftHandRing2', 'LeftHandRing3',
+      'LeftHandPinky1', 'LeftHandPinky2', 'LeftHandPinky3',
+      'RightHandThumb1', 'RightHandThumb2', 'RightHandThumb3',
+      'RightHandIndex1', 'RightHandIndex2', 'RightHandIndex3',
+      'RightHandMiddle1', 'RightHandMiddle2', 'RightHandMiddle3',
+      'RightHandRing1', 'RightHandRing2', 'RightHandRing3',
+      'RightHandPinky1', 'RightHandPinky2', 'RightHandPinky3',
+    ];
 
     function updateGloveAttachmentButton() {
       if (!gloveAttachButton) return;
@@ -1028,6 +1051,59 @@
       gloveAttachButton.title = usingModelHands
         ? 'Los guantes siguen los huesos del personaje cargado'
         : 'Los guantes siguen la pose detectada en vivo';
+    }
+
+    function updateFistToggleButton() {
+      if (!fistToggleButton) return;
+      fistToggleButton.classList.toggle('toggle-active', fistsClosed);
+      fistToggleButton.textContent = fistsClosed ? 'Cerrar puños (activo)' : 'Cerrar puños';
+      fistToggleButton.title = fistsClosed
+        ? 'Los dedos se pliegan en forma de puño mientras dure la captura'
+        : 'Activa para que el personaje cierre los puños en modelos con huesos de dedos';
+    }
+
+    function applyFistPose(enabled) {
+      if (!skeleton) return;
+
+      const shouldRestore = !enabled && originalFingerRotations.size;
+      if (!enabled && !shouldRestore) return;
+
+      const fingerCurl = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.1, 0, 0));
+      const thumbCurl = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.7, 0.35, 0));
+      const missing = [];
+
+      fingerBoneNames.forEach((name) => {
+        const bone = getBone(name);
+        if (!bone) {
+          missing.push(name);
+          return;
+        }
+
+        if (enabled) {
+          if (!originalFingerRotations.has(bone.uuid)) {
+            originalFingerRotations.set(bone.uuid, bone.quaternion.clone());
+          }
+          const targetQuat = name.includes('Thumb') ? thumbCurl : fingerCurl;
+          bone.quaternion.slerp(targetQuat, 0.7);
+        } else {
+          const original = originalFingerRotations.get(bone.uuid);
+          if (original) bone.quaternion.copy(original);
+        }
+      });
+
+      if (!enabled && originalFingerRotations.size) {
+        originalFingerRotations.clear();
+      }
+
+      if (missing.length) {
+        const key = missing.slice().sort().join(',');
+        if (key !== lastMissingFingerBonesKey) {
+          console.warn('Huesos de dedos no encontrados para cerrar puños:', missing);
+          lastMissingFingerBonesKey = key;
+        }
+      } else {
+        lastMissingFingerBonesKey = null;
+      }
     }
 
     function setStatus(live, text) {
@@ -1899,6 +1975,10 @@
           prototype: glovePrototype,
           predefinedPair,
         });
+
+        if (fistsClosed) {
+          applyFistPose(true);
+        }
       };
 
       if (config.mtlUrl) {
@@ -1959,6 +2039,8 @@
       activeAction = null;
       resetAnimationOptions();
       retargetEnabled = true;
+      originalFingerRotations.clear();
+      lastMissingFingerBonesKey = null;
 
       setStatus(false, `Cargando ${config.name}…`);
 
@@ -2023,6 +2105,10 @@
           });
 
           rebuildAnimationActions();
+
+          if (fistsClosed) {
+            applyFistPose(true);
+          }
 
           setStatus(capturing, capturing ? 'Capturando pose…' : 'Modelo listo. Mocap en vivo');
           console.log(`Modelo cargado (${config.name}). Huesos detectados:`, Object.keys(bonesByName));
@@ -2324,6 +2410,15 @@
 
         const scale = getCalibrationScale(smoothedWorldLandmarks);
         updateGloveAnchors(lastPoseLandmarks, scale);
+      });
+    }
+
+    if (fistToggleButton) {
+      updateFistToggleButton();
+      fistToggleButton.addEventListener('click', () => {
+        fistsClosed = !fistsClosed;
+        updateFistToggleButton();
+        applyFistPose(fistsClosed);
       });
     }
 
@@ -2759,6 +2854,8 @@
       orientBoneFromLandmarks('LeftLeg',     POSE_LM.LEFT_KNEE,      POSE_LM.LEFT_ANKLE, 0.35, scale);
       orientBoneFromLandmarks('RightUpLeg',  POSE_LM.RIGHT_HIP,      POSE_LM.RIGHT_KNEE, 0.35, scale);
       orientBoneFromLandmarks('RightLeg',    POSE_LM.RIGHT_KNEE,     POSE_LM.RIGHT_ANKLE,0.35, scale);
+
+      applyFistPose(fistsClosed);
     }
 
     // ==============================
