@@ -17,7 +17,11 @@ import {
   Vector3,
   BufferGeometry,
   Float32BufferAttribute,
-  WebGLRenderer
+  WebGLRenderer,
+  AdditiveBlending,
+  Sprite,
+  SpriteMaterial,
+  Fog
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
@@ -28,6 +32,11 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
 import { EffectProfileName, applyEffects, registerEffectsContext } from './effects';
+
+export interface AudienceFlashSettings {
+  frequency: number;
+  intensity: number;
+}
 
 export interface SceneFlowOptions {
   backgroundColor?: string | number;
@@ -66,6 +75,8 @@ interface SceneFlowContext {
   selectionLight: SpotLight | null;
   ringAccentLight: PointLight | null;
   ringHighlightParticles: Points | null;
+  audienceFlashSystem: AudienceFlashSystem | null;
+  flashSettings: AudienceFlashSettings;
   eventHandlers: Record<string, EventListener>;
   ringModel: Object3D | null;
   fighterModel: Object3D | null;
@@ -216,6 +227,95 @@ const RING_VISUALS: Record<
   }
 };
 
+export const DEFAULT_AUDIENCE_FLASH_SETTINGS: AudienceFlashSettings = {
+  frequency: 0.55,
+  intensity: 0.8
+};
+
+interface AudienceFlash {
+  sprite: Sprite;
+  strength: number;
+  baseColor: Color;
+}
+
+class AudienceFlashSystem {
+  private flashes: AudienceFlash[] = [];
+
+  constructor(private scene: Scene) {
+    this.buildPool();
+  }
+
+  private buildPool() {
+    const poolSize = 90;
+    const radius = 8.5;
+
+    for (let i = 0; i < poolSize; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = radius + Math.random() * 4.5;
+      const height = 2 + Math.random() * 3.2;
+      const offset = (Math.random() - 0.5) * 1.4;
+
+      const baseColor = new Color('#ffcfa1').multiplyScalar(3.8 + Math.random() * 1.2);
+      const material = new SpriteMaterial({
+        color: baseColor,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        fog: true,
+        toneMapped: false
+      });
+
+      const sprite = new Sprite(material);
+      sprite.position.set(
+        Math.cos(angle) * distance + offset,
+        height,
+        Math.sin(angle) * distance + offset,
+      );
+      sprite.scale.setScalar(0.36 + Math.random() * 0.22);
+      sprite.layers.enable(1);
+
+      this.scene.add(sprite);
+      this.flashes.push({ sprite, strength: 0, baseColor });
+    }
+  }
+
+  update(delta: number, settings: AudienceFlashSettings) {
+    const activations = this.getActivationCount(delta, settings.frequency);
+
+    for (let i = 0; i < activations; i++) {
+      this.triggerFlash(settings.intensity);
+    }
+
+    const decaySpeed = 6 + settings.intensity * 7;
+    this.flashes.forEach((flash) => {
+      if (flash.strength <= 0) return;
+      flash.strength = Math.max(0, flash.strength - delta * decaySpeed);
+      const material = flash.sprite.material as SpriteMaterial;
+      material.opacity = flash.strength;
+    });
+  }
+
+  private getActivationCount(delta: number, frequency: number) {
+    const burstsPerSecond = 1.5 + frequency * 16;
+    const expectedActivations = burstsPerSecond * delta;
+    const whole = Math.floor(expectedActivations);
+    const fractional = expectedActivations - whole;
+    return whole + (Math.random() < fractional ? 1 : 0);
+  }
+
+  private triggerFlash(intensity: number) {
+    if (!this.flashes.length) return;
+    const flash = this.flashes[Math.floor(Math.random() * this.flashes.length)];
+    const material = flash.sprite.material as SpriteMaterial;
+    const brightness = 0.35 + intensity * 0.95 + Math.random() * 0.25;
+
+    flash.strength = Math.min(1.2, brightness);
+    material.color.copy(flash.baseColor).multiplyScalar(1 + intensity * 0.9);
+    material.opacity = flash.strength;
+  }
+}
+
 let context: SceneFlowContext | null = null;
 const assetHookListeners = new Set<AssetHooks>();
 const assetManager = new AssetManager({
@@ -342,7 +442,9 @@ function createRenderer(container: HTMLElement, backgroundColor: string | number
 
 function createScene(backgroundColor: string | number): Scene {
   const scene = new Scene();
-  scene.background = new Color(backgroundColor);
+  const background = new Color(backgroundColor);
+  scene.background = background;
+  scene.fog = new Fog(background.getHex(), 8, 32);
   return scene;
 }
 
@@ -416,6 +518,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   scene.add(selectionLight);
   scene.add(selectionLight.target);
 
+  const audienceFlashSystem = new AudienceFlashSystem(scene);
+
   const eventHandlers = registerSceneEvents();
 
   context = {
@@ -442,6 +546,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     pendingResize: null,
     clock: new Clock(),
     selectionLight,
+    audienceFlashSystem,
+    flashSettings: { ...DEFAULT_AUDIENCE_FLASH_SETTINGS },
     ringAccentLight: null,
     ringHighlightParticles: null,
     eventHandlers,
@@ -543,6 +649,12 @@ function registerSceneEvents(): Record<string, EventListener> {
       applyPhaseEffects(context?.phase ?? 'intro');
       replaceRing(nextRing);
       preloadRings(nextRing);
+    },
+    'box9:flash-settings': (event: Event) => {
+      if (!context) return;
+      const detail = (event as CustomEvent<{ settings?: Partial<AudienceFlashSettings> }>).detail;
+      if (!detail?.settings) return;
+      context.flashSettings = { ...context.flashSettings, ...detail.settings };
     }
   };
 
@@ -614,6 +726,8 @@ function animate(_timestamp?: number) {
   if (context.ringHighlightParticles) {
     context.ringHighlightParticles.rotation.y += delta * 0.35;
   }
+
+  context.audienceFlashSystem?.update(delta, context.flashSettings);
 
   composer.render();
   context.animationFrame = requestAnimationFrame(animate);

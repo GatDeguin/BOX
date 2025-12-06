@@ -7,7 +7,8 @@ import {
   getDefaultRingForCharacter
 } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
-import { subscribeAssetManager } from './scene';
+import { DEFAULT_AUDIENCE_FLASH_SETTINGS, subscribeAssetManager } from './scene';
+import type { AudienceFlashSettings } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
 import {
   canFightCharacter,
@@ -338,7 +339,11 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
   };
 }
 
-function createModal(onClose: () => void, onApply: (ring: RingId, freeCamera: boolean) => void) {
+function createModal(
+  onClose: () => void,
+  onApply: (ring: RingId, freeCamera: boolean, flashSettings: AudienceFlashSettings) => void,
+  initialFlashSettings: AudienceFlashSettings
+) {
   const backdrop = document.createElement('div');
   backdrop.className = 'box9-modal-backdrop';
 
@@ -369,6 +374,65 @@ function createModal(onClose: () => void, onApply: (ring: RingId, freeCamera: bo
   freeCamToggle.type = 'checkbox';
   freeCamField.append(freeCamLabel, freeCamToggle);
 
+  const flashField = document.createElement('div');
+  flashField.className = 'box9-field';
+  const flashLabel = document.createElement('label');
+  flashLabel.textContent = 'Destellos en gradas';
+
+  const flashFrequency = document.createElement('input');
+  flashFrequency.type = 'range';
+  flashFrequency.min = '0';
+  flashFrequency.max = '1';
+  flashFrequency.step = '0.01';
+
+  const flashIntensity = document.createElement('input');
+  flashIntensity.type = 'range';
+  flashIntensity.min = '0';
+  flashIntensity.max = '1';
+  flashIntensity.step = '0.01';
+
+  const flashMeta = document.createElement('div');
+  flashMeta.className = 'box9-row';
+  flashMeta.style.justifyContent = 'space-between';
+  const flashFrequencyLabel = document.createElement('small');
+  flashFrequencyLabel.textContent = 'Frecuencia';
+  flashFrequencyLabel.style.textTransform = 'uppercase';
+  flashFrequencyLabel.style.letterSpacing = '0.08em';
+  flashFrequencyLabel.style.color = '#9aa3ba';
+  const flashIntensityLabel = document.createElement('small');
+  flashIntensityLabel.textContent = 'Intensidad';
+  flashIntensityLabel.style.textTransform = 'uppercase';
+  flashIntensityLabel.style.letterSpacing = '0.08em';
+  flashIntensityLabel.style.color = '#9aa3ba';
+  flashMeta.append(flashFrequencyLabel, flashIntensityLabel);
+
+  const flashFrequencyValue = document.createElement('small');
+  flashFrequencyValue.style.color = '#cbd3e8';
+  const flashIntensityValue = document.createElement('small');
+  flashIntensityValue.style.color = '#cbd3e8';
+
+  const updateFlashInfo = () => {
+    flashFrequencyValue.textContent = `${Math.round(parseFloat(flashFrequency.value) * 100)}%`;
+    flashIntensityValue.textContent = `${Math.round(parseFloat(flashIntensity.value) * 100)}%`;
+  };
+
+  const setFlashSettings = (settings: AudienceFlashSettings) => {
+    flashFrequency.value = settings.frequency.toString();
+    flashIntensity.value = settings.intensity.toString();
+    updateFlashInfo();
+  };
+
+  flashFrequency.addEventListener('input', updateFlashInfo);
+  flashIntensity.addEventListener('input', updateFlashInfo);
+  setFlashSettings(initialFlashSettings);
+
+  const flashValuesRow = document.createElement('div');
+  flashValuesRow.className = 'box9-row';
+  flashValuesRow.style.justifyContent = 'space-between';
+  flashValuesRow.append(flashFrequencyValue, flashIntensityValue);
+
+  flashField.append(flashLabel, flashMeta, flashFrequency, flashValuesRow, flashIntensity);
+
   const actions = document.createElement('div');
   actions.className = 'box9-modal-actions';
   const cancelButton = document.createElement('button');
@@ -380,15 +444,20 @@ function createModal(onClose: () => void, onApply: (ring: RingId, freeCamera: bo
   applyButton.className = 'box9-button';
   applyButton.textContent = 'Aplicar';
   applyButton.addEventListener('click', () => {
-    onApply(ringSelect.value as RingId, freeCamToggle.checked);
+    const flashSettings: AudienceFlashSettings = {
+      frequency: parseFloat(flashFrequency.value),
+      intensity: parseFloat(flashIntensity.value)
+    };
+
+    onApply(ringSelect.value as RingId, freeCamToggle.checked, flashSettings);
     onClose();
   });
 
   actions.append(cancelButton, applyButton);
-  modal.append(heading, ringField, freeCamField, actions);
+  modal.append(heading, ringField, freeCamField, flashField, actions);
   backdrop.appendChild(modal);
 
-  return { backdrop, ringSelect, freeCamToggle };
+  return { backdrop, ringSelect, freeCamToggle, setFlashSettings };
 }
 
 function createLoadingOverlay() {
@@ -1336,6 +1405,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
   let dummyActive = false;
   let openDummyScene: (() => void) | null = null;
+  let flashSettings: AudienceFlashSettings = { ...DEFAULT_AUDIENCE_FLASH_SETTINGS };
 
   const container = document.createElement('div');
   container.className = 'box9-ui';
@@ -1406,19 +1476,24 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   const helpPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-help]'));
   const cardPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-card]'));
 
-  const { backdrop, ringSelect, freeCamToggle } = createModal(
+  const { backdrop, ringSelect, freeCamToggle, setFlashSettings } = createModal(
     () => {
       backdrop.style.display = 'none';
     },
-    (ring, freeCamera) => {
+    (ring, freeCamera, flashes) => {
       const preferredRing = getDefaultRingForCharacter(store.getState().character);
       const ringOverride = ring !== preferredRing;
 
+      flashSettings = flashes;
       store.setState({ ring, ringOverride, freeCamera });
       emitSceneEvent('ring-change', { ring });
       emitSceneEvent('freecam-change', { enabled: freeCamera });
-    }
+      emitSceneEvent('flash-settings', { settings: flashSettings });
+    },
+    flashSettings
   );
+
+  emitSceneEvent('flash-settings', { settings: flashSettings });
 
   const { backdrop: assetBackdrop } = createAssetModal(() => {
     assetBackdrop.style.display = 'none';
@@ -1442,6 +1517,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       const state = store.getState();
       ringSelect.value = state.ring;
       freeCamToggle.checked = state.freeCamera;
+      setFlashSettings(flashSettings);
       backdrop.style.display = 'flex';
     },
     () => {
