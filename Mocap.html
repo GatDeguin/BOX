@@ -1006,6 +1006,15 @@
       if (!poseInstance) initPose();
       if (!poseInstance) return;
 
+      // Reiniciar estado de suavizado y calibración para evitar arrastrar
+      // offsets o escalas de sesiones anteriores.
+      calibrationRef = null;
+      smoothedDepth = null;
+      lastPoseLandmarks = null;
+      smoothedLandmarks = null;
+      lastWorldLandmarks = null;
+      smoothedWorldLandmarks = null;
+
       capturing = true;
       btnIcon.textContent = '⏸';
       btnLabel.textContent = 'Detener captura';
