@@ -227,6 +227,7 @@
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
+      espectadores: 1200,
     };
 
     gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange((value) => {
@@ -242,6 +243,7 @@
     gui.add(params, 'pausarAnimaciones').name('Pausar animaciones');
     gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
     gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
+    gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => rebuildSpectators());
 
     const status = document.createElement('div');
     status.className = 'pill';
@@ -258,11 +260,94 @@
 
     const clock = new THREE.Clock();
 
+    const spectatorGeometry = new THREE.CapsuleGeometry(0.12, 0.35, 8, 16);
+    const spectatorMaterial = new THREE.MeshStandardMaterial({
+      color: '#111827',
+      roughness: 0.65,
+      metalness: 0.05,
+    });
+
+    let spectatorsMesh = null;
+    let spectatorData = [];
+    const spectatorDummy = new THREE.Object3D();
+
+    function rebuildSpectators() {
+      if (spectatorsMesh) {
+        scene.remove(spectatorsMesh);
+        spectatorsMesh.dispose?.();
+      }
+
+      const total = Math.max(400, Math.min(4000, Math.floor(params.espectadores)));
+      spectatorData = [];
+      spectatorsMesh = new THREE.InstancedMesh(spectatorGeometry, spectatorMaterial, total);
+      spectatorsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      spectatorsMesh.receiveShadow = true;
+      spectatorsMesh.castShadow = true;
+
+      const baseRadius = 5.2;
+      const ringSpacing = 0.75;
+      const radialJitter = 0.25;
+      const angleJitterStrength = 0.3;
+      const densityStep = 0.55;
+
+      let remaining = total;
+      let ringIndex = 0;
+      let instanceId = 0;
+
+      while (remaining > 0) {
+        const radius = baseRadius + ringSpacing * ringIndex;
+        const idealCount = Math.max(12, Math.round((2 * Math.PI * radius) / densityStep));
+        const ringCount = Math.min(idealCount, remaining);
+        const angleStep = (Math.PI * 2) / ringCount;
+
+        for (let i = 0; i < ringCount; i++) {
+          const jitter = (Math.random() - 0.5) * angleStep * angleJitterStrength;
+          const angle = i * angleStep + jitter;
+          const offsetRadius = radius + (Math.random() - 0.5) * radialJitter;
+
+          const x = Math.cos(angle) * offsetRadius;
+          const z = Math.sin(angle) * offsetRadius;
+          const baseY = 0.05 + Math.random() * 0.35;
+          const rotationY = angle + Math.PI + (Math.random() - 0.5) * 0.35;
+          const amplitude = 0.02 + Math.random() * 0.1;
+          const speed = 0.8 + Math.random() * 1.1;
+          const phase = Math.random() * Math.PI * 2;
+
+          spectatorData.push({ position: new THREE.Vector3(x, baseY, z), rotationY, amplitude, speed, phase });
+
+          spectatorDummy.position.set(x, baseY, z);
+          spectatorDummy.rotation.set(0, rotationY, 0);
+          spectatorDummy.updateMatrix();
+          spectatorsMesh.setMatrixAt(instanceId, spectatorDummy.matrix);
+          instanceId++;
+        }
+
+        remaining -= ringCount;
+        ringIndex++;
+      }
+
+      scene.add(spectatorsMesh);
+    }
+
+    rebuildSpectators();
+
     function render() {
       requestAnimationFrame(render);
       const delta = clock.getDelta();
       if (!params.pausarAnimaciones) {
         mixers.forEach((mixer) => mixer.update(delta));
+      }
+
+      if (spectatorsMesh) {
+        const time = clock.elapsedTime;
+        spectatorData.forEach((data, index) => {
+          spectatorDummy.position.copy(data.position);
+          spectatorDummy.position.y = data.position.y + Math.sin(time * data.speed + data.phase) * data.amplitude;
+          spectatorDummy.rotation.set(0, data.rotationY, 0);
+          spectatorDummy.updateMatrix();
+          spectatorsMesh.setMatrixAt(index, spectatorDummy.matrix);
+        });
+        spectatorsMesh.instanceMatrix.needsUpdate = true;
       }
       controls.update();
       renderer.render(scene, activeCamera);
