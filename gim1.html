@@ -927,6 +927,10 @@
         let ambientBaseIntensity = lightingPresets[currentPreset].ambientBase;
 
         // Golpes y respiración de luz
+        const BOX9_GYM_ID = 'gim1';
+        const BOX9_OPPONENT_ID = 'mma-sparring';
+        let box9SessionReported = false;
+
         const IMPACT_FLASH_DURATION = 0.12;
         let punchActivity = 0;
         let impactFlashTime = 0;
@@ -3238,8 +3242,24 @@
         // ============================
         (async function boot() {
             await init();
+            if (typeof window.box9NotifyReady === 'function') {
+                window.box9NotifyReady(BOX9_GYM_ID);
+            }
             animate();
         })();
+
+        function reportBox9Outcome(outcome = 'win') {
+            if (box9SessionReported) return;
+            box9SessionReported = true;
+
+            if (outcome === 'win') {
+                if (typeof window.box9RegisterWin === 'function') {
+                    window.box9RegisterWin(BOX9_OPPONENT_ID);
+                }
+            } else if (typeof window.box9RegisterLoss === 'function') {
+                window.box9RegisterLoss(BOX9_OPPONENT_ID);
+            }
+        }
 
         async function init() {
             const container = document.getElementById('canvas-container');
@@ -3285,6 +3305,7 @@
 
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('pointerdown', onPointerDown, { passive: true });
+            window.addEventListener('beforeunload', () => reportBox9Outcome('win'));
         }
 
         function initScene() {
