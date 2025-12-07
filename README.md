@@ -27,3 +27,6 @@ La mayoría de las escenas son HTML estáticos. Basta con servir la raíz del pr
 ### Desarrollo de BOX9
 - `npm run dev` levanta el servidor de Vite para trabajar en caliente sobre `src/box9`.
 - `npm run preview` sirve la carpeta de salida (`public/`) tras ejecutar un build.
+
+### Integración de combates en la escena 3D
+- Cuando un combate termina en la escena, llama a `window.box9RegisterWin("mma" | "bodybuilder" | "tyson")` para registrar la victoria, actualizar el progreso y refrescar HUD/modal/panel de progreso.
