@@ -179,7 +179,7 @@
     ];
 
     spotConfig.forEach(({ position, angle }) => {
-      const spot = new THREE.SpotLight('#dff3ff', 2.8, 18, angle, 0.55, 1.5);
+      const spot = new THREE.SpotLight('#dff3ff', 2.8, 22, angle + 0.05, 0.55, 1.5);
       spot.position.copy(position);
       spot.target.position.set(0, 1.2, 0);
       spot.castShadow = true;
@@ -347,8 +347,8 @@
       spectatorsMesh.receiveShadow = true;
       spectatorsMesh.castShadow = true;
 
-      const baseRadius = 5.2;
-      const ringSpacing = 0.75;
+      const baseRadius = 6.1;
+      const ringSpacing = 0.8;
       const radialJitter = 0.25;
       const angleJitterStrength = 0.3;
       const densityStep = 0.55;
@@ -370,7 +370,7 @@
 
           const x = Math.cos(angle) * offsetRadius;
           const z = Math.sin(angle) * offsetRadius;
-          const baseY = 0.05 + Math.random() * 0.35;
+          const baseY = 0.2 + Math.random() * 0.32;
           const rotationY = angle + Math.PI + (Math.random() - 0.5) * 0.35;
           const amplitude = 0.02 + Math.random() * 0.1;
           const speed = 0.8 + Math.random() * 1.1;
