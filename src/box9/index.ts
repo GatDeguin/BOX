@@ -3,6 +3,7 @@ import { startIntro } from './scene';
 import { box9Store } from './state';
 import { initBox9UI } from './ui';
 import { registerProgressionTriggers } from './progression';
+import { initBox9Options } from './ui-options';
 
 function getRequiredElement<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -22,6 +23,7 @@ function bootstrap() {
 
   const store = attachProgressPersistence(box9Store);
   registerProgressionTriggers(store);
+  const optionsController = initBox9Options();
 
   let uiInitialized = false;
   let sceneInitialized = false;
@@ -46,8 +48,13 @@ function bootstrap() {
     showExperience();
   };
 
+  const handleOptions = () => {
+    showExperience();
+    optionsController.open();
+  };
+
   startButton.addEventListener('click', handleStart);
-  optionsButton.addEventListener('click', handleStart);
+  optionsButton.addEventListener('click', handleOptions);
 
   window.addEventListener('box9:mode-selected', () => {
     showExperience();
