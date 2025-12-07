@@ -252,6 +252,34 @@
     const ambient = new THREE.AmbientLight('#a5b4fc', 0.16);
     scene.add(ambient);
 
+    const ledPanels = [];
+    const ledPanelGeometry = new THREE.BoxGeometry(2.6, 1.2, 0.08);
+    const ledBaseColor = new THREE.Color('#0ea5e9');
+
+    const ledPositions = [
+      { position: new THREE.Vector3(0, 1.8, 5.6), rotation: new THREE.Euler(0, 0, 0) },
+      { position: new THREE.Vector3(0, 1.8, -5.6), rotation: new THREE.Euler(0, Math.PI, 0) },
+      { position: new THREE.Vector3(5.6, 1.8, 0), rotation: new THREE.Euler(0, -Math.PI / 2, 0) },
+      { position: new THREE.Vector3(-5.6, 1.8, 0), rotation: new THREE.Euler(0, Math.PI / 2, 0) },
+    ];
+
+    ledPositions.forEach(({ position, rotation }) => {
+      const material = new THREE.MeshStandardMaterial({
+        color: '#0f172a',
+        emissive: ledBaseColor.clone(),
+        emissiveIntensity: 1.5,
+        metalness: 0.45,
+        roughness: 0.35,
+      });
+      const panel = new THREE.Mesh(ledPanelGeometry, material);
+      panel.position.copy(position);
+      panel.rotation.copy(rotation);
+      panel.castShadow = false;
+      panel.receiveShadow = true;
+      ledPanels.push(panel);
+      scene.add(panel);
+    });
+
     const cornerLights = [
       new THREE.Vector3(3.2, 1.7, 3.2),
       new THREE.Vector3(3.2, 1.7, -3.2),
@@ -271,6 +299,31 @@
 
     const gltfLoader = new GLTFLoader(loaderManager);
     const fbxLoader = new FBXLoader(loaderManager);
+
+    const stageProfiles = {
+      Presentación: {
+        intensity: 0.35,
+        noise: 0.45,
+        ledColor: '#22d3ee',
+        audio: 'sonidos/publico_intro.wav',
+      },
+      Combate: {
+        intensity: 0.72,
+        noise: 0.75,
+        ledColor: '#f472b6',
+        audio: 'sonidos/publico_enojado.wav',
+      },
+      Clímax: {
+        intensity: 1,
+        noise: 1,
+        ledColor: '#f97316',
+        audio: 'sonidos/publico_victoria.wav',
+      },
+    };
+
+    let fightIntensity = stageProfiles.Presentación.intensity;
+    let crowdNoiseLevel = stageProfiles.Presentación.noise;
+    let stageName = 'Presentación';
 
     function setShadows(object) {
       object.traverse?.((child) => {
@@ -327,6 +380,7 @@
       niebla: scene.fog.density,
       bloom: 1.2,
       bloomUmbral: 0.82,
+      etapa: stageName,
     };
 
     const composer = new EffectComposer(renderer);
@@ -367,6 +421,7 @@
       controls.enabled = useOrbit;
       activeCamera = useOrbit ? orbitCamera : povCamera;
       renderPass.camera = activeCamera;
+      attachListener(activeCamera);
       if (!useOrbit) {
         povCamera.position.set(0, 1.6, 0.35);
         povCamera.lookAt(0, 1.4, -1);
@@ -386,6 +441,7 @@
       params.pausarAnimaciones = !!params.pausarAnimaciones;
       updateStatusText();
     });
+    gui.add(params, 'etapa', Object.keys(stageProfiles)).name('Etapa de pelea').onChange((value) => setStage(value));
     gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
     gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
     gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
@@ -402,7 +458,7 @@
     overlay.appendChild(status);
 
     function updateStatusText() {
-      status.textContent = `Listo • ${params.camara} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
+      status.textContent = `Listo • ${params.camara} • ${stageName} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
     }
 
     Promise.all([
@@ -425,6 +481,103 @@
     let spectatorsMesh = null;
     let spectatorData = [];
     const spectatorDummy = new THREE.Object3D();
+
+    const listener = new THREE.AudioListener();
+    const crowdAudio = new THREE.Audio(listener);
+    const audioLoader = new THREE.AudioLoader();
+    povCamera.add(listener);
+
+    const loadedBuffers = new Map();
+
+    function attachListener(camera) {
+      listener.removeFromParent();
+      camera.add(listener);
+    }
+
+    function playCrowdAudio(stageKey) {
+      const config = stageProfiles[stageKey];
+      if (!config?.audio) return;
+      const url = config.audio;
+      const volume = 0.45 + config.intensity * 0.45;
+
+      const playBuffer = (buffer) => {
+        if (crowdAudio.isPlaying) {
+          crowdAudio.stop();
+        }
+        crowdAudio.setBuffer(buffer);
+        crowdAudio.setLoop(true);
+        crowdAudio.setVolume(volume);
+        crowdAudio.play();
+      };
+
+      if (loadedBuffers.has(url)) {
+        playBuffer(loadedBuffers.get(url));
+        return;
+      }
+
+      audioLoader.load(url, (buffer) => {
+        loadedBuffers.set(url, buffer);
+        playBuffer(buffer);
+      });
+    }
+
+    function setStage(nextStage) {
+      const config = stageProfiles[nextStage];
+      if (!config) return;
+      stageName = nextStage;
+      params.etapa = nextStage;
+      fightIntensity = config.intensity;
+      crowdNoiseLevel = config.noise;
+      ledBaseColor.set(config.ledColor);
+      updateAtmosphere(0);
+      playCrowdAudio(nextStage);
+      updateStatusText();
+    }
+
+    function updateAtmosphere(time) {
+      const hue = THREE.MathUtils.lerp(0.62, 0.02, fightIntensity);
+      const saturation = 0.7 + fightIntensity * 0.25;
+      const lightness = 0.55 + fightIntensity * 0.15;
+      const lightColor = new THREE.Color().setHSL(hue, saturation, lightness);
+      const pulse = Math.sin(time * (1.4 + fightIntensity)) * 0.05;
+
+      ambient.color.copy(lightColor);
+      hemiLight.color.copy(lightColor);
+      ambient.intensity = 0.12 + fightIntensity * 0.4 + pulse * 0.5;
+      hemiLight.intensity = params.hemi + fightIntensity * 0.35 + pulse * 0.6;
+
+      spotGroup.children.forEach((child) => {
+        if (child.isLight) {
+          child.color.lerp(lightColor, 0.35);
+          child.intensity = 2 + fightIntensity * 1.8 + Math.sin(time * 2 + child.position.x) * 0.08;
+        }
+      });
+    }
+
+    function updateLedPanels(noise, time) {
+      const vivid = THREE.MathUtils.clamp(noise, 0, 1);
+      const reactiveColor = new THREE.Color().setHSL(0.56 - vivid * 0.38, 0.9, 0.55 + vivid * 0.25);
+      const emissiveColor = ledBaseColor.clone().lerp(reactiveColor, 0.6);
+
+      ledPanels.forEach((panel, index) => {
+        const flicker = Math.sin(time * 3 + index) * 0.08 + Math.random() * 0.02;
+        const level = THREE.MathUtils.clamp(1.2 + vivid * 2.6 + flicker, 0.8, 3.8);
+        panel.material.emissive.copy(emissiveColor);
+        panel.material.emissiveIntensity = level;
+        panel.scale.y = 1 + vivid * 0.25 + Math.sin(time * 5 + index) * 0.04;
+      });
+    }
+
+    updateAtmosphere(0);
+
+    let audioPrimed = false;
+    function resumeCrowdAudio() {
+      if (audioPrimed) return;
+      audioPrimed = true;
+      listener.context.resume?.();
+      playCrowdAudio(stageName);
+    }
+    window.addEventListener('pointerdown', resumeCrowdAudio, { once: true });
 
     function rebuildSpectators() {
       if (spectatorsMesh) {
@@ -519,21 +672,33 @@
     function render() {
       requestAnimationFrame(render);
       const delta = clock.getDelta();
+      const time = clock.elapsedTime;
+
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
+      const rhythmicPulse = (Math.sin(time * (1.1 + fightIntensity * 0.4)) + 1) * 0.12;
+      const slowWave = (Math.sin(time * 0.35) + 1) * 0.08;
+      const targetNoise = THREE.MathUtils.clamp(stageConfig.noise + rhythmicPulse + slowWave, 0.25, 1.05);
+      crowdNoiseLevel = THREE.MathUtils.lerp(crowdNoiseLevel, targetNoise, 0.04);
+
       if (!params.pausarAnimaciones) {
         mixers.forEach((mixer) => mixer.update(delta));
       }
 
       if (spectatorsMesh) {
-        const time = clock.elapsedTime;
         spectatorData.forEach((data, index) => {
           spectatorDummy.position.copy(data.position);
-          spectatorDummy.position.y = data.position.y + Math.sin(time * data.speed + data.phase) * data.amplitude;
-          spectatorDummy.rotation.set(0, data.rotationY + Math.sin(time * data.rotSpeed + data.rotPhase) * data.rotAmplitude, 0);
+          const lift = data.amplitude * (0.6 + crowdNoiseLevel * 0.8);
+          const sway = data.rotAmplitude * (0.6 + crowdNoiseLevel * 0.7);
+          spectatorDummy.position.y = data.position.y + Math.sin(time * data.speed + data.phase) * lift;
+          spectatorDummy.rotation.set(0, data.rotationY + Math.sin(time * data.rotSpeed + data.rotPhase) * sway, 0);
           spectatorDummy.updateMatrix();
           spectatorsMesh.setMatrixAt(index, spectatorDummy.matrix);
         });
         spectatorsMesh.instanceMatrix.needsUpdate = true;
       }
+
+      updateLedPanels(crowdNoiseLevel, time);
+      updateAtmosphere(time);
       controls.update();
       renderPass.camera = activeCamera;
       composer.render();
