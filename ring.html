@@ -227,6 +227,7 @@
     import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
     import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+    import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
     import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
     import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
     import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -635,6 +636,7 @@
     const gltfLoader = new GLTFLoader(loaderManager);
     const fbxLoader = new FBXLoader(loaderManager);
     const objLoader = new OBJLoader(loaderManager);
+    const mtlLoader = new MTLLoader(loaderManager);
     const textureLoader = new THREE.TextureLoader(loaderManager);
 
     const fighters = {
@@ -652,14 +654,11 @@
     };
 
     const gloveConfig = {
-      url: 'modelos/Guantes_Amateur.obj',
-      scale: 0.01,
-      baseRotation: new THREE.Euler(-Math.PI / 2, Math.PI, 0),
-      offset: new THREE.Vector3(0, 0, -0.08),
-      textures: {
-        map: { url: 'texturas/Boxing_Gloves_Leather_Tan.jpg', colorSpace: THREE.SRGBColorSpace },
-        normalMap: { url: 'texturas/Boxing_Gloves_BUMP.jpg', colorSpace: THREE.NoColorSpace },
-      },
+      url: 'modelos/Guantes_PRO/mesh.obj',
+      mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
+      scale: 0.025,
+      baseRotation: new THREE.Euler(1.8675022996339319, -1.3788101090755194, 0.03490658503988602),
+      offset: new THREE.Vector3(0.35, 0.25, 0.05),
     };
 
     let glovePrototype = null;
@@ -835,7 +834,14 @@
     async function ensureGlovePrototype() {
       if (glovePrototype) return glovePrototype;
       try {
-        const glove = await objLoader.loadAsync(gloveConfig.url);
+        const gloveLoader = gloveConfig.mtlUrl ? new OBJLoader(loaderManager) : objLoader;
+        if (gloveConfig.mtlUrl) {
+          const materials = await mtlLoader.loadAsync(gloveConfig.mtlUrl);
+          materials.preload();
+          gloveLoader.setMaterials(materials);
+        }
+
+        const glove = await gloveLoader.loadAsync(gloveConfig.url);
         const textureSet = buildTextureSet(gloveConfig.textures);
         glove.traverse?.((child) => {
           if (child.isMesh) {
