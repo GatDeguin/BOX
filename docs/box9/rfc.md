@@ -4,6 +4,7 @@
 - Definir una experiencia de combate estilizada y accesible que conserve el tono neon del proyecto.
 - Priorizar la claridad de controles y estados de cámara para reducir confusión durante el combate.
 - Proveer lineamientos de localización al español para contenido estático y dinámico.
+- Documentar el punto de entrada actual: `menu.html` carga el bundle generado en `public/box9.js`.
 
 ## Públicos objetivo
 - **Jugadores casuales de acción/arcade** que buscan rondas rápidas con mínima curva de aprendizaje.
