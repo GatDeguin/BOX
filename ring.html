@@ -245,8 +245,12 @@
 
     const spotGroup = new THREE.Group();
     const rigLights = [];
+    const rigBeamLights = [];
+    const rigBeamEmitters = [];
     const rimLights = [];
     const fillLights = [];
+    const backlights = [];
+    let spectatorOuterRadius = 12;
 
     const ringRadius = 4.8;
     const spotCount = 8;
@@ -306,6 +310,43 @@
     fillLights.push(skyFill);
     scene.add(skyFill);
     scene.add(skyFill.target);
+
+    const backlightGroup = new THREE.Group();
+    const backlightCount = 8;
+    const backlightBaseIntensity = 1.15;
+
+    function updateBacklightPositions() {
+      const radius = spectatorOuterRadius + 4.5;
+      const height = 4.8;
+
+      backlights.forEach((light, index) => {
+        const angle = (index / backlightCount) * Math.PI * 2 + Math.PI / backlightCount;
+        light.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+        light.target.position.set(0, 2.4, 0);
+      });
+    }
+
+    function refreshBacklightIntensity(enabled) {
+      backlights.forEach((light) => {
+        light.intensity = enabled ? light.userData.baseIntensity : 0;
+      });
+    }
+
+    for (let i = 0; i < backlightCount; i++) {
+      const rimColor = i % 2 === 0 ? '#b7d6ff' : '#d8e0ff';
+      const backlight = new THREE.SpotLight(rimColor, backlightBaseIntensity, 70, 0.35, 0.5, 1.8);
+      backlight.castShadow = false;
+      backlight.penumbra = 0.65;
+      backlight.shadow.bias = -0.0002;
+      backlight.decay = 1.6;
+      backlight.userData.baseIntensity = backlightBaseIntensity;
+      backlights.push(backlight);
+      backlightGroup.add(backlight);
+      backlightGroup.add(backlight.target);
+    }
+
+    scene.add(backlightGroup);
+    updateBacklightPositions();
 
     const rigGroup = new THREE.Group();
     const rigHeight = 8.6;
@@ -377,7 +418,59 @@
     rigGroup.add(rigFill);
     rigLights.push(rigFill);
 
+    const beamEmitterGeometry = new THREE.CylinderGeometry(0.06, 0.1, 0.32, 12);
+    const baseEmitterIntensity = 2.3;
+    const beamEmitterMaterial = new THREE.MeshStandardMaterial({
+      color: '#e0f2fe',
+      emissive: '#38bdf8',
+      emissiveIntensity: baseEmitterIntensity,
+      metalness: 0.42,
+      roughness: 0.2,
+    });
+
+    const rigBeamOffsets = [-rigSize / 2 + 1.2, 0, rigSize / 2 - 1.2];
+    const rigBeamDistance = rigSize / 2;
+    const beamLightIntensity = 1.45;
+
+    rigBeamOffsets.forEach((offset) => {
+      const positions = [
+        new THREE.Vector3(offset, rigHeight - 0.15, rigBeamDistance),
+        new THREE.Vector3(offset, rigHeight - 0.15, -rigBeamDistance),
+        new THREE.Vector3(rigBeamDistance, rigHeight - 0.15, offset),
+        new THREE.Vector3(-rigBeamDistance, rigHeight - 0.15, offset),
+      ];
+
+      positions.forEach((position) => {
+        const emitter = new THREE.Mesh(beamEmitterGeometry, beamEmitterMaterial.clone());
+        emitter.position.copy(position);
+        emitter.castShadow = false;
+        emitter.receiveShadow = false;
+        emitter.material.userData.baseEmissiveIntensity = baseEmitterIntensity;
+        rigBeamEmitters.push(emitter);
+        rigGroup.add(emitter);
+
+        const beamLight = new THREE.PointLight('#8bd1ff', beamLightIntensity, 28, 2);
+        beamLight.position.copy(position).add(new THREE.Vector3(0, -0.08, 0));
+        beamLight.castShadow = false;
+        beamLight.decay = 1.7;
+        beamLight.userData.baseIntensity = beamLightIntensity;
+        rigBeamLights.push(beamLight);
+        rigGroup.add(beamLight);
+      });
+    });
+
     scene.add(rigGroup);
+
+    function refreshRigBeamLights(enabled) {
+      rigBeamLights.forEach((light) => {
+        light.intensity = enabled ? light.userData.baseIntensity : 0;
+      });
+
+      rigBeamEmitters.forEach((mesh) => {
+        const base = mesh.material.userData.baseEmissiveIntensity ?? baseEmitterIntensity;
+        mesh.material.emissiveIntensity = enabled ? base : 0.05;
+      });
+    }
 
     const ambient = new THREE.AmbientLight('#a5b4fc', 0.16);
     scene.add(ambient);
@@ -689,6 +782,8 @@
       bloom: 1.2,
       bloomUmbral: 0.82,
       etapa: stageName,
+      contraluz: true,
+      lucesViga: true,
     };
 
     fighterSlots.rival.current = params.rival;
@@ -796,6 +891,8 @@
     gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
     gui.add(params, 'bloomUmbral', 0.4, 1.5, 0.01).name('Umbral bloom').onChange((v) => unrealBloomPass.threshold = v);
     gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
+    gui.add(params, 'contraluz').name('Contraluz público').onChange((value) => refreshBacklightIntensity(value));
+    gui.add(params, 'lucesViga').name('Luces vigas superiores').onChange((value) => refreshRigBeamLights(value));
     gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => {
       rebuildSpectators();
       updateStatusText();
@@ -1422,6 +1519,10 @@
         ringIndex++;
       }
 
+      const lastRadius = baseRadius + ringSpacing * Math.max(0, ringIndex - 1);
+      spectatorOuterRadius = lastRadius + 1.8;
+      updateBacklightPositions();
+
       refreshSpectatorColors();
       scene.add(spectatorsMesh);
 
@@ -1485,6 +1586,8 @@
     }
 
     rebuildSpectators();
+    refreshBacklightIntensity(params.contraluz);
+    refreshRigBeamLights(params.lucesViga);
 
     window.addEventListener('keydown', (event) => {
       if (event.repeat) return;
