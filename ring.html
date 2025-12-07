@@ -561,7 +561,8 @@
     }
 
     async function loadRing() {
-      const candidates = ['modelos/Ring.glb', 'modelos/Ring 2.glb'];
+      const candidates = ['modelos/Ring.glb', 'modelos/Ring 2.glb', 'modelos/Ring 3.glb'];
+
       for (const url of candidates) {
         try {
           const gltf = await gltfLoader.loadAsync(url);
@@ -575,7 +576,8 @@
           console.warn('No se pudo cargar', url, err.message);
         }
       }
-      console.warn('No se encontró ningún modelo Ring.glb/Ring 2.glb');
+
+      console.warn('No se encontró ningún modelo de ring en las rutas esperadas');
     }
 
     async function loadFighter(url, position, target, scale = 0.01) {
