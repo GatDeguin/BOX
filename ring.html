@@ -357,7 +357,7 @@
     const fighterSlots = {
       player: {
         position: new THREE.Vector3(2.2, 0, 2.2),
-        flip: true,
+        target: 'rival',
         current: 'principal',
         model: null,
         mixer: null,
@@ -366,7 +366,7 @@
       },
       rival: {
         position: new THREE.Vector3(-2.2, 0, -2.2),
-        flip: false,
+        target: 'player',
         current: 'tyson',
         model: null,
         mixer: null,
@@ -432,12 +432,16 @@
       console.warn('No se encontró ningún modelo Ring.glb/Ring 2.glb');
     }
 
-    async function loadFighter(url, position, flip = false, scale = 0.01) {
+    async function loadFighter(url, position, target, scale = 0.01) {
       try {
         const model = await fbxLoader.loadAsync(url);
         model.scale.setScalar(scale);
         model.position.copy(position);
-        model.rotation.y = flip ? Math.PI / 4 : -Math.PI / 4;
+        if (target) {
+          const lookTarget = target.clone();
+          lookTarget.y = position.y;
+          model.lookAt(lookTarget);
+        }
         setShadows(model);
 
         let mixer = null;
@@ -462,6 +466,21 @@
       });
     }
 
+    function getSlotTarget(slotKey) {
+      const slot = fighterSlots[slotKey];
+      if (!slot) return null;
+
+      if (slot.target === 'player') {
+        return fighterSlots.player?.position;
+      }
+
+      if (slot.target === 'rival') {
+        return fighterSlots.rival?.position;
+      }
+
+      return new THREE.Vector3();
+    }
+
     async function setFighter(slotKey, fighterKey) {
       const slot = fighterSlots[slotKey];
       const fighter = fighters[fighterKey];
@@ -469,10 +488,12 @@
 
       slot.scale = fighter.scale ?? slot.scale ?? 0.01;
 
+      const targetPosition = getSlotTarget(slotKey);
+
       slot.requestId += 1;
       const requestId = slot.requestId;
 
-      const loaded = await loadFighter(fighter.url, slot.position, slot.flip, slot.scale);
+      const loaded = await loadFighter(fighter.url, slot.position, targetPosition, slot.scale);
       if (!loaded || requestId !== slot.requestId) {
         loaded?.model && disposeModel(loaded.model);
         return;
