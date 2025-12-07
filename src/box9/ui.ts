@@ -244,6 +244,17 @@ function createStyles() {
     .box9-progress-wins small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
     .box9-progress-milestone { margin: 0; color: #dce2f5; line-height: 1.5; font-size: 14px; }
     .box9-secret-progress { margin: 0; color: #c7ffe8; background: rgba(84,255,191,0.12); border: 1px solid rgba(84,255,191,0.4); padding: 10px 12px; border-radius: 10px; line-height: 1.5; font-weight: 700; }
+    .box9-button.text { background: transparent; border-color: transparent; color: #cbd3e8; box-shadow: none; text-decoration: underline; padding-inline: 10px; }
+    .box9-button:focus-visible { outline: 2px solid rgba(122,155,255,0.8); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(122,155,255,0.25); }
+    .box9-toggle input:focus-visible + .box9-toggle-slider { box-shadow: 0 0 0 3px rgba(122,155,255,0.35); }
+    .box9-radio input:focus-visible { outline: 2px solid rgba(122,155,255,0.8); outline-offset: 2px; border-radius: 6px; }
+    .box9-slider input:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(122,155,255,0.35); border-radius: 999px; }
+    .box9-mode-grid button:focus-visible, .box9-mode-sidebar button:focus-visible { outline: 2px solid rgba(122,155,255,0.85); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(122,155,255,0.2); }
+    @media (max-width: 960px) {
+      .box9-mode-layout { grid-template-columns: 1fr; }
+      .box9-mode-sidebar { order: -1; }
+      .box9-mode-card .box9-button { width: auto; }
+    }
   `;
   document.head.appendChild(style);
 }

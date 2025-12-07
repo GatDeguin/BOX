@@ -8,39 +8,53 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --box9-bg: radial-gradient(circle at 15% 20%, rgba(122,155,255,0.25), transparent 40%),
+        radial-gradient(circle at 70% 10%, rgba(255,107,129,0.18), transparent 32%),
+        radial-gradient(circle at 50% 80%, rgba(7,10,16,0.85), rgba(3,5,8,0.95));
+      --box9-surface: linear-gradient(135deg, rgba(7,10,16,0.9), rgba(13,18,30,0.85));
+      --box9-border: rgba(255, 255, 255, 0.12);
+      --box9-text: #e9ecf4;
+      --box9-text-soft: #b4bed4;
+      --box9-accent: #7a9bff;
+      --box9-accent-strong: #3f5cff;
+      --box9-soft: #9aa3ba;
+    }
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       min-height: 100vh;
-      background: radial-gradient(circle at 15% 20%, rgba(122,155,255,0.25), transparent 40%),
-        radial-gradient(circle at 70% 10%, rgba(255,107,129,0.18), transparent 32%),
-        radial-gradient(circle at 50% 80%, rgba(7,10,16,0.85), rgba(3,5,8,0.95));
+      background: var(--box9-bg);
       font-family: "Inter", system-ui, -apple-system, sans-serif;
-      color: #e9ecf4;
+      color: var(--box9-text);
       overflow: hidden;
+      line-height: 1.6;
     }
     #box9-root {
       position: relative;
       min-height: 100vh;
       display: grid;
       place-items: center;
-      padding: 28px 18px;
+      padding: clamp(16px, 4vw, 32px) clamp(14px, 3vw, 24px);
     }
     .box9-hero {
       width: min(960px, 100%);
-      padding: 28px 24px 22px;
+      padding: clamp(22px, 3vw, 32px);
       border-radius: 18px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: linear-gradient(135deg, rgba(7,10,16,0.9), rgba(13,18,30,0.85));
+      border: 1px solid var(--box9-border);
+      background: var(--box9-surface);
       box-shadow: 0 22px 70px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
       display: grid;
-      gap: 12px;
+      gap: 14px;
     }
     .box9-overline {
       letter-spacing: 0.12em;
       text-transform: uppercase;
       font-size: 12px;
-      color: #9aa3ba;
+      color: var(--box9-soft);
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -57,18 +71,20 @@
     }
     .box9-subtitle {
       margin: 0;
-      color: #b4bed4;
-      line-height: 1.6;
+      color: var(--box9-text-soft);
+      line-height: 1.7;
       font-size: 16px;
+      max-width: 72ch;
     }
     .box9-actions {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
     }
     .box9-button {
-      border: 1px solid rgba(255,255,255,0.14);
-      background: linear-gradient(135deg, #3f5cff, #7a9bff);
+      border: 1px solid var(--box9-accent-strong);
+      background: linear-gradient(135deg, var(--box9-accent-strong), var(--box9-accent));
       color: #fff;
       border-radius: 12px;
       padding: 12px 16px;
@@ -77,27 +93,42 @@
       text-transform: uppercase;
       cursor: pointer;
       box-shadow: 0 14px 40px rgba(63,92,255,0.35);
-      transition: transform 140ms ease, box-shadow 140ms ease;
-    }
-    .box9-button.secondary {
-      background: rgba(255,255,255,0.06);
-      border-color: rgba(255,255,255,0.16);
-      color: #e9ecf4;
-      box-shadow: none;
-    }
-    .box9-button.ghost {
-      background: transparent;
-      border-color: rgba(255,255,255,0.18);
-      color: #b4bed4;
-      box-shadow: none;
+      transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
     }
     .box9-button:hover {
       transform: translateY(-1px);
       box-shadow: 0 18px 50px rgba(63,92,255,0.45);
     }
+    .box9-button:focus-visible {
+      outline: 2px solid rgba(122,155,255,0.85);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(122,155,255,0.25);
+    }
+    .box9-button.secondary {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.2);
+      color: var(--box9-text);
+      box-shadow: none;
+    }
+    .box9-button.ghost {
+      background: transparent;
+      border-color: rgba(255,255,255,0.18);
+      color: var(--box9-text-soft);
+      box-shadow: none;
+    }
+    .box9-button.text {
+      background: transparent;
+      border-color: transparent;
+      color: var(--box9-text-soft);
+      box-shadow: none;
+      text-decoration: underline;
+    }
+    .box9-button.text:hover {
+      color: #fff;
+    }
     .box9-tip {
       margin: 4px 0 0;
-      color: #9aa3ba;
+      color: var(--box9-soft);
       font-size: 14px;
       display: inline-flex;
       align-items: center;
@@ -116,6 +147,22 @@
       position: absolute;
       inset: 0;
       pointer-events: none;
+    }
+    @media (max-width: 720px) {
+      .box9-hero {
+        padding: 20px 18px 16px;
+      }
+      .box9-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .box9-button {
+        width: 100%;
+        text-align: center;
+      }
+      .box9-logo {
+        font-size: clamp(28px, 8vw, 40px);
+      }
     }
   </style>
 </head>
