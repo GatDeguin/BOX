@@ -256,6 +256,38 @@
     const ledPanelGeometry = new THREE.BoxGeometry(2.6, 1.2, 0.08);
     const ledBaseColor = new THREE.Color('#0ea5e9');
 
+    const fxGroup = new THREE.Group();
+    scene.add(fxGroup);
+
+    const edgeStripMaterial = new THREE.MeshStandardMaterial({
+      color: '#0a0f1f',
+      emissive: '#38bdf8',
+      emissiveIntensity: 1.3,
+      roughness: 0.38,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.9,
+    });
+
+    const edgeStripGeometry = new THREE.BoxGeometry(6.8, 0.06, 0.16);
+    const edgeStripPositions = [
+      new THREE.Vector3(0, 0.14, 3.4),
+      new THREE.Vector3(0, 0.14, -3.4),
+      new THREE.Vector3(3.4, 0.14, 0),
+      new THREE.Vector3(-3.4, 0.14, 0),
+    ];
+
+    edgeStripPositions.forEach((pos, idx) => {
+      const strip = new THREE.Mesh(edgeStripGeometry, edgeStripMaterial.clone());
+      strip.position.copy(pos);
+      if (idx >= 2) {
+        strip.rotation.y = Math.PI / 2;
+      }
+      strip.castShadow = false;
+      strip.receiveShadow = true;
+      fxGroup.add(strip);
+    });
+
     const ledPositions = [
       { position: new THREE.Vector3(0, 1.8, 5.6), rotation: new THREE.Euler(0, 0, 0) },
       { position: new THREE.Vector3(0, 1.8, -5.6), rotation: new THREE.Euler(0, Math.PI, 0) },
@@ -487,6 +519,65 @@
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
 
+    const smokeCount = 90;
+    const smokePositions = new Float32Array(smokeCount * 3);
+    const smokeVelocities = new Float32Array(smokeCount);
+    const smokeMaterial = new THREE.PointsMaterial({
+      color: '#9fb3c8',
+      size: 0.55,
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const smokeGeometry = new THREE.BufferGeometry();
+    smokeGeometry.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
+    const smokePoints = new THREE.Points(smokeGeometry, smokeMaterial);
+    smokePoints.frustumCulled = false;
+    fxGroup.add(smokePoints);
+
+    function resetSmokeParticle(index, baseY = 0.05) {
+      const radius = 3.2 + Math.random() * 1.1;
+      const angle = Math.random() * Math.PI * 2;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = baseY + Math.random() * 0.35;
+
+      smokePositions[index * 3] = x;
+      smokePositions[index * 3 + 1] = y;
+      smokePositions[index * 3 + 2] = z;
+      smokeVelocities[index] = 0.08 + Math.random() * 0.12;
+    }
+
+    for (let i = 0; i < smokeCount; i++) {
+      resetSmokeParticle(i, Math.random() * 0.2);
+    }
+
+    smokeGeometry.attributes.position.needsUpdate = true;
+
+    const dustCount = 140;
+    const dustPositions = new Float32Array(dustCount * 3);
+    const dustVelocity = new Float32Array(dustCount * 3);
+    const dustLife = new Float32Array(dustCount).fill(0);
+    const dustMaterial = new THREE.PointsMaterial({
+      color: '#f3ddc2',
+      size: 0.085,
+      transparent: true,
+      opacity: 0.06,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const dustGeometry = new THREE.BufferGeometry();
+    dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+    const dustPoints = new THREE.Points(dustGeometry, dustMaterial);
+    dustPoints.frustumCulled = false;
+    fxGroup.add(dustPoints);
+
+    for (let i = 0; i < dustCount; i++) {
+      dustPositions[i * 3 + 1] = -10;
+    }
+    dustGeometry.attributes.position.needsUpdate = true;
+
     const loadedBuffers = new Map();
 
     function attachListener(camera) {
@@ -566,6 +657,68 @@
         panel.material.emissiveIntensity = level;
         panel.scale.y = 1 + vivid * 0.25 + Math.sin(time * 5 + index) * 0.04;
       });
+    }
+
+    function updateSmoke(delta, time) {
+      for (let i = 0; i < smokeCount; i++) {
+        smokePositions[i * 3 + 1] += smokeVelocities[i] * delta;
+        smokePositions[i * 3] += Math.sin(time * 0.35 + i) * 0.015 * delta;
+        smokePositions[i * 3 + 2] += Math.cos(time * 0.35 + i) * 0.015 * delta;
+
+        if (smokePositions[i * 3 + 1] > 1) {
+          resetSmokeParticle(i, 0.04);
+        }
+      }
+
+      const swell = 0.2 + fightIntensity * 0.35 + Math.sin(time * 0.5) * 0.05;
+      smokeMaterial.opacity = THREE.MathUtils.clamp(0.22 + swell * 0.25, 0.18, 0.42);
+      smokeGeometry.attributes.position.needsUpdate = true;
+    }
+
+    function spawnDustBurst() {
+      const burstSize = 10 + Math.floor(Math.random() * 12);
+      const radius = 0.6 + Math.random() * 1.2;
+      const centerAngle = Math.random() * Math.PI * 2;
+
+      for (let i = 0; i < dustCount; i++) {
+        if (dustLife[i] > 0) continue;
+        const angle = centerAngle + (Math.random() - 0.5) * 0.7;
+        const dist = radius + (Math.random() - 0.5) * 0.35;
+        dustPositions[i * 3] = Math.cos(angle) * dist;
+        dustPositions[i * 3 + 1] = 0.08 + Math.random() * 0.04;
+        dustPositions[i * 3 + 2] = Math.sin(angle) * dist;
+        dustVelocity[i * 3] = (Math.random() - 0.5) * 0.3;
+        dustVelocity[i * 3 + 1] = 0.45 + Math.random() * 0.4;
+        dustVelocity[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+        dustLife[i] = 1.2 + Math.random() * 0.4;
+        if (--burstSize <= 0) break;
+      }
+
+      dustGeometry.attributes.position.needsUpdate = true;
+    }
+
+    function updateDust(delta) {
+      let active = 0;
+
+      for (let i = 0; i < dustCount; i++) {
+        if (dustLife[i] <= 0) continue;
+        active++;
+
+        dustPositions[i * 3] += dustVelocity[i * 3] * delta;
+        dustPositions[i * 3 + 1] += dustVelocity[i * 3 + 1] * delta;
+        dustPositions[i * 3 + 2] += dustVelocity[i * 3 + 2] * delta;
+        dustVelocity[i * 3 + 1] -= delta * 0.28;
+        dustLife[i] -= delta * 1.1;
+
+        if (dustLife[i] <= 0 || dustPositions[i * 3 + 1] < 0) {
+          dustLife[i] = 0;
+          dustPositions[i * 3 + 1] = -10;
+        }
+      }
+
+      const pulse = Math.min(active / 40, 1);
+      dustMaterial.opacity = 0.05 + pulse * 0.35;
+      dustGeometry.attributes.position.needsUpdate = true;
     }
 
     updateAtmosphere(0);
@@ -682,6 +835,9 @@
 
       if (!params.pausarAnimaciones) {
         mixers.forEach((mixer) => mixer.update(delta));
+        if (Math.random() < 0.02 + fightIntensity * 0.01) {
+          spawnDustBurst();
+        }
       }
 
       if (spectatorsMesh) {
@@ -698,6 +854,8 @@
       }
 
       updateLedPanels(crowdNoiseLevel, time);
+      updateSmoke(delta, time);
+      updateDust(delta);
       updateAtmosphere(time);
       controls.update();
       renderPass.camera = activeCamera;
