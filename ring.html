@@ -244,6 +244,7 @@
     scene.add(dirLight);
 
     const spotGroup = new THREE.Group();
+    const rigLights = [];
     const spotConfig = [
       { position: new THREE.Vector3(0, 8, 0), angle: 0.5 },
       { position: new THREE.Vector3(4, 7.5, 2), angle: 0.45 },
@@ -263,6 +264,78 @@
       spotGroup.add(spot.target);
     });
     scene.add(spotGroup);
+
+    const rigGroup = new THREE.Group();
+    const rigHeight = 8.6;
+    const rigSize = 10;
+
+    const trussMaterial = new THREE.MeshStandardMaterial({
+      color: '#1f2937',
+      metalness: 0.75,
+      roughness: 0.32,
+      emissive: '#0b1220',
+      emissiveIntensity: 0.25,
+    });
+
+    const mainBeamGeo = new THREE.BoxGeometry(rigSize, 0.2, 0.2);
+    const sideBeamGeo = new THREE.BoxGeometry(0.2, 0.2, rigSize);
+
+    [
+      { geometry: mainBeamGeo, position: new THREE.Vector3(0, rigHeight, rigSize / 2) },
+      { geometry: mainBeamGeo, position: new THREE.Vector3(0, rigHeight, -rigSize / 2) },
+      { geometry: sideBeamGeo, position: new THREE.Vector3(rigSize / 2, rigHeight, 0) },
+      { geometry: sideBeamGeo, position: new THREE.Vector3(-rigSize / 2, rigHeight, 0) },
+    ].forEach(({ geometry, position }) => {
+      const beam = new THREE.Mesh(geometry, trussMaterial);
+      beam.position.copy(position);
+      beam.castShadow = false;
+      beam.receiveShadow = true;
+      rigGroup.add(beam);
+    });
+
+    const diagonalGeo = new THREE.BoxGeometry(0.16, 0.16, Math.sqrt(2) * rigSize);
+    const diagonals = [
+      { position: new THREE.Vector3(0, rigHeight - 0.3, 0), rotation: new THREE.Euler(0, Math.PI / 4, Math.PI / 2) },
+      { position: new THREE.Vector3(0, rigHeight - 0.3, 0), rotation: new THREE.Euler(0, -Math.PI / 4, Math.PI / 2) },
+    ];
+
+    diagonals.forEach(({ position, rotation }) => {
+      const brace = new THREE.Mesh(diagonalGeo, trussMaterial.clone());
+      brace.position.copy(position);
+      brace.rotation.copy(rotation);
+      brace.castShadow = false;
+      brace.receiveShadow = true;
+      rigGroup.add(brace);
+    });
+
+    const reflectorConfig = [
+      { position: new THREE.Vector3(4.2, rigHeight - 0.1, 4.2), target: new THREE.Vector3(1.2, 1.3, 1.2), angle: 0.45 },
+      { position: new THREE.Vector3(-4.2, rigHeight - 0.1, 4.2), target: new THREE.Vector3(-1.2, 1.3, 1.2), angle: 0.45 },
+      { position: new THREE.Vector3(4.2, rigHeight - 0.1, -4.2), target: new THREE.Vector3(1.2, 1.3, -1.2), angle: 0.45 },
+      { position: new THREE.Vector3(-4.2, rigHeight - 0.1, -4.2), target: new THREE.Vector3(-1.2, 1.3, -1.2), angle: 0.45 },
+      { position: new THREE.Vector3(0, rigHeight - 0.2, 0), target: new THREE.Vector3(0, 1, 0), angle: 0.35 },
+    ];
+
+    reflectorConfig.forEach(({ position, target, angle }, index) => {
+      const color = index === reflectorConfig.length - 1 ? '#fcd34d' : '#dbeafe';
+      const reflector = new THREE.SpotLight(color, 2.2, 28, angle, 0.5, 1.1);
+      reflector.position.copy(position);
+      reflector.target.position.copy(target);
+      reflector.castShadow = true;
+      reflector.shadow.mapSize.set(1024, 1024);
+      reflector.shadow.bias = -0.00035;
+      reflector.penumbra = 0.55;
+      rigLights.push(reflector);
+      rigGroup.add(reflector);
+      rigGroup.add(reflector.target);
+    });
+
+    const rigFill = new THREE.PointLight('#7dd3fc', 0.4, 30, 1.5);
+    rigFill.position.set(0, rigHeight + 0.3, 0);
+    rigGroup.add(rigFill);
+    rigLights.push(rigFill);
+
+    scene.add(rigGroup);
 
     const ambient = new THREE.AmbientLight('#a5b4fc', 0.16);
     scene.add(ambient);
@@ -842,6 +915,11 @@
           child.color.lerp(lightColor, 0.35);
           child.intensity = 2 + fightIntensity * 1.8 + Math.sin(time * 2 + child.position.x) * 0.08;
         }
+      });
+
+      rigLights.forEach((light, index) => {
+        light.color.lerp(lightColor, 0.25);
+        light.intensity = 1.1 + fightIntensity * 1.6 + Math.sin(time * 1.6 + index) * 0.12;
       });
     }
 
