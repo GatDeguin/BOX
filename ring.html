@@ -65,6 +65,45 @@
       position: relative;
     }
 
+    .hud__lifebars {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .lifebar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .lifebar__label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #cbd5f5;
+    }
+
+    .lifebar__track {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .lifebar__fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #22d3ee, #10b981, #fbbf24);
+      width: 100%;
+      transition: width 0.25s ease;
+    }
+
     canvas {
       width: 100%;
       height: calc(100vh - 66px);
@@ -148,12 +187,22 @@
     <h1>Ring POV • Three.js</h1>
     <div class="tag"><span></span> Carga: Ring.glb + FBX</div>
   </header>
-  <main>
-    <div id="overlay"></div>
-    <div class="hud">
-      <div class="hud__title">Controles rápidos</div>
-      <ul>
-        <li><strong>C</strong> • Cambiar POV / Orbital</li>
+    <main>
+      <div id="overlay"></div>
+      <div class="hud">
+        <div class="hud__lifebars">
+          <div class="lifebar" id="player-bar">
+            <div class="lifebar__label">Jugador</div>
+            <div class="lifebar__track"><div class="lifebar__fill"></div></div>
+          </div>
+          <div class="lifebar" id="rival-bar">
+            <div class="lifebar__label">Rival</div>
+            <div class="lifebar__track"><div class="lifebar__fill"></div></div>
+          </div>
+        </div>
+        <div class="hud__title">Controles rápidos</div>
+        <ul>
+          <li><strong>C</strong> • Cambiar POV / Orbital</li>
         <li><strong>P</strong> • Pausar / reanudar animaciones</li>
         <li><strong>R</strong> • Regenerar público</li>
         <li><strong>Click + WASD</strong> • Moverte en POV</li>
@@ -187,6 +236,10 @@
 
     const canvas = document.getElementById('scene');
     const overlay = document.getElementById('overlay');
+    const lifeBars = {
+      player: document.querySelector('#player-bar .lifebar__fill'),
+      rival: document.querySelector('#rival-bar .lifebar__fill'),
+    };
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#030712');
@@ -588,6 +641,26 @@
       bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx', scale: 0.0105 },
     };
 
+    const animationLibrary = {
+      idle: { url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: THREE.LoopRepeat },
+      rest: { url: 'animaciones/descanso/Arm Stretching.fbx', loop: THREE.LoopRepeat },
+      attackLight: { url: 'animaciones/ataque/Lead Jab.fbx', loop: THREE.LoopOnce, damage: 8 },
+      attackHeavy: { url: 'animaciones/ataque/Hook.fbx', loop: THREE.LoopOnce, damage: 12 },
+      attackCombo: { url: 'animaciones/ataque/Jab Cross.fbx', loop: THREE.LoopOnce, damage: 16 },
+      attackElbow: { url: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: THREE.LoopOnce, damage: 18 },
+      defend: { url: 'animaciones/defensa/Left Block.fbx', loop: THREE.LoopRepeat },
+      dodge: { url: 'animaciones/defensa/Dodging.fbx', loop: THREE.LoopRepeat },
+      damage: { url: 'animaciones/daño/Light Hit To Head.fbx', loop: THREE.LoopOnce },
+      fall: { url: 'animaciones/daño/caida/Fall Over.fbx', loop: THREE.LoopOnce },
+      getup: { url: 'animaciones/daño/caida/Getting Up.fbx', loop: THREE.LoopOnce },
+    };
+
+    const animationCache = new Map();
+    const fighterStates = {
+      player: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null },
+      rival: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null },
+    };
+
     const fighterSlots = {
       player: {
         position: new THREE.Vector3(2.2, 0, 2.2),
@@ -686,9 +759,8 @@
         }
         setShadows(model);
 
-        let mixer = null;
+        const mixer = new THREE.AnimationMixer(model);
         if (model.animations?.length) {
-          mixer = new THREE.AnimationMixer(model);
           model.animations.forEach((clip) => mixer.clipAction(clip).play());
         }
 
@@ -758,6 +830,10 @@
         mixers.add(loaded.mixer);
       }
 
+      if (!slot.animations) slot.animations = {};
+      preloadCoreAnimations(slotKey);
+      resetFighterState(slotKey);
+
       if (slotKey === 'player' && playerScaleController) {
         params.escalaJugador = slot.scale;
         playerScaleController.setValue(slot.scale);
@@ -767,6 +843,74 @@
         params.escalaRival = slot.scale;
         rivalScaleController.setValue(slot.scale);
       }
+    }
+
+    function resetFighterState(slotKey) {
+      const state = fighterStates[slotKey];
+      if (!state) return;
+      state.health = state.maxHealth;
+      state.blocking = false;
+      state.dodging = false;
+      state.down = false;
+      state.activeAction = null;
+      updateLifeBar(slotKey);
+    }
+
+    function updateLifeBar(slotKey) {
+      const state = fighterStates[slotKey];
+      const bar = lifeBars[slotKey];
+      if (!state || !bar) return;
+      const pct = Math.max(0, Math.min(1, state.health / state.maxHealth));
+      bar.style.width = `${pct * 100}%`;
+    }
+
+    async function loadClip(key) {
+      const config = animationLibrary[key];
+      if (!config) return null;
+      if (animationCache.has(config.url)) return animationCache.get(config.url);
+
+      try {
+        const asset = await fbxLoader.loadAsync(config.url);
+        const clip = asset.animations?.[0] ?? null;
+        if (clip) {
+          clip.resetDuration?.();
+          animationCache.set(config.url, clip);
+          return clip;
+        }
+      } catch (err) {
+        console.warn('No se pudo cargar la animación', config.url, err.message);
+      }
+
+      return null;
+    }
+
+    async function preloadCoreAnimations(slotKey) {
+      const slot = fighterSlots[slotKey];
+      if (!slot) return;
+      const keys = ['idle', 'rest', 'attackLight', 'attackHeavy', 'attackCombo', 'attackElbow', 'defend', 'dodge', 'damage', 'fall', 'getup'];
+      keys.forEach((key) => loadClip(key));
+      // Play a neutral idle to keep the mixer alive.
+      playAnimation(slotKey, 'idle', true);
+    }
+
+    async function playAnimation(slotKey, key, fade = false) {
+      const slot = fighterSlots[slotKey];
+      if (!slot?.mixer) return null;
+      const config = animationLibrary[key];
+      const clip = await loadClip(key);
+      if (!config || !clip) return null;
+
+      slot.mixer.stopAllAction();
+      const action = slot.mixer.clipAction(clip);
+      action.loop = config.loop ?? THREE.LoopRepeat;
+      action.clampWhenFinished = config.loop === THREE.LoopOnce;
+      action.reset();
+      if (fade) {
+        action.fadeIn(0.2).play();
+      } else {
+        action.play();
+      }
+      return { action, config, clip };
     }
 
     const params = {
@@ -883,6 +1027,13 @@
 
     const pauseController = gui.add(params, 'pausarAnimaciones').name('Pausar animaciones').onChange(() => {
       params.pausarAnimaciones = !!params.pausarAnimaciones;
+      if (params.pausarAnimaciones) {
+        clearAi('player');
+        clearAi('rival');
+      } else if (stageName === 'Combate') {
+        scheduleAi('player');
+        scheduleAi('rival');
+      }
       updateStatusText();
     });
     gui.add(params, 'etapa', Object.keys(stageProfiles)).name('Etapa de pelea').onChange((value) => setStage(value));
@@ -913,6 +1064,7 @@
       setFighter('player', fighterSlots.player.current),
       setFighter('rival', params.rival),
     ]).finally(() => {
+      applyPresentationMode();
       updateStatusText();
     });
 
@@ -987,6 +1139,8 @@
     const listener = new THREE.AudioListener();
     const crowdAudio = new THREE.Audio(listener);
     const bellAudio = new THREE.Audio(listener);
+    const impactAudio = new THREE.Audio(listener);
+    const fallAudio = new THREE.Audio(listener);
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
 
@@ -1051,6 +1205,27 @@
 
     const loadedBuffers = new Map();
 
+    function playSound(url, audio, volume = 1, loop = false) {
+      if (!audio) return;
+      const start = (buffer) => {
+        audio.stop();
+        audio.setBuffer(buffer);
+        audio.setLoop(loop);
+        audio.setVolume(volume);
+        audio.play();
+      };
+
+      if (loadedBuffers.has(url)) {
+        start(loadedBuffers.get(url));
+        return;
+      }
+
+      audioLoader.load(url, (buffer) => {
+        loadedBuffers.set(url, buffer);
+        start(buffer);
+      });
+    }
+
     function attachListener(camera) {
       listener.removeFromParent();
       camera.add(listener);
@@ -1106,6 +1281,117 @@
       });
     }
 
+    function clearAi(slotKey) {
+      const state = fighterStates[slotKey];
+      if (state?.aiTimer) {
+        clearTimeout(state.aiTimer);
+        state.aiTimer = null;
+      }
+    }
+
+    function applyPresentationMode() {
+      Object.keys(fighterStates).forEach((slotKey) => {
+        const state = fighterStates[slotKey];
+        state.mode = 'Presentación';
+        clearAi(slotKey);
+        state.health = state.maxHealth;
+        updateLifeBar(slotKey);
+        playAnimation(slotKey, 'rest', true);
+      });
+    }
+
+    function evaluateCollision(attackerKey, attackKey) {
+      const attacker = fighterSlots[attackerKey];
+      const targetKey = attackerKey === 'player' ? 'rival' : 'player';
+      const targetSlot = fighterSlots[targetKey];
+      const targetState = fighterStates[targetKey];
+      const attackConfig = animationLibrary[attackKey];
+      if (!attacker?.model || !targetSlot?.model || !attackConfig || !targetState) return;
+
+      const attackerBox = new THREE.Box3().setFromObject(attacker.model);
+      const targetBox = new THREE.Box3().setFromObject(targetSlot.model);
+      if (!attackerBox.intersectsBox(targetBox)) return;
+      if (targetState.blocking || targetState.dodging || targetState.down) return;
+
+      const damage = attackConfig.damage ?? 10;
+      targetState.health = Math.max(0, targetState.health - damage);
+      updateLifeBar(targetKey);
+      playSound('sonidos/golpe_4.mp3', impactAudio, 0.6 + fightIntensity * 0.3);
+
+      playAnimation(targetKey, 'damage', true);
+
+      if (targetState.health <= targetState.maxHealth * 0.5 && !targetState.down) {
+        triggerFall(targetKey);
+      }
+    }
+
+    async function triggerFall(slotKey) {
+      const state = fighterStates[slotKey];
+      if (!state || state.down) return;
+      state.down = true;
+      clearAi(slotKey);
+      playSound('sonidos/impacto_grave.wav', fallAudio, 0.9);
+      const fallAction = await playAnimation(slotKey, 'fall', true);
+      const duration = fallAction?.clip?.duration ?? 1.6;
+
+      setTimeout(async () => {
+        await playAnimation(slotKey, 'getup', true);
+        state.health = state.maxHealth;
+        updateLifeBar(slotKey);
+        state.down = false;
+        if (stageName === 'Combate') {
+          scheduleAi(slotKey);
+        }
+      }, duration * 1000 + 800);
+    }
+
+    function scheduleAi(slotKey) {
+      const state = fighterStates[slotKey];
+      if (!state || stageName !== 'Combate' || params.pausarAnimaciones) return;
+      clearAi(slotKey);
+
+      const delay = 600 + Math.random() * 1200;
+      state.aiTimer = setTimeout(async () => {
+        if (state.down || stageName !== 'Combate') return;
+        const roll = Math.random();
+        let actionKey = 'attackLight';
+        if (roll > 0.8) actionKey = 'attackElbow';
+        else if (roll > 0.6) actionKey = 'attackCombo';
+        else if (roll > 0.45) actionKey = 'attackHeavy';
+        else if (roll > 0.3) actionKey = 'defend';
+        else if (roll > 0.15) actionKey = 'dodge';
+
+        state.blocking = actionKey === 'defend';
+        state.dodging = actionKey === 'dodge';
+        state.activeAction = actionKey;
+
+        const action = await playAnimation(slotKey, actionKey, true);
+        const impactTime = Math.min(0.6, (action?.clip?.duration ?? 1) * 0.5);
+        if (actionKey.startsWith('attack')) {
+          setTimeout(() => evaluateCollision(slotKey, actionKey), impactTime * 1000);
+        }
+
+        const resetTime = (action?.clip?.duration ?? 1) * 1000;
+        setTimeout(() => {
+          state.blocking = false;
+          state.dodging = false;
+          if (!state.down && stageName === 'Combate') {
+            playAnimation(slotKey, 'idle', true);
+            scheduleAi(slotKey);
+          }
+        }, resetTime + 250);
+      }, delay);
+    }
+
+    function applyCombatMode() {
+      Object.keys(fighterStates).forEach((slotKey) => {
+        const state = fighterStates[slotKey];
+        state.mode = 'Combate';
+        playAnimation(slotKey, 'idle', true);
+        scheduleAi(slotKey);
+      });
+    }
+
     function setStage(nextStage) {
       const config = stageProfiles[nextStage];
       if (!config) return;
@@ -1119,6 +1405,11 @@
       playCrowdAudio(nextStage);
       if (startingCombat) {
         playBell();
+      }
+      if (stageName === 'Combate') {
+        applyCombatMode();
+      } else {
+        applyPresentationMode();
       }
       refreshSpectatorColors();
       updateStatusText();
