@@ -133,7 +133,7 @@
     scene.fog = new THREE.FogExp2('#0b1b2f', 0.05);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
