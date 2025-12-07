@@ -1,10 +1,12 @@
 import { attachProgressPersistence } from './persistence';
 import { startIntro } from './scene';
-import { box9Store } from './state';
+import { box9Store, CharacterId } from './state';
 import { initBox9UI } from './ui';
+import { initCampaignSelectionView } from './ui-campaign-selection';
 import { registerProgressionTriggers, normalizeProgress } from './progression';
 import { initBox9Options } from './ui-options';
 import type { Box9ModeId } from './ui-modes';
+import { createModeOverlay } from './ui-modes';
 
 function getRequiredElement<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -29,13 +31,10 @@ function bootstrap() {
 
   let uiInitialized = false;
   let sceneInitialized = false;
+  let teardownCampaign: (() => void) | null = null;
+  let modeOverlay: { overlay: HTMLElement; update: (progress: ReturnType<typeof normalizeProgress>) => void } | null = null;
 
   const showExperience = () => {
-    if (!uiInitialized) {
-      initBox9UI(uiRoot, store);
-      uiInitialized = true;
-    }
-
     hero.style.display = 'none';
     experience.style.display = 'block';
   };
@@ -46,32 +45,42 @@ function bootstrap() {
     startIntro(canvasContainer);
   };
 
-  const handleStart = () => {
-    showExperience();
+  const mountModeOverlay = () => {
+    const { overlay, update } = createModeOverlay(store, (mode) => {
+      window.dispatchEvent(new CustomEvent('box9:mode-selected', { detail: { mode } }));
+    });
+
+    modeOverlay = { overlay, update };
+    uiRoot.innerHTML = '';
+    uiRoot.appendChild(overlay);
   };
 
-  const handleOptions = () => {
-    showExperience();
-    optionsController.open();
+  const ensureModeOverlay = () => {
+    if (!modeOverlay) {
+      mountModeOverlay();
+    }
   };
 
-  startButton.addEventListener('click', handleStart);
-  optionsButton.addEventListener('click', handleOptions);
+  const openCampaign = () => {
+    ensureScene();
+    uiRoot.innerHTML = '';
+    modeOverlay = null;
+    teardownCampaign?.();
+    teardownCampaign = initCampaignSelectionView(uiRoot, store);
+  };
 
-  const routeMode = (mode: Box9ModeId = 'seleccion') => {
+  const routeMode = (mode: Box9ModeId = 'campaign') => {
     const progress = normalizeProgress(store.getState().progress);
     showExperience();
 
     switch (mode) {
-      case 'seleccion': {
-        ensureScene();
-        window.dispatchEvent(
-          new CustomEvent('box9:start-selection', { detail: { progress, unlocks: progress.unlocks } })
-        );
+      case 'campaign': {
+        openCampaign();
         break;
       }
       case 'bolsa': {
         ensureScene();
+        uiRoot.innerHTML = '';
         window.dispatchEvent(
           new CustomEvent('box9:start-bag-mode', { detail: { progress, unlocks: progress.unlocks } })
         );
@@ -79,6 +88,7 @@ function bootstrap() {
       }
       case 'dummy': {
         ensureScene();
+        uiRoot.innerHTML = '';
         window.dispatchEvent(
           new CustomEvent('box9:open-dummy-scene', { detail: { progress, unlocks: progress.unlocks } })
         );
@@ -87,15 +97,62 @@ function bootstrap() {
     }
   };
 
+  const handleStart = () => {
+    showExperience();
+    ensureModeOverlay();
+  };
+
+  const handleOptions = () => {
+    showExperience();
+    ensureModeOverlay();
+    optionsController.open();
+  };
+
+  startButton.addEventListener('click', handleStart);
+  optionsButton.addEventListener('click', handleOptions);
+
   window.addEventListener('box9:mode-selected', (event: Event) => {
     const detail = (event as CustomEvent<{ mode?: Box9ModeId }>).detail;
-    routeMode(detail?.mode ?? 'seleccion');
+    routeMode(detail?.mode ?? 'campaign');
   });
 
-  window.addEventListener('box9:start-selection', () => {
+  window.addEventListener('box9:start-fight', (event: Event) => {
+    const detail = (event as CustomEvent<{ character?: CharacterId }>).detail;
     showExperience();
     ensureScene();
+    uiRoot.innerHTML = '';
+
+    if (!uiInitialized) {
+      initBox9UI(uiRoot, store);
+      uiInitialized = true;
+    }
+
+    if (detail?.character) {
+      store.setState({ character: detail.character, selectionStarted: true });
+    } else {
+      store.setState({ selectionStarted: true });
+    }
+
+    const progress = normalizeProgress(store.getState().progress);
+    window.dispatchEvent(
+      new CustomEvent('box9:start-selection', { detail: { progress, unlocks: progress.unlocks } })
+    );
   });
+
+  window.addEventListener('box9:go-modes', () => {
+    teardownCampaign?.();
+    teardownCampaign = null;
+    mountModeOverlay();
+    const progress = normalizeProgress(store.getState().progress);
+    modeOverlay?.update(progress);
+  });
+
+  store.subscribe((state) => {
+    if (!modeOverlay) return;
+    modeOverlay.update(normalizeProgress(state.progress));
+  });
+
+  ensureModeOverlay();
 }
 
 if (document.readyState === 'loading') {

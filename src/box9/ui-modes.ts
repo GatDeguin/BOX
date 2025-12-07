@@ -1,7 +1,7 @@
 import { getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 import { Box9Store } from './state';
 
-export type Box9ModeId = 'seleccion' | 'bolsa' | 'dummy';
+export type Box9ModeId = 'campaign' | 'bolsa' | 'dummy';
 
 interface ModeOption {
   id: Box9ModeId;
@@ -12,7 +12,7 @@ interface ModeOption {
 
 const MODE_OPTIONS: ModeOption[] = [
   {
-    id: 'seleccion',
+    id: 'campaign',
     title: 'Modo campaña',
     description: 'Elige rival, ring y activa el travelling guiado del combate.',
     hint: 'Disponible siempre'
@@ -94,7 +94,7 @@ export function createModeOverlay(
 
     const button = document.createElement('button');
     button.className = 'box9-button';
-    button.textContent = mode.id === 'seleccion' ? 'Entrar al ring' : 'Activar modo';
+    button.textContent = mode.id === 'campaign' ? 'Entrar al ring' : 'Activar modo';
     button.addEventListener('click', () => {
       const progress = normalizeProgress(store.getState().progress);
       if (mode.id === 'dummy' && !progress.unlocks.secreto) return;
