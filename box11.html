@@ -4211,7 +4211,7 @@
                     const ring = gltf.scene || gltf;
                     ring.position.copy(RING_POSITION);
                     ring.rotation.y = Math.PI / 2;
-                    ring.scale.setScalar(0.35);
+                    ring.scale.setScalar(1.05);
                     ring.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
