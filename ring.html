@@ -650,6 +650,8 @@
       attackElbow: { url: 'animaciones/ataque/Illegal Elbow Punch.fbx', loop: THREE.LoopOnce, damage: 18 },
       defend: { url: 'animaciones/defensa/Left Block.fbx', loop: THREE.LoopRepeat },
       dodge: { url: 'animaciones/defensa/Dodging.fbx', loop: THREE.LoopRepeat },
+      walk: { url: 'animaciones/movimiento/Walking.fbx', loop: THREE.LoopRepeat },
+      walkBack: { url: 'animaciones/movimiento/Walk back.fbx', loop: THREE.LoopRepeat },
       damage: { url: 'animaciones/daño/Light Hit To Head.fbx', loop: THREE.LoopOnce },
       fall: { url: 'animaciones/daño/caida/Fall Over.fbx', loop: THREE.LoopOnce },
       getup: { url: 'animaciones/daño/caida/Getting Up.fbx', loop: THREE.LoopOnce },
@@ -657,8 +659,8 @@
 
     const animationCache = new Map();
     const fighterStates = {
-      player: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null },
-      rival: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null },
+      player: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null, knockdowns: 0, countdownTimer: null },
+      rival: { health: 100, maxHealth: 100, mode: 'Presentación', blocking: false, dodging: false, down: false, aiTimer: null, activeAction: null, knockdowns: 0, countdownTimer: null },
     };
 
     const fighterSlots = {
@@ -717,6 +719,7 @@
     let fightIntensity = stageProfiles.Presentación.intensity;
     let crowdNoiseLevel = stageProfiles.Presentación.noise;
     let stageName = 'Presentación';
+    let fightEnded = false;
 
     function setShadows(object) {
       object.traverse?.((child) => {
@@ -830,6 +833,9 @@
         mixers.add(loaded.mixer);
       }
 
+      applyPosition(slotKey);
+      faceTarget(slotKey, slotKey === 'player' ? 'rival' : 'player');
+
       if (!slot.animations) slot.animations = {};
       preloadCoreAnimations(slotKey);
       resetFighterState(slotKey);
@@ -852,6 +858,11 @@
       state.blocking = false;
       state.dodging = false;
       state.down = false;
+      state.knockdowns = 0;
+      if (state.countdownTimer) {
+        clearTimeout(state.countdownTimer);
+        state.countdownTimer = null;
+      }
       state.activeAction = null;
       updateLifeBar(slotKey);
     }
@@ -862,6 +873,88 @@
       if (!state || !bar) return;
       const pct = Math.max(0, Math.min(1, state.health / state.maxHealth));
       bar.style.width = `${pct * 100}%`;
+    }
+
+    const ringMovementLimit = ringRadius - 1.2;
+
+    function clampToRingBounds(position) {
+      const clamped = position.clone();
+      const flatDistance = Math.hypot(clamped.x, clamped.z);
+      if (flatDistance > ringMovementLimit) {
+        const factor = ringMovementLimit / flatDistance;
+        clamped.x *= factor;
+        clamped.z *= factor;
+      }
+      return clamped;
+    }
+
+    function faceTarget(slotKey, targetKey) {
+      const slot = fighterSlots[slotKey];
+      const targetSlot = fighterSlots[targetKey];
+      if (!slot?.model || !targetSlot?.position) return;
+      const lookTarget = targetSlot.position.clone();
+      lookTarget.y = slot.position.y;
+      slot.model.lookAt(lookTarget);
+    }
+
+    function applyPosition(slotKey) {
+      const slot = fighterSlots[slotKey];
+      if (!slot?.model) return;
+      slot.model.position.copy(slot.position);
+    }
+
+    function moveFighter(slotKey, direction, distance) {
+      const slot = fighterSlots[slotKey];
+      if (!slot) return;
+      const movement = direction.clone().setY(0).normalize().multiplyScalar(distance);
+      const nextPosition = clampToRingBounds(slot.position.clone().add(movement));
+      nextPosition.y = slot.position.y;
+      slot.position.copy(nextPosition);
+      applyPosition(slotKey);
+    }
+
+    function getHorizontalDistance(slotA, slotB) {
+      if (!slotA?.position || !slotB?.position) return Infinity;
+      return Math.hypot(slotA.position.x - slotB.position.x, slotA.position.z - slotB.position.z);
+    }
+
+    function directionToTarget(slotKey, targetKey) {
+      const slot = fighterSlots[slotKey];
+      const target = fighterSlots[targetKey];
+      if (!slot?.position || !target?.position) return new THREE.Vector3(1, 0, 0);
+      return target.position.clone().sub(slot.position).setY(0).normalize();
+    }
+
+    const aiBehavior = {
+      minRange: 1.05,
+      idealRange: 1.5,
+      maxRange: 2,
+      approachStep: 0.7,
+      retreatStep: 0.6,
+    };
+
+    async function adjustDistanceForAttack(slotKey, targetKey) {
+      const slot = fighterSlots[slotKey];
+      const target = fighterSlots[targetKey];
+      if (!slot || !target) return 'idle';
+      const distance = getHorizontalDistance(slot, target);
+      const direction = directionToTarget(slotKey, targetKey);
+
+      if (distance > aiBehavior.maxRange) {
+        await playAnimation(slotKey, 'walk', true);
+        moveFighter(slotKey, direction, Math.min(aiBehavior.approachStep, distance - aiBehavior.idealRange));
+        faceTarget(slotKey, targetKey);
+        return 'approach';
+      }
+
+      if (distance < aiBehavior.minRange) {
+        await playAnimation(slotKey, 'walkBack', true);
+        moveFighter(slotKey, direction.multiplyScalar(-1), Math.min(aiBehavior.retreatStep, aiBehavior.minRange - distance + 0.25));
+        faceTarget(slotKey, targetKey);
+        return 'retreat';
+      }
+
+      return 'ready';
     }
 
     async function loadClip(key) {
@@ -887,7 +980,7 @@
     async function preloadCoreAnimations(slotKey) {
       const slot = fighterSlots[slotKey];
       if (!slot) return;
-      const keys = ['idle', 'rest', 'attackLight', 'attackHeavy', 'attackCombo', 'attackElbow', 'defend', 'dodge', 'damage', 'fall', 'getup'];
+      const keys = ['idle', 'rest', 'walk', 'walkBack', 'attackLight', 'attackHeavy', 'attackCombo', 'attackElbow', 'defend', 'dodge', 'damage', 'fall', 'getup'];
       keys.forEach((key) => loadClip(key));
       // Play a neutral idle to keep the mixer alive.
       playAnimation(slotKey, 'idle', true);
@@ -918,6 +1011,8 @@
       rival: 'tyson',
       escalaJugador: fighterSlots.player.scale,
       escalaRival: fighterSlots.rival.scale,
+      alturaJugador: fighterSlots.player.position.y,
+      alturaRival: fighterSlots.rival.position.y,
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
@@ -1017,12 +1112,28 @@
         fighterSlots.player.model?.scale.setScalar(value);
       });
 
+    gui
+      .add(params, 'alturaJugador', -1, 2, 0.01)
+      .name('Altura jugador (Y)')
+      .onChange((value) => {
+        fighterSlots.player.position.y = value;
+        applyPosition('player');
+      });
+
     rivalScaleController = gui
       .add(params, 'escalaRival', 0.005, 2, 0.001)
       .name('Escala rival')
       .onChange((value) => {
         fighterSlots.rival.scale = value;
         fighterSlots.rival.model?.scale.setScalar(value);
+      });
+
+    gui
+      .add(params, 'alturaRival', -1, 2, 0.01)
+      .name('Altura rival (Y)')
+      .onChange((value) => {
+        fighterSlots.rival.position.y = value;
+        applyPosition('rival');
       });
 
     const pauseController = gui.add(params, 'pausarAnimaciones').name('Pausar animaciones').onChange(() => {
@@ -1281,6 +1392,27 @@
       });
     }
 
+    function declareVictory(winnerKey, reason = 'Finalización') {
+      if (fightEnded) return;
+      fightEnded = true;
+      params.pausarAnimaciones = true;
+      pauseController?.setValue(true);
+      Object.keys(fighterStates).forEach((slotKey) => {
+        clearAi(slotKey);
+        fighterStates[slotKey].blocking = false;
+        fighterStates[slotKey].dodging = false;
+        if (fighterStates[slotKey].countdownTimer) {
+          clearTimeout(fighterStates[slotKey].countdownTimer);
+          fighterStates[slotKey].countdownTimer = null;
+        }
+      });
+      stageName = 'Clímax';
+      params.etapa = 'Clímax';
+      const label = winnerKey === 'player' ? 'Jugador' : 'Rival';
+      status.textContent = `${label} gana • ${reason}`;
+      playAnimation(winnerKey, 'rest', true);
+    }
+
     function clearAi(slotKey) {
       const state = fighterStates[slotKey];
       if (state?.aiTimer) {
@@ -1290,11 +1422,17 @@
     }
 
     function applyPresentationMode() {
+      fightEnded = false;
       Object.keys(fighterStates).forEach((slotKey) => {
         const state = fighterStates[slotKey];
         state.mode = 'Presentación';
         clearAi(slotKey);
+        if (state.countdownTimer) {
+          clearTimeout(state.countdownTimer);
+          state.countdownTimer = null;
+        }
         state.health = state.maxHealth;
+        state.knockdowns = 0;
         updateLifeBar(slotKey);
         playAnimation(slotKey, 'rest', true);
       });
@@ -1320,46 +1458,94 @@
 
       playAnimation(targetKey, 'damage', true);
 
-      if (targetState.health <= targetState.maxHealth * 0.5 && !targetState.down) {
+      if (targetState.health <= 0) {
+        triggerFall(targetKey, true);
+      } else if (targetState.health <= targetState.maxHealth * 0.35 && !targetState.down) {
         triggerFall(targetKey);
       }
     }
 
-    async function triggerFall(slotKey) {
+    async function triggerFall(slotKey, isKnockout = false) {
       const state = fighterStates[slotKey];
       if (!state || state.down) return;
+      const opponentKey = slotKey === 'player' ? 'rival' : 'player';
       state.down = true;
+      state.knockdowns = (state.knockdowns ?? 0) + 1;
       clearAi(slotKey);
       playSound('sonidos/impacto_grave.wav', fallAudio, 0.9);
       const fallAction = await playAnimation(slotKey, 'fall', true);
       const duration = fallAction?.clip?.duration ?? 1.6;
 
+      if (state.knockdowns >= 3) {
+        declareVictory(opponentKey, '3 caídas');
+      }
+
+      if (state.countdownTimer) {
+        clearTimeout(state.countdownTimer);
+      }
+
+      const countdownMs = 10000;
+      state.countdownTimer = setTimeout(() => {
+        declareVictory(opponentKey, 'Cuenta de 10');
+      }, countdownMs);
+
       setTimeout(async () => {
+        if (fightEnded) return;
+        if (state.countdownTimer) {
+          clearTimeout(state.countdownTimer);
+          state.countdownTimer = null;
+        }
+
+        if (state.knockdowns >= 3 || isKnockout) {
+          declareVictory(opponentKey, isKnockout ? 'KO' : '3 caídas');
+          return;
+        }
+
         await playAnimation(slotKey, 'getup', true);
-        state.health = state.maxHealth;
+        state.health = Math.max(state.maxHealth * 0.6, state.health || state.maxHealth * 0.6);
         updateLifeBar(slotKey);
         state.down = false;
-        if (stageName === 'Combate') {
+        if (stageName === 'Combate' && !fightEnded) {
           scheduleAi(slotKey);
         }
-      }, duration * 1000 + 800);
+      }, Math.min(countdownMs - 1500, duration * 1000 + 2200));
     }
 
     function scheduleAi(slotKey) {
       const state = fighterStates[slotKey];
-      if (!state || stageName !== 'Combate' || params.pausarAnimaciones) return;
+      if (!state || stageName !== 'Combate' || params.pausarAnimaciones || fightEnded) return;
       clearAi(slotKey);
 
-      const delay = 600 + Math.random() * 1200;
+      const delay = 480 + Math.random() * 820;
       state.aiTimer = setTimeout(async () => {
-        if (state.down || stageName !== 'Combate') return;
-        const roll = Math.random();
+        if (state.down || stageName !== 'Combate' || fightEnded) return;
+        const targetKey = slotKey === 'player' ? 'rival' : 'player';
+        const targetState = fighterStates[targetKey];
+        faceTarget(slotKey, targetKey);
+
+        const adjustment = await adjustDistanceForAttack(slotKey, targetKey);
+        const distance = getHorizontalDistance(fighterSlots[slotKey], fighterSlots[targetKey]);
+
+        if (adjustment !== 'ready') {
+          state.blocking = false;
+          state.dodging = false;
+          playAnimation(slotKey, 'idle', true);
+          scheduleAi(slotKey);
+          return;
+        }
+
         let actionKey = 'attackLight';
-        if (roll > 0.8) actionKey = 'attackElbow';
-        else if (roll > 0.6) actionKey = 'attackCombo';
-        else if (roll > 0.45) actionKey = 'attackHeavy';
-        else if (roll > 0.3) actionKey = 'defend';
-        else if (roll > 0.15) actionKey = 'dodge';
+        if (distance < aiBehavior.minRange + 0.15) {
+          actionKey = Math.random() > 0.5 ? 'attackCombo' : 'attackHeavy';
+        } else if (distance > aiBehavior.idealRange) {
+          actionKey = Math.random() > 0.4 ? 'attackHeavy' : 'attackCombo';
+        }
+
+        if (targetState?.activeAction?.startsWith('attack') && Math.random() > 0.45) {
+          actionKey = Math.random() > 0.5 ? 'defend' : 'dodge';
+        } else if (Math.random() > 0.82) {
+          actionKey = Math.random() > 0.5 ? 'defend' : 'dodge';
+        }
 
         state.blocking = actionKey === 'defend';
         state.dodging = actionKey === 'dodge';
@@ -1369,13 +1555,20 @@
         const impactTime = Math.min(0.6, (action?.clip?.duration ?? 1) * 0.5);
         if (actionKey.startsWith('attack')) {
           setTimeout(() => evaluateCollision(slotKey, actionKey), impactTime * 1000);
+          setTimeout(() => {
+            if (fightEnded) return;
+            playAnimation(slotKey, 'walkBack', true);
+            moveFighter(slotKey, directionToTarget(slotKey, targetKey).multiplyScalar(-1), aiBehavior.retreatStep * 0.6);
+            faceTarget(slotKey, targetKey);
+          }, impactTime * 1000 + 200);
         }
 
         const resetTime = (action?.clip?.duration ?? 1) * 1000;
         setTimeout(() => {
           state.blocking = false;
           state.dodging = false;
-          if (!state.down && stageName === 'Combate') {
+          state.activeAction = null;
+          if (!state.down && stageName === 'Combate' && !fightEnded) {
             playAnimation(slotKey, 'idle', true);
             scheduleAi(slotKey);
           }
@@ -1384,9 +1577,15 @@
     }
 
     function applyCombatMode() {
+      fightEnded = false;
       Object.keys(fighterStates).forEach((slotKey) => {
         const state = fighterStates[slotKey];
         state.mode = 'Combate';
+        if (state.countdownTimer) {
+          clearTimeout(state.countdownTimer);
+          state.countdownTimer = null;
+        }
+        state.knockdowns = 0;
         playAnimation(slotKey, 'idle', true);
         scheduleAi(slotKey);
       });
