@@ -6,6 +6,7 @@ import { BOX9_ASSET_SECTIONS } from './inventory';
 import { canFightCharacter, emitFightWin, getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 import { Box9Settings, loadSettings } from './settings';
 import { Box9ModeId, createModeOverlay } from './ui-modes';
+import { gymVariants } from './ui-campaign-selection';
 
 declare global {
   interface Window {
@@ -28,36 +29,6 @@ const ringDescriptions: Record<RingId, string> = {
   mmaGym: 'Octágono cerrado, rejas húmedas y presión constante cuerpo a cuerpo.',
   bodybuilderArena: 'Arena luminosa con cadenas doradas, público cercano y golpes pesados.',
   tysonRing: 'Ring oscuro con focos fríos, cuerdas tensas y ritmo agresivo a corta distancia.'
-};
-
-const gymVariants: Record<
-  CharacterId,
-  {
-    href: string;
-    label: string;
-    description: string;
-  }
-> = {
-  mma: {
-    href: 'box10.html',
-    label: 'BOX 10 · MMA Sparring',
-    description: 'Octágono húmedo con clinch, sprawl y cámara pegada a las jaulas.'
-  },
-  bodybuilder: {
-    href: 'box11.html',
-    label: 'BOX 11 · Golden Pump',
-    description: 'Sesión de hipertrofia con luz cálida, cadenas y repeticiones al fallo.'
-  },
-  tyson: {
-    href: 'box12.html',
-    label: 'BOX 12 · Tyson POV',
-    description: 'POV pesado inspirado en Tyson con sombras, uppercuts y respiración cruda.'
-  },
-  principal: {
-    href: 'box13.html',
-    label: 'BOX 13 · Bolsa Tyson',
-    description: 'Warmup guiado en saco con marcador simple y Tyson liderando el ritmo.'
-  }
 };
 
 const characterOptions: Record<CharacterId, string> = {
@@ -1131,7 +1102,7 @@ function createHud(
   gymTabButton.addEventListener('click', () => {
     const variant = gymVariants[store.getState().character];
     if (!variant) return;
-    window.open(variant.href, '_blank', 'noopener,noreferrer');
+    window.open(variant.url, '_blank', 'noopener,noreferrer');
   });
 
   let gymEmbedVisible = false;
@@ -1178,7 +1149,7 @@ function createHud(
     const variant = gymVariants[store.getState().character];
     if (!variant) return;
 
-    setGymIframeSource(variant.href);
+    setGymIframeSource(variant.url);
 
     if (gymEmbedVisible) {
       hideGymEmbed();
@@ -1286,8 +1257,8 @@ function createHud(
 
       if (lastVariantId !== state.character) {
         hideGymEmbed();
-      } else if (gymEmbedVisible && gymIframe.src !== new URL(variant.href, window.location.href).href) {
-        setGymIframeSource(variant.href);
+      } else if (gymEmbedVisible && gymIframe.src !== new URL(variant.url, window.location.href).href) {
+        setGymIframeSource(variant.url);
       }
     } else {
       gymTitle.textContent = 'Gimnasio alterno';
