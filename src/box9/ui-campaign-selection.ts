@@ -150,11 +150,18 @@ function createCampaignLayout(): CampaignDom {
   backButton.className = 'box9-button box9-ghost';
   backButton.textContent = 'Volver a modos';
 
+  const glovesButton = document.createElement('button');
+  glovesButton.className = 'box9-button box9-ghost';
+  glovesButton.textContent = 'Guantes';
+  glovesButton.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('box9:open-gloves'));
+  });
+
   const startButton = document.createElement('button');
   startButton.className = 'box9-button';
   startButton.textContent = 'Comenzar pelea';
 
-  actions.append(backButton, startButton);
+  actions.append(backButton, glovesButton, startButton);
   header.append(title, actions);
 
   const columns = document.createElement('div');

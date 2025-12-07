@@ -107,6 +107,7 @@ export function recordFightWin(store: Box9Store, opponent: CharacterId): Progres
 
   const next = { wins, unlocks, activeGlove };
   store.setState({ progress: next });
+  emitProgressUpdated(next);
   return next;
 }
 
@@ -116,6 +117,32 @@ export function emitFightWin(opponent: CharacterId) {
       detail: { opponent }
     })
   );
+}
+
+export function emitProgressUpdated(progress: ProgressionState) {
+  window.dispatchEvent(
+    new CustomEvent('box9:progress-updated', {
+      detail: { progress }
+    })
+  );
+}
+
+export function equipGlove(store: Box9Store, level: GloveLevel): ProgressionState {
+  const progress = normalizeProgress(store.getState().progress);
+  const unlocked =
+    level === 'entrenamiento'
+      ? true
+      : level === 'amateur'
+        ? progress.unlocks.amateur
+        : level === 'pro'
+          ? progress.unlocks.pro
+          : progress.unlocks.secreto;
+
+  const desiredLevel = unlocked ? level : progress.activeGlove;
+  const next = normalizeProgress({ ...progress, activeGlove: desiredLevel });
+  store.setState({ progress: next });
+  emitProgressUpdated(next);
+  return next;
 }
 
 export function getGloveLabel(level: GloveLevel): string {
