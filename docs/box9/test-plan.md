@@ -8,6 +8,7 @@ Este documento cubre pruebas manuales clave para Box9 en los dispositivos objeti
 - Conectividad para capturar logs y métricas de rendimiento.
 - Mando compatible y teclado conectados según el caso.
 - Herramienta de medición de FPS (overlay interno o adb/gpu profiler) disponible.
+- Bundle de BOX9 compilado (`npm run build`) y servido desde `menu.html`.
 
 ## Casos de prueba
 

@@ -2,6 +2,8 @@
 
 Esta página resume las condiciones de desbloqueo y la ruta de avance de los guantes dentro de Box9.
 
+> Punto de entrada actual: carga `menu.html` (bundle `public/box9.js`) para probar la progresión descrita.
+
 ## Tabla de condiciones
 
 | Guantes | Requisito de desbloqueo | Acción clave |

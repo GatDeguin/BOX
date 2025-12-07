@@ -2,9 +2,10 @@
 
 ## Entradas web y bundle generado
 - `index.html`: hub principal con tarjetas hacia todas las escenas.
-- `box9.html`: página que carga el bundle compilado de BOX9 (`public/box9.js`).
-- `box10.html`, `box11.html`, `box12.html`, `box13.html`: variaciones del ring y flujos de sparring/bolsa.
-- `Mocap.html`, `RING.html`, `sacobox8.html`: escenas de mocap, recorrido de gimnasio y POV de saco.
+- `menu.html`: página que carga el bundle compilado de BOX9 (`public/box9.js`) para el travelling ringside.
+- `bolsa.html`: Gym Box 8, POV con pose y loops de saco (evolución de sacobox8).
+- `gim1.html`, `gim2.html`, `gim3.html`, `gim4.html`: gimnasios Box 10–13 (MMA, Bodybuilder, Tyson POV y bolsa introductoria).
+- `Mocap.html`, `ring.html`: escenas de mocap y POV en Three.js.
 - `public/box9.js`: bundle JavaScript generado por `npm run build` a partir del código en `src/box9`.
 
 ## Código fuente de BOX9
@@ -22,7 +23,7 @@
 - `docs/box9/test-plan.md`: plan de pruebas asociado a BOX9.
 - `docs/sacobox7_spec.md`: especificación para la experiencia "sacobox7".
 - `docs/progresion-hitos.md`: hitos y fases de progreso del proyecto.
-- `docs/gimnasios-ambientacion.md`: notas de ambientación para gimnasios y escenarios.
+- `docs/gimnasios-ambientacion.md`: notas de ambientación para gimnasios y escenarios, incluyendo las variantes `bolsa.html` y `gim*.html`.
 - `docs/personajes.md`: catálogo de personajes, estilos y referencias visuales.
 - `docs/progress-panel-mockups.md`: mockups y checklist de panel de progreso.
 
