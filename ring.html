@@ -289,10 +289,10 @@
     });
 
     const ledPositions = [
-      { position: new THREE.Vector3(0, 1.8, 5.6), rotation: new THREE.Euler(0, 0, 0) },
-      { position: new THREE.Vector3(0, 1.8, -5.6), rotation: new THREE.Euler(0, Math.PI, 0) },
-      { position: new THREE.Vector3(5.6, 1.8, 0), rotation: new THREE.Euler(0, -Math.PI / 2, 0) },
-      { position: new THREE.Vector3(-5.6, 1.8, 0), rotation: new THREE.Euler(0, Math.PI / 2, 0) },
+      { position: new THREE.Vector3(0, 2, 9.5), rotation: new THREE.Euler(0, 0, 0) },
+      { position: new THREE.Vector3(0, 2, -9.5), rotation: new THREE.Euler(0, Math.PI, 0) },
+      { position: new THREE.Vector3(9.5, 2, 0), rotation: new THREE.Euler(0, -Math.PI / 2, 0) },
+      { position: new THREE.Vector3(-9.5, 2, 0), rotation: new THREE.Euler(0, Math.PI / 2, 0) },
     ];
 
     ledPositions.forEach(({ position, rotation }) => {
@@ -516,6 +516,7 @@
 
     const listener = new THREE.AudioListener();
     const crowdAudio = new THREE.Audio(listener);
+    const bellAudio = new THREE.Audio(listener);
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
 
@@ -612,9 +613,33 @@
       });
     }
 
+    function playBell() {
+      const url = 'sonidos/campana.mp3';
+      const volume = 0.9;
+
+      const start = (buffer) => {
+        bellAudio.stop();
+        bellAudio.setBuffer(buffer);
+        bellAudio.setLoop(false);
+        bellAudio.setVolume(volume);
+        bellAudio.play();
+      };
+
+      if (loadedBuffers.has(url)) {
+        start(loadedBuffers.get(url));
+        return;
+      }
+
+      audioLoader.load(url, (buffer) => {
+        loadedBuffers.set(url, buffer);
+        start(buffer);
+      });
+    }
+
     function setStage(nextStage) {
       const config = stageProfiles[nextStage];
       if (!config) return;
+      const startingCombat = stageName !== 'Combate' && nextStage === 'Combate';
       stageName = nextStage;
       params.etapa = nextStage;
       fightIntensity = config.intensity;
@@ -622,6 +647,9 @@
       ledBaseColor.set(config.ledColor);
       updateAtmosphere(0);
       playCrowdAudio(nextStage);
+      if (startingCombat) {
+        playBell();
+      }
       updateStatusText();
     }
 
