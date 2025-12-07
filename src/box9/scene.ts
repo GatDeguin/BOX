@@ -32,6 +32,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
 import { EffectProfileName, applyEffects, registerEffectsContext } from './effects';
+import { CAMERA_PRESETS, Box9Settings, CameraPresetId, loadSettings } from './settings';
+import { applyAudioSettings } from './audio';
 
 export interface AudienceFlashSettings {
   frequency: number;
@@ -65,6 +67,7 @@ interface SceneFlowContext {
   freeCamKeyState: { forward: boolean; backward: boolean; left: boolean; right: boolean };
   freeCamInputHandlers: { keydown: (event: KeyboardEvent) => void; keyup: (event: KeyboardEvent) => void } | null;
   pointerLockClickHandler: (() => void) | null;
+  freeCamMoveSpeed: number;
   phase: ScenePhase;
   selectionTarget: SelectionTarget | null;
   animationFrame: number | null;
@@ -72,6 +75,9 @@ interface SceneFlowContext {
   resizeObserver: ResizeObserver | null;
   pendingResize: number | null;
   clock: Clock;
+  cameraShakeIntensity: number;
+  cameraShakeOffset: Vector3;
+  comfortMode: boolean;
   selectionLight: SpotLight | null;
   ringAccentLight: PointLight | null;
   ringHighlightParticles: Points | null;
@@ -197,6 +203,9 @@ const CHIN_PREVIEW_DEFAULTS: Required<ChinPreviewOptions> = {
   verticalOffset: -0.28,
   lookAtLift: 0.12
 };
+
+const BASE_FREE_CAM_SPEED = 6;
+const BASE_CAMERA_SHAKE = 0.18;
 
 const RING_VISUALS: Record<
   RingId,
@@ -411,6 +420,55 @@ function ensureRingHighlightParticles(): Points | null {
   return context.ringHighlightParticles;
 }
 
+function applyCameraPreset(presetId: CameraPresetId) {
+  if (!context) return;
+
+  const preset = CAMERA_PRESETS[presetId] ?? CAMERA_PRESETS.ringside;
+  context.travelingCamera.position.copy(preset.position);
+  context.travelingCamera.lookAt(preset.lookAt);
+  context.travelingCamera.fov = preset.fov;
+  context.travelingCamera.updateProjectionMatrix();
+
+  context.freeCamera.position.copy(preset.position);
+  context.freeCamera.lookAt(preset.lookAt);
+  context.freeCamera.fov = Math.max(60, preset.fov + 6);
+  context.freeCamera.updateProjectionMatrix();
+  context.freeCamControls?.target.copy(preset.lookAt);
+}
+
+function applyControlTuning(settings: Box9Settings) {
+  if (!context) return;
+
+  ensureFreeCamControls();
+  const sensitivity = Math.max(0.25, settings.cameraSensitivity);
+  const comfortMultiplier = settings.motionComfort ? 0.72 : 1;
+  const pointerSpeed = 0.9 + sensitivity * 0.6;
+
+  if (context.freeCamControls) {
+    context.freeCamControls.rotateSpeed = 0.85 * sensitivity;
+    context.freeCamControls.zoomSpeed = 0.65 + sensitivity * 0.45;
+    context.freeCamControls.panSpeed = 0.75 * sensitivity;
+    context.freeCamControls.dampingFactor = settings.motionComfort ? 0.16 : 0.1;
+  }
+
+  if (context.pointerLockControls && 'pointerSpeed' in context.pointerLockControls) {
+    (context.pointerLockControls as unknown as { pointerSpeed?: number }).pointerSpeed = pointerSpeed;
+  }
+
+  context.freeCamMoveSpeed = BASE_FREE_CAM_SPEED * sensitivity * comfortMultiplier;
+  context.comfortMode = settings.motionComfort;
+  context.cameraShakeIntensity = BASE_CAMERA_SHAKE * (settings.motionComfort ? 0.35 : 1) * (0.6 + sensitivity * 0.4);
+}
+
+function applySceneSettings(settings: Box9Settings) {
+  if (!context) return;
+
+  applyCameraPreset(settings.cameraPreset);
+  applyControlTuning(settings);
+  context.flashSettings = { ...context.flashSettings, ...settings.flashSettings };
+  applyAudioSettings(settings);
+}
+
 function ensureAnimationLoop() {
   if (!context) return;
   if (context.animationFrame !== null) return;
@@ -429,6 +487,23 @@ function stopAnimationLoop() {
   disableFreeCamInputs();
 
   context.clock.stop();
+}
+
+function applyCameraShake() {
+  if (!context || context.cameraShakeIntensity <= 0) return;
+
+  const camera = context.activeCamera;
+  camera.position.sub(context.cameraShakeOffset);
+
+  const time = context.clock.elapsedTime;
+  const strength = context.cameraShakeIntensity;
+  context.cameraShakeOffset.set(
+    Math.sin(time * 3.2) * 0.04 * strength,
+    Math.cos(time * 2.4) * 0.03 * strength,
+    0
+  );
+
+  camera.position.add(context.cameraShakeOffset);
 }
 
 function createRenderer(container: HTMLElement, backgroundColor: string | number): WebGLRenderer {
@@ -509,6 +584,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     resolvedOptions.maxBlur
   );
 
+  const initialSettings = loadSettings();
+
   const resizeHandler = () => handleResize();
   window.addEventListener('resize', resizeHandler);
 
@@ -537,6 +614,7 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     freeCamKeyState: { forward: false, backward: false, left: false, right: false },
     freeCamInputHandlers: null,
     pointerLockClickHandler: null,
+    freeCamMoveSpeed: BASE_FREE_CAM_SPEED,
     activeCamera: travelingCamera,
     phase: 'intro',
     selectionTarget: null,
@@ -545,9 +623,12 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     resizeObserver: null,
     pendingResize: null,
     clock: new Clock(),
+    cameraShakeIntensity: BASE_CAMERA_SHAKE,
+    cameraShakeOffset: new Vector3(),
+    comfortMode: false,
     selectionLight,
     audienceFlashSystem,
-    flashSettings: { ...DEFAULT_AUDIENCE_FLASH_SETTINGS },
+    flashSettings: { ...DEFAULT_AUDIENCE_FLASH_SETTINGS, ...initialSettings.flashSettings },
     ringAccentLight: null,
     ringHighlightParticles: null,
     eventHandlers,
@@ -561,6 +642,7 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   registerEffectsContext({ renderer, composer, bokehPass, outputPass });
   applyRingVisualState(box9Store.getState().ring, { updateEffects: false });
   applyPhaseEffects('intro');
+  applySceneSettings(initialSettings);
 
   const resizeObserver = new ResizeObserver(() => handleResize());
   resizeObserver.observe(container);
@@ -596,6 +678,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
 
 function setActiveCamera(camera: PerspectiveCamera) {
   if (!context) return;
+  context.activeCamera?.position.sub(context.cameraShakeOffset);
+  context.cameraShakeOffset.set(0, 0, 0);
   context.activeCamera = camera;
   context.renderPass.camera = camera;
   context.bokehPass.camera = camera;
@@ -649,6 +733,10 @@ function registerSceneEvents(): Record<string, EventListener> {
       applyPhaseEffects(context?.phase ?? 'intro');
       replaceRing(nextRing);
       preloadRings(nextRing);
+    },
+    'box9:settings-changed': (event: Event) => {
+      const detail = (event as CustomEvent<Box9Settings>).detail;
+      applySceneSettings(detail ?? loadSettings());
     },
     'box9:flash-settings': (event: Event) => {
       if (!context) return;
@@ -729,6 +817,7 @@ function animate(_timestamp?: number) {
 
   context.audienceFlashSystem?.update(delta, context.flashSettings);
 
+  applyCameraShake();
   composer.render();
   context.animationFrame = requestAnimationFrame(animate);
 }
@@ -1172,7 +1261,7 @@ function updateFreeCamMovement(delta: number) {
   if (!context?.pointerLockControls || !context.pointerLockControls.isLocked) return;
 
   const { freeCamKeyState, pointerLockControls } = context;
-  const speed = 6;
+  const speed = context.freeCamMoveSpeed;
   const distance = speed * delta;
 
   if (freeCamKeyState.forward) pointerLockControls.moveForward(distance);

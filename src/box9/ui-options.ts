@@ -16,6 +16,10 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatMultiplier(value: number): string {
+  return `${value.toFixed(2)}x`;
+}
+
 function createOptionRow(label: string, description?: string) {
   const row = document.createElement('div');
   row.className = 'box9-option-row';
@@ -180,12 +184,38 @@ export function initBox9Options(): OptionsController {
     }
   );
 
+  const cameraSensitivity = createSlider(
+    'Sensibilidad de cámara',
+    'Define la velocidad de rotación y respuesta de la cámara libre.',
+    settings.cameraSensitivity,
+    0.3,
+    1.7,
+    0.05,
+    formatMultiplier,
+    (value) => {
+      settings = { ...settings, cameraSensitivity: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
   const travelToggle = createToggle(
     'Viaje asistido',
     'Activa la guía de movimientos para evitar cambios bruscos de cámara.',
     settings.travelAssist,
     (value) => {
       settings = { ...settings, travelAssist: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
+  const comfortToggle = createToggle(
+    'Modo antináuseas',
+    'Suaviza sacudidas y reduce la velocidad para disminuir el mareo.',
+    settings.motionComfort,
+    (value) => {
+      settings = { ...settings, motionComfort: value };
       saveSettings(settings);
       dispatchSettingsChange(settings);
     }
@@ -221,9 +251,76 @@ export function initBox9Options(): OptionsController {
     }
   );
 
+  const masterVolume = createSlider(
+    'Volumen maestro',
+    'Ajusta el volumen global de la experiencia.',
+    settings.masterVolume,
+    0,
+    1,
+    0.05,
+    formatPercent,
+    (value) => {
+      settings = { ...settings, masterVolume: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
+  const musicVolume = createSlider(
+    'Volumen música',
+    'Equilibra la música de ambiente con los efectos de pelea.',
+    settings.musicVolume,
+    0,
+    1,
+    0.05,
+    formatPercent,
+    (value) => {
+      settings = { ...settings, musicVolume: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
+  const sfxVolume = createSlider(
+    'Volumen SFX',
+    'Controla golpes, campanas y respiración.',
+    settings.sfxVolume,
+    0,
+    1,
+    0.05,
+    formatPercent,
+    (value) => {
+      settings = { ...settings, sfxVolume: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
+  const highContrastToggle = createToggle(
+    'Alto contraste',
+    'Activa textos y contornos más definidos para facilitar la lectura.',
+    settings.highContrast,
+    (value) => {
+      settings = { ...settings, highContrast: value };
+      saveSettings(settings);
+      dispatchSettingsChange(settings);
+    }
+  );
+
   const content = document.createElement('div');
   content.className = 'box9-options-content';
-  content.append(cameraGroup.row, travelToggle.row, flashFrequency.row, flashIntensity.row);
+  content.append(
+    cameraGroup.row,
+    cameraSensitivity.row,
+    travelToggle.row,
+    comfortToggle.row,
+    flashFrequency.row,
+    flashIntensity.row,
+    masterVolume.row,
+    musicVolume.row,
+    sfxVolume.row,
+    highContrastToggle.row
+  );
 
   const footer = document.createElement('div');
   footer.className = 'box9-options-footer';
@@ -254,11 +351,21 @@ export function initBox9Options(): OptionsController {
       cameraGroup.list
         .querySelectorAll<HTMLInputElement>('input[type="radio"]')
         .forEach((input) => (input.checked = input.value === settings.cameraPreset));
+      cameraSensitivity.input.value = String(settings.cameraSensitivity);
       travelToggle.input.checked = settings.travelAssist;
+      comfortToggle.input.checked = settings.motionComfort;
       flashFrequency.input.value = String(settings.flashSettings.frequency);
       flashIntensity.input.value = String(settings.flashSettings.intensity);
+      masterVolume.input.value = String(settings.masterVolume);
+      musicVolume.input.value = String(settings.musicVolume);
+      sfxVolume.input.value = String(settings.sfxVolume);
+      highContrastToggle.input.checked = settings.highContrast;
       flashFrequency.valueBadge.textContent = formatPercent(settings.flashSettings.frequency);
       flashIntensity.valueBadge.textContent = formatPercent(settings.flashSettings.intensity);
+      cameraSensitivity.valueBadge.textContent = formatMultiplier(settings.cameraSensitivity);
+      masterVolume.valueBadge.textContent = formatPercent(settings.masterVolume);
+      musicVolume.valueBadge.textContent = formatPercent(settings.musicVolume);
+      sfxVolume.valueBadge.textContent = formatPercent(settings.sfxVolume);
       backdrop.classList.add('visible');
       backdrop.setAttribute('aria-hidden', 'false');
     },
