@@ -201,8 +201,8 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
 
     const povCamera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight - 66), 0.1, 100);
-    povCamera.position.set(0, 1.6, 0.35);
-    povCamera.lookAt(0, 1.4, -1);
+    povCamera.position.set(0, 1.9, 0.35);
+    povCamera.lookAt(0, 1.7, -1);
 
     const orbitCamera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight - 66), 0.1, 200);
     orbitCamera.position.set(6, 4.5, 6);
@@ -489,7 +489,7 @@
     const fbxLoader = new FBXLoader(loaderManager);
 
     const fighters = {
-      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx', scale: 0.01 },
+      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx', scale: 1 },
       principal: { label: 'Principal', url: 'modelos/Principal.fbx', scale: 0.01 },
       mma: { label: 'MMA', url: 'modelos/MMA.fbx', scale: 0.0095 },
       bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx', scale: 0.0105 },
@@ -740,8 +740,8 @@
       renderPass.camera = activeCamera;
       attachListener(activeCamera);
       if (!useOrbit) {
-        povCamera.position.set(0, 1.6, 0.35);
-        povCamera.lookAt(0, 1.4, -1);
+        povCamera.position.set(0, 1.9, 0.35);
+        povCamera.lookAt(0, 1.7, -1);
         povControls.getObject().position.copy(povCamera.position);
         povControls.getObject().rotation.copy(povCamera.rotation);
       } else {
@@ -771,7 +771,7 @@
       });
 
     playerScaleController = gui
-      .add(params, 'escalaJugador', 0.005, 0.04, 0.001)
+      .add(params, 'escalaJugador', 0.005, 2, 0.001)
       .name('Escala jugador')
       .onChange((value) => {
         fighterSlots.player.scale = value;
@@ -779,7 +779,7 @@
       });
 
     rivalScaleController = gui
-      .add(params, 'escalaRival', 0.005, 0.04, 0.001)
+      .add(params, 'escalaRival', 0.005, 2, 0.001)
       .name('Escala rival')
       .onChange((value) => {
         fighterSlots.rival.scale = value;
