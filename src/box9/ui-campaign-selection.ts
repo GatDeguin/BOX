@@ -19,6 +19,12 @@ const ringOptions: Record<RingId, { title: string; description: string }> = {
   }
 };
 
+const ringDescriptions: Record<RingId, string> = {
+  mmaGym: ringOptions.mmaGym.description,
+  bodybuilderArena: ringOptions.bodybuilderArena.description,
+  tysonRing: ringOptions.tysonRing.description
+};
+
 const gymVariants: Record<
   CharacterId,
   {
@@ -63,6 +69,7 @@ interface CampaignDom {
   backButton: HTMLButtonElement;
   ringTitle: HTMLElement;
   ringDescription: HTMLElement;
+  ringChips: HTMLElement;
   gymTitle: HTMLElement;
   gymDescription: HTMLElement;
   gymLink: HTMLAnchorElement;
@@ -101,6 +108,12 @@ function injectCampaignStyles() {
     .box9-campaign-panel { background: rgba(0,0,0,0.36); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
     .box9-campaign-panel h4 { margin: 0; letter-spacing: 0.06em; text-transform: uppercase; color: #e9ecf4; font-size: 13px; }
     .box9-campaign-panel p { margin: 0; color: #cbd3e8; line-height: 1.4; font-size: 13px; }
+    .box9-ring-chips { display: grid; gap: 8px; }
+    .box9-ring-chip { border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); border-radius: 10px; padding: 10px; text-align: left; color: #e9ecf4; display: grid; gap: 4px; cursor: pointer; transition: border-color 120ms ease, transform 120ms ease; }
+    .box9-ring-chip:hover { transform: translateY(-1px); border-color: rgba(122,155,255,0.45); }
+    .box9-ring-chip.active { border-color: #7a9bff; box-shadow: 0 10px 26px rgba(63, 92, 255, 0.3); }
+    .box9-ring-chip strong { display: block; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .box9-ring-chip small { color: #b4bed4; }
     .box9-campaign-lock { color: #ffd4dc; background: rgba(255, 107, 129, 0.16); border: 1px solid rgba(255,107,129,0.45); padding: 10px 12px; border-radius: 10px; display: none; font-weight: 700; letter-spacing: 0.04em; }
     .box9-campaign-lock.visible { display: block; }
     .box9-campaign-gym a { color: #7a9bff; font-weight: 700; text-decoration: none; }
@@ -196,7 +209,9 @@ function createCampaignLayout(): CampaignDom {
   ringPanel.className = 'box9-campaign-panel';
   const ringTitle = document.createElement('h4');
   const ringDescription = document.createElement('p');
-  ringPanel.append(ringTitle, ringDescription);
+  const ringChips = document.createElement('div');
+  ringChips.className = 'box9-ring-chips';
+  ringPanel.append(ringTitle, ringDescription, ringChips);
 
   const gymPanel = document.createElement('div');
   gymPanel.className = 'box9-campaign-panel box9-campaign-gym';
@@ -226,16 +241,55 @@ function createCampaignLayout(): CampaignDom {
     backButton,
     ringTitle,
     ringDescription,
+    ringChips,
     gymTitle,
     gymDescription,
     gymLink
   };
 }
 
-function updateRingPanel(dom: CampaignDom, ring: RingId) {
-  const info = ringOptions[ring];
+function updateRingPanel(dom: CampaignDom, store: Box9Store, rival: CharacterId) {
+  if (!dom.ringChips.dataset.wired) {
+    Object.entries(ringOptions).forEach(([ringId, option]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'box9-ring-chip';
+      chip.dataset.ringId = ringId;
+
+      const chipTitle = document.createElement('strong');
+      chipTitle.textContent = option.title;
+      const chipDescription = document.createElement('small');
+      chipDescription.textContent = ringDescriptions[ringId as RingId];
+
+      chip.append(chipTitle, chipDescription);
+
+      chip.addEventListener('click', () => {
+        const ring = ringId as RingId;
+        const defaultRing = getDefaultRingForCharacter(store.getState().character);
+        const ringOverride = ring === defaultRing ? null : ring;
+        const resolvedRing = ringOverride ?? defaultRing;
+
+        store.setState({ ringOverride, ring: resolvedRing });
+        window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: resolvedRing } }));
+        updateRingPanel(dom, store, store.getState().character);
+      });
+
+      dom.ringChips.appendChild(chip);
+    });
+
+    dom.ringChips.dataset.wired = 'true';
+  }
+
+  const state = store.getState();
+  const activeRing = state.ringOverride ?? getDefaultRingForCharacter(rival);
+  const info = ringOptions[activeRing];
+
   dom.ringTitle.textContent = info?.title ?? 'Ring dinámico';
   dom.ringDescription.textContent = info?.description ?? 'Selecciona un ring para este combate.';
+
+  Array.from(dom.ringChips.querySelectorAll<HTMLButtonElement>('[data-ring-id]')).forEach((chip) => {
+    chip.classList.toggle('active', chip.dataset.ringId === activeRing);
+  });
 }
 
 function updateGymPanel(dom: CampaignDom, fighter: CharacterId) {
@@ -251,6 +305,7 @@ function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
   const items = new Map<CharacterId, HTMLElement>();
 
   const setActive = (character: CharacterId, progress = normalizeProgress(store.getState().progress)) => {
+    const state = store.getState();
     items.forEach((item, id) => {
       item.classList.toggle('active', id === character);
     });
@@ -269,8 +324,13 @@ function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
     dom.lockMessage.textContent = lockReason ?? '';
     dom.lockMessage.classList.toggle('visible', locked && Boolean(lockReason));
 
-    const ring = store.getState().ringOverride ? store.getState().ring : getDefaultRingForCharacter(character);
-    updateRingPanel(dom, ring);
+    const resolvedRing = state.ringOverride ?? getDefaultRingForCharacter(character);
+    if (state.ring !== resolvedRing) {
+      store.setState({ ring: resolvedRing });
+      window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: resolvedRing } }));
+    }
+
+    updateRingPanel(dom, store, character);
     updateGymPanel(dom, character);
   };
 

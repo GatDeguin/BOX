@@ -1445,7 +1445,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     },
     (ring, freeCamera, flashes) => {
       const preferredRing = getDefaultRingForCharacter(store.getState().character);
-      const ringOverride = ring !== preferredRing;
+      const ringOverride = ring === preferredRing ? null : ring;
 
       flashSettings = flashes;
       store.setState({ ring, ringOverride, freeCamera });
