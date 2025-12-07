@@ -1134,17 +1134,46 @@ function createHud(
   gymIframe.title = 'Vista de gimnasio alterno';
   gymEmbed.appendChild(gymIframe);
 
+  const setGymIframeSource = (href: string) => {
+    const targetHref = new URL(href, window.location.href).href;
+    if (!gymIframe.src || gymIframe.src !== targetHref) {
+      gymIframe.src = targetHref;
+    }
+  };
+
+  const showGymEmbed = (href?: string) => {
+    if (href) setGymIframeSource(href);
+    gymEmbedVisible = true;
+    gymEmbed.style.display = 'block';
+    gymIframeButton.textContent = 'Cerrar iframe';
+  };
+
+  const hideGymEmbed = () => {
+    gymEmbedVisible = false;
+    gymEmbed.style.display = 'none';
+    gymIframeButton.textContent = 'Abrir en iframe';
+  };
+
+  openBagScene = () => {
+    const bagHref = new URL('bolsa.html', window.location.href).href;
+    showGymEmbed(bagHref);
+    if (!store.getState().selectionStarted) {
+      store.setState({ selectionStarted: true });
+    }
+    emitSceneEvent('start-selection', { mode: 'bolsa' });
+  };
+
   gymIframeButton.addEventListener('click', () => {
     const variant = gymVariants[store.getState().character];
     if (!variant) return;
 
-    if (!gymIframe.src || gymIframe.src !== new URL(variant.href, window.location.href).href) {
-      gymIframe.src = variant.href;
-    }
+    setGymIframeSource(variant.href);
 
-    gymEmbedVisible = !gymEmbedVisible;
-    gymEmbed.style.display = gymEmbedVisible ? 'block' : 'none';
-    gymIframeButton.textContent = gymEmbedVisible ? 'Cerrar iframe' : 'Abrir en iframe';
+    if (gymEmbedVisible) {
+      hideGymEmbed();
+    } else {
+      showGymEmbed();
+    }
   });
 
   gymActions.append(gymTabButton, gymIframeButton);
@@ -1245,20 +1274,16 @@ function createHud(
       gymIframeButton.disabled = false;
 
       if (lastVariantId !== state.character) {
-        gymEmbedVisible = false;
-        gymEmbed.style.display = 'none';
-        gymIframeButton.textContent = 'Abrir en iframe';
+        hideGymEmbed();
       } else if (gymEmbedVisible && gymIframe.src !== new URL(variant.href, window.location.href).href) {
-        gymIframe.src = variant.href;
+        setGymIframeSource(variant.href);
       }
     } else {
       gymTitle.textContent = 'Gimnasio alterno';
       gymDescription.textContent = 'Selecciona un rival para ver su entorno asociado.';
       gymTabButton.disabled = true;
       gymIframeButton.disabled = true;
-      gymEmbedVisible = false;
-      gymEmbed.style.display = 'none';
-      gymIframeButton.textContent = 'Abrir en iframe';
+      hideGymEmbed();
     }
 
     winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder} · Principal: ${progress.wins.entrenamiento.principal}`;
@@ -1313,7 +1338,8 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   window.box9RegisterWin = (opponent: CharacterId) => emitFightWin(opponent);
 
   let dummyActive = false;
-  let openDummyScene: (() => void) | null = null;
+  let openDummyScene: ((progress?: ReturnType<typeof normalizeProgress>) => void) | null = null;
+  let openBagScene: (() => void) | null = null;
   const initialSettings = loadSettings();
   let flashSettings: AudienceFlashSettings = {
     ...DEFAULT_AUDIENCE_FLASH_SETTINGS,
@@ -1386,10 +1412,12 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   const { overlay: modeOverlay, update: updateModeOverlay } = createModeOverlay(store, (mode) => {
     const progress = normalizeProgress(store.getState().progress);
     if (mode === 'dummy') {
-      if (!progress.unlocks.secreto) return;
-      dummyActive = true;
-      syncLayout();
-      openDummyScene?.();
+      openDummyScene?.(progress);
+      return;
+    }
+
+    if (mode === 'bolsa') {
+      openBagScene?.();
       return;
     }
 
@@ -1474,7 +1502,9 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     syncLayout();
   });
 
-  openDummyScene = () => {
+  openDummyScene = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
+    const progress = progressOverride ?? normalizeProgress(store.getState().progress);
+    if (!progress.unlocks.secreto) return;
     dummyActive = true;
     syncLayout();
     openDummy();
@@ -1484,6 +1514,18 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     modeOverlay.style.display = !dummyActive && !state.selectionStarted ? 'flex' : 'none';
     hud.style.display = !dummyActive && state.selectionStarted ? 'flex' : 'none';
   };
+
+  const handleDummyMode = (event: Event) => {
+    const detail = (event as CustomEvent<{ progress?: ReturnType<typeof normalizeProgress> }>).detail;
+    openDummyScene?.(detail?.progress);
+  };
+
+  const handleBagMode = () => {
+    openBagScene?.();
+  };
+
+  window.addEventListener('box9:open-dummy-scene', handleDummyMode as EventListener);
+  window.addEventListener('box9:start-bag-mode', handleBagMode as EventListener);
 
   const lockWarning = document.createElement('div');
   lockWarning.className = 'box9-warning';

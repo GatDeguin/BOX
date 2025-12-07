@@ -2,8 +2,9 @@ import { attachProgressPersistence } from './persistence';
 import { startIntro } from './scene';
 import { box9Store } from './state';
 import { initBox9UI } from './ui';
-import { registerProgressionTriggers } from './progression';
+import { registerProgressionTriggers, normalizeProgress } from './progression';
 import { initBox9Options } from './ui-options';
+import type { Box9ModeId } from './ui-modes';
 
 function getRequiredElement<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -22,6 +23,7 @@ function bootstrap() {
   const uiRoot = getRequiredElement<HTMLElement>('#box9-ui-root');
 
   const store = attachProgressPersistence(box9Store);
+  store.setState({ progress: normalizeProgress(store.getState().progress) });
   registerProgressionTriggers(store);
   const optionsController = initBox9Options();
 
@@ -56,9 +58,38 @@ function bootstrap() {
   startButton.addEventListener('click', handleStart);
   optionsButton.addEventListener('click', handleOptions);
 
-  window.addEventListener('box9:mode-selected', () => {
+  const routeMode = (mode: Box9ModeId = 'seleccion') => {
+    const progress = normalizeProgress(store.getState().progress);
     showExperience();
-    ensureScene();
+
+    switch (mode) {
+      case 'seleccion': {
+        ensureScene();
+        window.dispatchEvent(
+          new CustomEvent('box9:start-selection', { detail: { progress, unlocks: progress.unlocks } })
+        );
+        break;
+      }
+      case 'bolsa': {
+        ensureScene();
+        window.dispatchEvent(
+          new CustomEvent('box9:start-bag-mode', { detail: { progress, unlocks: progress.unlocks } })
+        );
+        break;
+      }
+      case 'dummy': {
+        ensureScene();
+        window.dispatchEvent(
+          new CustomEvent('box9:open-dummy-scene', { detail: { progress, unlocks: progress.unlocks } })
+        );
+        break;
+      }
+    }
+  };
+
+  window.addEventListener('box9:mode-selected', (event: Event) => {
+    const detail = (event as CustomEvent<{ mode?: Box9ModeId }>).detail;
+    routeMode(detail?.mode ?? 'seleccion');
   });
 
   window.addEventListener('box9:start-selection', () => {
