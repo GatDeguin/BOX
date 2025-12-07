@@ -18,6 +18,7 @@ import {
   nextMilestone,
   normalizeProgress
 } from './progression';
+import { Box9Settings, loadSettings } from './settings';
 
 declare global {
   interface Window {
@@ -124,6 +125,9 @@ function createStyles() {
   const style = document.createElement('style');
   style.textContent = `
     .box9-ui { position: absolute; inset: 0; pointer-events: none; font-family: 'Inter', system-ui, sans-serif; color: #e9ecf4; }
+    .box9-high-contrast .box9-ui { color: #f9fbff; }
+    .box9-high-contrast .box9-overlay, .box9-high-contrast .box9-status, .box9-high-contrast .box9-option-row { background: rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.25); }
+    .box9-high-contrast .box9-button { box-shadow: 0 0 0 2px rgba(255,255,255,0.35); border-color: rgba(255,255,255,0.6); }
     .box9-overlay { position: absolute; inset: 0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.06), transparent), #030508; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; pointer-events: auto; padding: 18px; }
     .box9-overlay h1 { letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin: 0; color: #f6f7fb; }
     .box9-overlay p { margin: 0; color: #b4bed4; }
@@ -1428,10 +1432,21 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
 
   let dummyActive = false;
   let openDummyScene: (() => void) | null = null;
-  let flashSettings: AudienceFlashSettings = { ...DEFAULT_AUDIENCE_FLASH_SETTINGS };
+  const initialSettings = loadSettings();
+  let flashSettings: AudienceFlashSettings = {
+    ...DEFAULT_AUDIENCE_FLASH_SETTINGS,
+    ...initialSettings.flashSettings
+  };
+
+  const syncSettings = (settings: Box9Settings) => {
+    flashSettings = { ...DEFAULT_AUDIENCE_FLASH_SETTINGS, ...settings.flashSettings };
+    root.classList.toggle('box9-high-contrast', settings.highContrast);
+    emitSceneEvent('flash-settings', { settings: flashSettings });
+  };
 
   const container = document.createElement('div');
   container.className = 'box9-ui';
+  syncSettings(initialSettings);
 
   const { overlay: loadingOverlay, progressBar, errorText } = createLoadingOverlay();
   const progressByUrl = new Map<string, number>();
@@ -1481,6 +1496,11 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     }
   });
 
+  window.addEventListener('box9:settings-changed', (event: Event) => {
+    const detail = (event as CustomEvent<Box9Settings>).detail ?? loadSettings();
+    syncSettings(detail);
+  });
+
   const { overlay, updateLocks } = createOverlay((mode) => {
     const progress = normalizeProgress(store.getState().progress);
     if (mode === 'dummy') {
@@ -1515,8 +1535,6 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     },
     flashSettings
   );
-
-  emitSceneEvent('flash-settings', { settings: flashSettings });
 
   const { backdrop: assetBackdrop } = createAssetModal(() => {
     assetBackdrop.style.display = 'none';

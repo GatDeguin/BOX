@@ -14,8 +14,14 @@ export interface CameraPreset {
 
 export interface Box9Settings {
   cameraPreset: CameraPresetId;
+  cameraSensitivity: number;
   flashSettings: AudienceFlashSettings;
   travelAssist: boolean;
+  motionComfort: boolean;
+  masterVolume: number;
+  musicVolume: number;
+  sfxVolume: number;
+  highContrast: boolean;
 }
 
 export const CAMERA_PRESETS: Record<CameraPresetId, CameraPreset> = {
@@ -47,8 +53,14 @@ export const CAMERA_PRESETS: Record<CameraPresetId, CameraPreset> = {
 
 export const DEFAULT_BOX9_SETTINGS: Box9Settings = {
   cameraPreset: 'ringside',
+  cameraSensitivity: 1,
   flashSettings: { frequency: 0.55, intensity: 0.8 },
-  travelAssist: true
+  travelAssist: true,
+  motionComfort: false,
+  masterVolume: 0.8,
+  musicVolume: 0.75,
+  sfxVolume: 0.9,
+  highContrast: false
 };
 
 export const BOX9_SETTINGS_STORAGE_KEY = 'box9:settings';
