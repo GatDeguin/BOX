@@ -194,6 +194,20 @@
     const ambient = new THREE.AmbientLight('#a5b4fc', 0.16);
     scene.add(ambient);
 
+    const cornerLights = [
+      new THREE.Vector3(3.2, 1.7, 3.2),
+      new THREE.Vector3(3.2, 1.7, -3.2),
+      new THREE.Vector3(-3.2, 1.7, 3.2),
+      new THREE.Vector3(-3.2, 1.7, -3.2),
+    ];
+
+    cornerLights.forEach((position) => {
+      const point = new THREE.PointLight('#ffb37a', 0.6, 4.5, 1.8);
+      point.position.copy(position);
+      point.castShadow = true;
+      scene.add(point);
+    });
+
     const mixers = [];
     const loaderManager = new THREE.LoadingManager();
 
