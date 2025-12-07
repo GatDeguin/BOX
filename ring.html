@@ -261,7 +261,8 @@
       const spot = new THREE.SpotLight('#dff3ff', 3, 24, 0.4, 0.6, 1.4);
       spot.position.copy(position);
       spot.target.position.set(0, 1.2, 0);
-      spot.castShadow = true;
+      // Limitar los mapas de sombra para no saturar las unidades de textura.
+      spot.castShadow = i < 4;
       spot.shadow.mapSize.set(1024, 1024);
       spot.shadow.bias = -0.0004;
       spot.penumbra = 0.7;
@@ -289,7 +290,7 @@
       const rim = new THREE.SpotLight(color, 1.4, 24, 0.7, 0.45, 1.8);
       rim.position.copy(position);
       rim.target.position.copy(target);
-      rim.castShadow = true;
+      rim.castShadow = false;
       rim.shadow.mapSize.set(1024, 1024);
       rim.shadow.bias = -0.00025;
       rim.penumbra = 0.5;
@@ -477,7 +478,7 @@
     cornerLights.forEach((position) => {
       const point = new THREE.PointLight('#ffb37a', 0.6, 4.5, 1.8);
       point.position.copy(position);
-      point.castShadow = true;
+      point.castShadow = false;
       scene.add(point);
     });
 
