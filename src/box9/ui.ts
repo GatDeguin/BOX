@@ -1700,7 +1700,6 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   root.appendChild(container);
   initSelectionControls(store, {
     onStartSelection: (character) => {
-      emitSceneEvent('start-selection', { character });
     },
     onConfirmSelection: (character) => {
       emitSceneEvent('character-selected', { character });
