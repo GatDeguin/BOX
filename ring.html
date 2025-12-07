@@ -249,17 +249,36 @@
     };
     const lifeBarHurtTimers = { player: null, rival: null };
 
+    function computeTechnicalBudget() {
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const memory = navigator.deviceMemory || 4;
+      const cores = navigator.hardwareConcurrency || 4;
+      const pixels = window.innerWidth * window.innerHeight;
+
+      if (isMobile || memory <= 4 || cores <= 4 || pixels > 5000000) {
+        return { tier: 'bajo', maxPixelRatio: 1.2, spectatorCap: 1400, bloomScale: 0.8, shadows: false };
+      }
+
+      if (memory >= 12 && cores >= 8 && pixels < 5200000) {
+        return { tier: 'alto', maxPixelRatio: 2, spectatorCap: 3600, bloomScale: 1.1, shadows: true };
+      }
+
+      return { tier: 'medio', maxPixelRatio: 1.5, spectatorCap: 2400, bloomScale: 1, shadows: true };
+    }
+
+    const technicalBudget = computeTechnicalBudget();
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#030712');
     scene.fog = new THREE.FogExp2('#0b1b2f', 0.05);
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = technicalBudget.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, technicalBudget.maxPixelRatio));
 
     const povCamera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight - 66), 0.1, 100);
     povCamera.position.set(0, 1.9, 0.35);
@@ -294,7 +313,7 @@
 
     const dirLight = new THREE.DirectionalLight('#bcd7ff', 0.55);
     dirLight.position.set(4, 8, 2);
-    dirLight.castShadow = true;
+    dirLight.castShadow = technicalBudget.shadows;
     dirLight.shadow.mapSize.set(2048, 2048);
     dirLight.shadow.camera.near = 1;
     dirLight.shadow.camera.far = 30;
@@ -327,7 +346,7 @@
       spot.position.copy(position);
       spot.target.position.set(0, 1.2, 0);
       // Limitar los mapas de sombra para no saturar las unidades de textura.
-      spot.castShadow = i < 4;
+      spot.castShadow = technicalBudget.shadows && i < 4;
       spot.shadow.mapSize.set(1024, 1024);
       spot.shadow.bias = -0.0004;
       spot.penumbra = 0.7;
@@ -338,7 +357,7 @@
     const keyLight = new THREE.SpotLight('#fff3d9', 3.8, 26, 0.48, 0.55, 1.3);
     keyLight.position.set(0.6, 9.4, 0.6);
     keyLight.target.position.set(0, 1.35, 0);
-    keyLight.castShadow = true;
+    keyLight.castShadow = technicalBudget.shadows;
     keyLight.shadow.mapSize.set(1024, 1024);
     keyLight.shadow.bias = -0.00032;
     spotGroup.add(keyLight);
@@ -659,13 +678,40 @@
       bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx', scale: 0.0105 },
     };
 
-    const gloveConfig = {
-      url: 'modelos/Guantes_PRO/mesh.obj',
-      mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
-      scale: 0.025,
-      baseRotation: new THREE.Euler(2.844886680750757, 1.7627825445142729, 0.03490658503988659),
-      offset: new THREE.Vector3(0.35, 0.25, 0.13),
+    const ringCatalog = {
+      clasico: { label: 'Ring clásico', url: 'modelos/Ring.glb', rotation: Math.PI / 2 },
+      nocturno: { label: 'Ring nocturno', url: 'modelos/Ring 2.glb', rotation: Math.PI / 2 },
+      arena: { label: 'Ring arena', url: 'modelos/Ring 3.glb', rotation: Math.PI / 2 },
     };
+
+    const gloveStyles = {
+      pro: {
+        label: 'Pro (rojo)',
+        url: 'modelos/Guantes_PRO/mesh.obj',
+        mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
+        scale: 0.025,
+        baseRotation: new THREE.Euler(2.844886680750757, 1.7627825445142729, 0.03490658503988659),
+        offset: new THREE.Vector3(0.35, 0.25, 0.13),
+        textures: {
+          map: { url: 'texturas/Boxing_Gloves_Leather_Tan.jpg', colorSpace: THREE.SRGBColorSpace },
+          normalMap: 'texturas/Boxing_Gloves_BUMP.jpg',
+        },
+      },
+      amateur: {
+        label: 'Amateur (azul)',
+        url: 'modelos/Guantes_Amateur.obj',
+        scale: 0.032,
+        baseRotation: new THREE.Euler(2.844886680750757, 1.7627825445142729, 0.03490658503988659),
+        offset: new THREE.Vector3(0.34, 0.23, 0.11),
+        textures: {
+          map: { url: 'texturas/Boxing_Gloves_Leather_Tan.jpg', colorSpace: THREE.SRGBColorSpace },
+          normalMap: 'texturas/Boxing_Gloves_BUMP.jpg',
+        },
+      },
+    };
+
+    let gloveConfig = { ...gloveStyles.pro };
+    let activeRing = null;
 
     let glovePrototype = null;
     const playerGloves = { left: null, right: null };
@@ -912,24 +958,44 @@
       }
     }
 
-    async function loadRing() {
-      const candidates = ['modelos/Ring.glb', 'modelos/Ring 2.glb', 'modelos/Ring 3.glb'];
+    function setGloveStyle(style = 'pro') {
+      const config = gloveStyles[style] ?? gloveStyles.pro;
+      params.guantes = style;
+      gloveConfig = { ...config };
+      glovePrototype = null;
+      attachGlovesToPlayer(fighterSlots.player.model);
+      updateStatusText();
+    }
 
-      for (const url of candidates) {
-        try {
-          const gltf = await gltfLoader.loadAsync(url);
-          const ring = gltf.scene;
-          ring.name = 'RingBase';
-          ring.rotation.y = Math.PI / 2;
-          setShadows(ring);
-          scene.add(ring);
-          return;
-        } catch (err) {
-          console.warn('No se pudo cargar', url, err.message);
+    function disposeRing() {
+      if (!activeRing) return;
+      scene.remove(activeRing);
+      disposeModel(activeRing);
+      activeRing = null;
+    }
+
+    async function setRing(key = 'clasico') {
+      const config = ringCatalog[key] ?? ringCatalog.clasico;
+      params.ring = key;
+      disposeRing();
+
+      if (!config) return;
+
+      try {
+        const gltf = await gltfLoader.loadAsync(config.url);
+        const ring = gltf.scene;
+        ring.name = `Ring-${key}`;
+        ring.rotation.y = config.rotation ?? Math.PI / 2;
+        setShadows(ring);
+        scene.add(ring);
+        activeRing = ring;
+        updateStatusText();
+      } catch (err) {
+        console.warn('No se pudo cargar', config.url, err.message);
+        if (key !== 'clasico') {
+          setRing('clasico');
         }
       }
-
-      console.warn('No se encontró ningún modelo de ring en las rutas esperadas');
     }
 
     async function loadFighter(url, position, target, scale = 0.01) {
@@ -1246,6 +1312,8 @@
     const params = {
       camara: 'POV',
       rival: 'tyson',
+      ring: 'clasico',
+      guantes: 'pro',
       escalaJugador: fighterSlots.player.scale,
       escalaRival: fighterSlots.rival.scale,
       alturaJugador: fighterSlots.player.position.y,
@@ -1253,14 +1321,16 @@
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
-      espectadores: 1200,
+      espectadores: Math.min(1200, technicalBudget.spectatorCap),
       niebla: scene.fog.density,
-      bloom: 1.2,
+      bloom: 1.2 * technicalBudget.bloomScale,
       bloomUmbral: 0.82,
       etapa: stageName,
       contraluz: true,
       lucesViga: true,
     };
+
+    gloveConfig = { ...gloveStyles[params.guantes] };
 
     function loadStoredParams() {
       try {
@@ -1302,6 +1372,7 @@
     function resize() {
       const width = window.innerWidth;
       const height = window.innerHeight - 66;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, technicalBudget.maxPixelRatio));
       renderer.setSize(width, height, false);
       composer.setSize(width, height);
       unrealBloomPass.setSize(width, height);
@@ -1331,6 +1402,9 @@
       MMA: 'mma',
       Bodybuilder: 'bodybuilder',
     };
+
+    const ringOptions = Object.fromEntries(Object.entries(ringCatalog).map(([key, config]) => [config.label, key]));
+    const gloveOptions = Object.fromEntries(Object.entries(gloveStyles).map(([key, config]) => [config.label, key]));
 
     function applyCameraMode(mode) {
       params.camara = mode;
@@ -1371,6 +1445,19 @@
         updateStatusText();
       });
     controllers.rival = rivalController;
+
+    controllers.ring = gui
+      .add(params, 'ring', ringOptions)
+      .name('Ring')
+      .onChange((value) => {
+        setRing(value);
+        updateStatusText();
+      });
+
+    controllers.guantes = gui
+      .add(params, 'guantes', gloveOptions)
+      .name('Guantes')
+      .onChange((value) => setGloveStyle(value));
 
     playerScaleController = gui
       .add(params, 'escalaJugador', 0.005, 2, 0.001)
@@ -1425,10 +1512,13 @@
     controllers.bloom = gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
     controllers.contraluz = gui.add(params, 'contraluz').name('Contraluz público').onChange((value) => refreshBacklightIntensity(value));
     controllers.lucesViga = gui.add(params, 'lucesViga').name('Luces vigas superiores').onChange((value) => refreshRigBeamLights(value));
-    controllers.espectadores = gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => {
-      rebuildSpectators();
-      updateStatusText();
-    });
+    controllers.espectadores = gui
+      .add(params, 'espectadores', 400, technicalBudget.spectatorCap, 50)
+      .name('Espectadores')
+      .onChange(() => {
+        rebuildSpectators();
+        updateStatusText();
+      });
 
     let status = document.createElement('div');
     status.className = 'pill';
@@ -1442,6 +1532,14 @@
       }
       if (saved.rival) {
         rivalController.setValue(saved.rival);
+      }
+      if (saved.ring && saved.ring !== params.ring) {
+        controllers.ring?.setValue(saved.ring);
+        setRing(saved.ring);
+      }
+      if (saved.guantes && saved.guantes !== params.guantes) {
+        controllers.guantes?.setValue(saved.guantes);
+        setGloveStyle(saved.guantes);
       }
       ['escalaJugador', 'escalaRival', 'alturaJugador', 'alturaRival', 'luzDireccional', 'hemi', 'niebla', 'bloomUmbral', 'bloom',
         'espectadores'].forEach((key) => {
@@ -1466,11 +1564,15 @@
 
     function updateStatusText() {
       const rivalLabel = fighters[params.rival]?.label ?? params.rival;
-      status.textContent = `Listo • ${params.camara} • ${stageName} • Rival: ${rivalLabel} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
+      const ringLabel = ringCatalog[params.ring]?.label ?? 'Ring';
+      const gloveLabel = gloveStyles[params.guantes]?.label ?? 'Guantes';
+      status.textContent = `Listo • Presupuesto: ${technicalBudget.tier} • ${params.camara} • ${stageName} • Ring: ${ringLabel} • Guantes: ${gloveLabel} • Rival: ${rivalLabel} • Animaciones: ${
+        params.pausarAnimaciones ? 'Pausadas' : 'Activas'
+      } • ${params.espectadores} espectadores`;
     }
 
     Promise.all([
-      loadRing(),
+      setRing(params.ring),
       setFighter('player', fighterSlots.player.current),
       setFighter('rival', params.rival),
     ]).finally(() => {
@@ -2222,7 +2324,7 @@
         spectatorsMesh.dispose?.();
       }
 
-      const total = Math.max(400, Math.min(4000, Math.floor(params.espectadores)));
+      const total = Math.max(400, Math.min(technicalBudget.spectatorCap, Math.floor(params.espectadores)));
       spectatorData = [];
       spectatorsMesh = new THREE.InstancedMesh(spectatorGeometry, spectatorMaterial, total);
       spectatorsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
