@@ -677,11 +677,13 @@
       color: '#111827',
       roughness: 0.65,
       metalness: 0.05,
+      vertexColors: true,
     });
 
     let spectatorsMesh = null;
     let spectatorData = [];
     const spectatorDummy = new THREE.Object3D();
+    const spectatorColor = new THREE.Color();
 
     const listener = new THREE.AudioListener();
     const crowdAudio = new THREE.Audio(listener);
@@ -819,6 +821,7 @@
       if (startingCombat) {
         playBell();
       }
+      refreshSpectatorColors();
       updateStatusText();
     }
 
@@ -976,6 +979,47 @@
       return handled;
     }
 
+    function buildSpectatorPalette(baseColorHex) {
+      const base = new THREE.Color(baseColorHex ?? '#22d3ee');
+      const hsl = { h: 0, s: 0, l: 0 };
+      base.getHSL(hsl);
+
+      const createVariant = (dh, ds, dl, satMul = 1, lightMul = 1) => new THREE.Color().setHSL(
+        (hsl.h + dh + 1) % 1,
+        THREE.MathUtils.clamp(hsl.s * satMul + ds, 0, 1),
+        THREE.MathUtils.clamp(hsl.l * lightMul + dl, 0, 1),
+      );
+
+      return [
+        base.clone(),
+        createVariant(0.02, 0.05, 0.04, 1.05, 1),
+        createVariant(-0.04, -0.08, -0.02, 0.85, 1),
+        createVariant(0.5, -0.1, 0.12, 0.55, 1),
+      ];
+    }
+
+    function refreshSpectatorColors() {
+      if (!spectatorsMesh) return;
+
+      const palette = buildSpectatorPalette(stageProfiles[stageName]?.ledColor ?? ledBaseColor.getStyle());
+      const intensityShift = (fightIntensity - 0.5) * 0.08;
+
+      spectatorData.forEach((data, index) => {
+        const base = palette[data.ringIndex % palette.length];
+        const hsl = { h: 0, s: 0, l: 0 };
+        base.getHSL(hsl);
+
+        const hue = (hsl.h + intensityShift + data.hueJitter + 1) % 1;
+        const saturation = THREE.MathUtils.clamp(hsl.s * (0.85 + fightIntensity * 0.25), 0, 1);
+        const lightness = THREE.MathUtils.clamp(hsl.l * (0.82 + data.colorNoise * 0.28) + fightIntensity * 0.05, 0, 1);
+
+        spectatorColor.setHSL(hue, saturation, lightness);
+        spectatorsMesh.setColorAt(index, spectatorColor);
+      });
+
+      spectatorsMesh.instanceColor.needsUpdate = true;
+    }
+
     function rebuildSpectators() {
       if (spectatorsMesh) {
         scene.remove(spectatorsMesh);
@@ -1020,6 +1064,10 @@
           const rotAmplitude = 0.015 + Math.random() * 0.05;
           const rotSpeed = 0.45 + Math.random() * 0.9;
           const rotPhase = Math.random() * Math.PI * 2;
+          const hueJitter = (Math.random() - 0.5) * 0.06;
+          const colorNoise = Math.random();
+          const widthScale = 0.9 + Math.random() * 0.15;
+          const heightScale = 0.94 + Math.random() * 0.18;
 
           spectatorData.push({
             position: new THREE.Vector3(x, baseY, z),
@@ -1030,10 +1078,15 @@
             rotAmplitude,
             rotSpeed,
             rotPhase,
+            ringIndex,
+            hueJitter,
+            colorNoise,
+            scale: new THREE.Vector3(widthScale, heightScale, widthScale),
           });
 
           spectatorDummy.position.set(x, baseY, z);
           spectatorDummy.rotation.set(0, rotationY, 0);
+          spectatorDummy.scale.set(widthScale, heightScale, widthScale);
           spectatorDummy.updateMatrix();
           spectatorsMesh.setMatrixAt(instanceId, spectatorDummy.matrix);
           instanceId++;
@@ -1043,6 +1096,7 @@
         ringIndex++;
       }
 
+      refreshSpectatorColors();
       scene.add(spectatorsMesh);
     }
 
@@ -1097,6 +1151,7 @@
           const sway = data.rotAmplitude * (0.6 + crowdNoiseLevel * 0.7);
           spectatorDummy.position.y = data.position.y + Math.sin(time * data.speed + data.phase) * lift;
           spectatorDummy.rotation.set(0, data.rotationY + Math.sin(time * data.rotSpeed + data.rotPhase) * sway, 0);
+          spectatorDummy.scale.copy(data.scale);
           spectatorDummy.updateMatrix();
           spectatorsMesh.setMatrixAt(index, spectatorDummy.matrix);
         });
