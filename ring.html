@@ -689,30 +689,32 @@
 
     const fighterSlots = {
       player: {
-        position: new THREE.Vector3(2.2, 0, 2.2),
-        corner: new THREE.Vector3(2.2, 0, 2.2),
+        position: new THREE.Vector3(2.2, 2, 2.2),
+        corner: new THREE.Vector3(2.2, 2, 2.2),
         target: 'rival',
         current: 'principal',
         model: null,
         mixer: null,
         requestId: 0,
-        scale: null,
+        scale: 0.01,
       },
       rival: {
-        position: new THREE.Vector3(-2.2, 0, -2.2),
-        corner: new THREE.Vector3(-2.2, 0, -2.2),
+        position: new THREE.Vector3(-2.2, 0.36, -2.2),
+        corner: new THREE.Vector3(-2.2, 0.36, -2.2),
         target: 'player',
         current: 'tyson',
         model: null,
         mixer: null,
         requestId: 0,
-        scale: null,
+        scale: 2,
       },
     };
 
     Object.entries(fighterSlots).forEach(([slotKey, slot]) => {
       const fighter = fighters[slot.current];
-      slot.scale = fighter?.scale ?? 0.01;
+      if (slot.scale == null) {
+        slot.scale = fighter?.scale ?? 0.01;
+      }
     });
 
     const stageProfiles = {
@@ -971,7 +973,9 @@
       const fighter = fighters[fighterKey];
       if (!slot || !fighter) return;
 
-      slot.scale = fighter.scale ?? slot.scale ?? 0.01;
+      const paramScale = params?.[slotKey === 'player' ? 'escalaJugador' : 'escalaRival'];
+      const defaultScale = slot.scale ?? fighter.scale ?? 0.01;
+      slot.scale = typeof paramScale === 'number' ? paramScale : defaultScale;
 
       const targetPosition = getSlotTarget(slotKey);
 
