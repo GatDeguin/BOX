@@ -187,6 +187,29 @@ function createStyles() {
     .box9-field select, .box9-field input[type="checkbox"] { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #fff; }
     .box9-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .box9-secondary { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); color: #e9ecf4; }
+    .box9-options-backdrop { position: fixed; inset: 0; background: rgba(3,5,8,0.75); display: none; align-items: center; justify-content: center; pointer-events: auto; z-index: 20; }
+    .box9-options-backdrop.visible { display: flex; }
+    .box9-options-modal { background: linear-gradient(135deg, rgba(7,10,18,0.95), rgba(8,12,20,0.9)); border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; padding: 18px; width: min(540px, 92vw); box-shadow: 0 20px 80px rgba(0,0,0,0.6); display: grid; gap: 12px; }
+    .box9-option-intro { margin: 0; color: #cbd3e8; line-height: 1.5; }
+    .box9-options-content { display: grid; gap: 12px; }
+    .box9-option-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 14px; }
+    .box9-option-label { display: grid; gap: 4px; max-width: 60%; }
+    .box9-option-title { font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-option-description { margin: 0; color: #b4bed4; line-height: 1.45; }
+    .box9-option-control { display: flex; justify-content: flex-end; flex: 1; }
+    .box9-toggle { position: relative; display: inline-flex; width: 54px; height: 30px; border-radius: 999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
+    .box9-toggle input { opacity: 0; width: 0; height: 0; }
+    .box9-toggle-slider { position: absolute; inset: 3px; background: linear-gradient(135deg, #4b5563, #1f2937); border-radius: 999px; transition: transform 120ms ease, background 120ms ease; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
+    .box9-toggle input:checked + .box9-toggle-slider { transform: translateX(22px); background: linear-gradient(135deg, #3f5cff, #7a9bff); }
+    .box9-radio-list { display: grid; gap: 10px; flex: 1; }
+    .box9-radio { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); }
+    .box9-radio input { accent-color: #7a9bff; }
+    .box9-radio strong { letter-spacing: 0.04em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-radio span { color: #cbd3e8; }
+    .box9-slider { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .box9-slider input { flex: 1; accent-color: #7a9bff; }
+    .box9-slider-value { padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e9ecf4; font-weight: 700; min-width: 64px; text-align: center; }
+    .box9-options-footer { display: flex; justify-content: flex-end; }
     .box9-loading { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
     .box9-loading-panel { background: rgba(5, 7, 12, 0.85); border: 1px solid rgba(122,155,255,0.35); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 240px; box-shadow: 0 10px 36px rgba(0,0,0,0.4); pointer-events: auto; }
     .box9-loading strong { letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; color: #e9ecf4; }
