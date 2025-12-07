@@ -245,25 +245,66 @@
 
     const spotGroup = new THREE.Group();
     const rigLights = [];
-    const spotConfig = [
-      { position: new THREE.Vector3(0, 8, 0), angle: 0.5 },
-      { position: new THREE.Vector3(4, 7.5, 2), angle: 0.45 },
-      { position: new THREE.Vector3(-4, 7.2, -2), angle: 0.45 },
-      { position: new THREE.Vector3(2, 7.6, -4), angle: 0.45 },
-    ];
+    const rimLights = [];
+    const fillLights = [];
 
-    spotConfig.forEach(({ position, angle }) => {
-      const spot = new THREE.SpotLight('#dff3ff', 2.8, 22, angle + 0.05, 0.55, 1.5);
+    const ringRadius = 4.8;
+    const spotCount = 8;
+    for (let i = 0; i < spotCount; i++) {
+      const angle = (i / spotCount) * Math.PI * 2 + Math.PI / spotCount;
+      const position = new THREE.Vector3(
+        Math.cos(angle) * ringRadius,
+        8.4,
+        Math.sin(angle) * ringRadius,
+      );
+
+      const spot = new THREE.SpotLight('#dff3ff', 3, 24, 0.4, 0.6, 1.4);
       spot.position.copy(position);
       spot.target.position.set(0, 1.2, 0);
       spot.castShadow = true;
       spot.shadow.mapSize.set(1024, 1024);
       spot.shadow.bias = -0.0004;
-      spot.penumbra = 0.65;
+      spot.penumbra = 0.7;
       spotGroup.add(spot);
       spotGroup.add(spot.target);
-    });
+    }
+
+    const keyLight = new THREE.SpotLight('#fff3d9', 3.8, 26, 0.48, 0.55, 1.3);
+    keyLight.position.set(0.6, 9.4, 0.6);
+    keyLight.target.position.set(0, 1.35, 0);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.bias = -0.00032;
+    spotGroup.add(keyLight);
+    spotGroup.add(keyLight.target);
+
     scene.add(spotGroup);
+
+    const rimConfig = [
+      { position: new THREE.Vector3(-6.5, 3.4, 0.6), target: new THREE.Vector3(0, 1.2, 0), color: '#e0f2fe' },
+      { position: new THREE.Vector3(0.6, 3.6, 6.5), target: new THREE.Vector3(0, 1.1, 0), color: '#ffe4e6' },
+    ];
+
+    rimConfig.forEach(({ position, target, color }) => {
+      const rim = new THREE.SpotLight(color, 1.4, 24, 0.7, 0.45, 1.8);
+      rim.position.copy(position);
+      rim.target.position.copy(target);
+      rim.castShadow = true;
+      rim.shadow.mapSize.set(1024, 1024);
+      rim.shadow.bias = -0.00025;
+      rim.penumbra = 0.5;
+      rimLights.push(rim);
+      scene.add(rim);
+      scene.add(rim.target);
+    });
+
+    const skyFill = new THREE.SpotLight('#c7ddff', 0.6, 60, Math.PI / 2.2, 1, 2.2);
+    skyFill.position.set(0, 13, 0);
+    skyFill.target.position.set(0, -2, 0);
+    skyFill.castShadow = false;
+    fillLights.push(skyFill);
+    scene.add(skyFill);
+    scene.add(skyFill.target);
 
     const rigGroup = new THREE.Group();
     const rigHeight = 8.6;
@@ -459,18 +500,24 @@
         noise: 0.45,
         ledColor: '#22d3ee',
         audio: 'sonidos/publico_intro.wav',
+        crowdVisibility: 0.35,
+        ringFocus: 1.25,
       },
       Combate: {
         intensity: 0.72,
         noise: 0.75,
         ledColor: '#f472b6',
         audio: 'sonidos/publico_enojado.wav',
+        crowdVisibility: 0.9,
+        ringFocus: 1,
       },
       Clímax: {
         intensity: 1,
         noise: 1,
         ledColor: '#f97316',
         audio: 'sonidos/publico_victoria.wav',
+        crowdVisibility: 1.05,
+        ringFocus: 1.1,
       },
     };
 
@@ -899,11 +946,14 @@
     }
 
     function updateAtmosphere(time) {
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
       const hue = THREE.MathUtils.lerp(0.62, 0.02, fightIntensity);
       const saturation = 0.7 + fightIntensity * 0.25;
       const lightness = 0.55 + fightIntensity * 0.15;
       const lightColor = new THREE.Color().setHSL(hue, saturation, lightness);
       const pulse = Math.sin(time * (1.4 + fightIntensity)) * 0.05;
+      const breath = Math.sin(time * 0.8) * 0.06;
+      const ringFocus = stageConfig.ringFocus ?? 1;
 
       ambient.color.copy(lightColor);
       hemiLight.color.copy(lightColor);
@@ -913,27 +963,39 @@
       spotGroup.children.forEach((child) => {
         if (child.isLight) {
           child.color.lerp(lightColor, 0.35);
-          child.intensity = 2 + fightIntensity * 1.8 + Math.sin(time * 2 + child.position.x) * 0.08;
+          child.intensity = (2.1 + fightIntensity * 1.9) * ringFocus + Math.sin(time * 2 + child.position.x) * 0.12 + breath;
         }
       });
 
       rigLights.forEach((light, index) => {
         light.color.lerp(lightColor, 0.25);
-        light.intensity = 1.1 + fightIntensity * 1.6 + Math.sin(time * 1.6 + index) * 0.12;
+        light.intensity = (1.1 + fightIntensity * 1.6) * ringFocus + Math.sin(time * 1.6 + index) * 0.12 + breath * 0.6;
+      });
+
+      rimLights.forEach((light, index) => {
+        light.color.lerp(lightColor, 0.18);
+        light.intensity = (1 + fightIntensity * 1.1) * ringFocus + Math.sin(time * 1.3 + index) * 0.08 + breath * 0.4;
+      });
+
+      fillLights.forEach((light) => {
+        light.color.lerp(new THREE.Color('#bcd7ff'), 0.4);
+        light.intensity = 0.35 + fightIntensity * 0.45 + breath * 0.5;
       });
     }
 
     function updateLedPanels(noise, time) {
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
       const vivid = THREE.MathUtils.clamp(noise, 0, 1);
+      const crowdVisibility = stageConfig.crowdVisibility ?? 1;
       const reactiveColor = new THREE.Color().setHSL(0.56 - vivid * 0.38, 0.9, 0.55 + vivid * 0.25);
       const emissiveColor = ledBaseColor.clone().lerp(reactiveColor, 0.6);
 
       ledPanels.forEach((panel, index) => {
         const flicker = Math.sin(time * 3 + index) * 0.08 + Math.random() * 0.02;
-        const level = THREE.MathUtils.clamp(1.2 + vivid * 2.6 + flicker, 0.8, 3.8);
+        const level = THREE.MathUtils.clamp(1 + vivid * 2.4 + flicker, 0.6, 3.8) * crowdVisibility;
         panel.material.emissive.copy(emissiveColor);
         panel.material.emissiveIntensity = level;
-        panel.scale.y = 1 + vivid * 0.25 + Math.sin(time * 5 + index) * 0.04;
+        panel.scale.y = 1 + vivid * 0.25 * crowdVisibility + Math.sin(time * 5 + index) * 0.04;
       });
     }
 
@@ -1081,6 +1143,7 @@
 
       const palette = buildSpectatorPalette(stageProfiles[stageName]?.ledColor ?? ledBaseColor.getStyle());
       const intensityShift = (fightIntensity - 0.5) * 0.08;
+      const crowdVisibility = stageProfiles[stageName]?.crowdVisibility ?? 1;
 
       spectatorData.forEach((data, index) => {
         const base = palette[data.ringIndex % palette.length];
@@ -1088,8 +1151,12 @@
         base.getHSL(hsl);
 
         const hue = (hsl.h + intensityShift + data.hueJitter + 1) % 1;
-        const saturation = THREE.MathUtils.clamp(hsl.s * (0.85 + fightIntensity * 0.25), 0, 1);
-        const lightness = THREE.MathUtils.clamp(hsl.l * (0.82 + data.colorNoise * 0.28) + fightIntensity * 0.05, 0, 1);
+        const saturation = THREE.MathUtils.clamp(hsl.s * (0.85 + fightIntensity * 0.25) * (0.7 + crowdVisibility * 0.4), 0, 1);
+        const lightness = THREE.MathUtils.clamp(
+          hsl.l * (0.82 + data.colorNoise * 0.28) * (0.65 + crowdVisibility * 0.45) + fightIntensity * 0.05 * crowdVisibility,
+          0,
+          1,
+        );
 
         spectatorColor.setHSL(hue, saturation, lightness);
         spectatorsMesh.setColorAt(index, spectatorColor);
