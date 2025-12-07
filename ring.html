@@ -348,10 +348,10 @@
     const fbxLoader = new FBXLoader(loaderManager);
 
     const fighters = {
-      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx' },
-      principal: { label: 'Principal', url: 'modelos/Principal.fbx' },
-      mma: { label: 'MMA', url: 'modelos/MMA.fbx' },
-      bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx' },
+      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx', scale: 0.01 },
+      principal: { label: 'Principal', url: 'modelos/Principal.fbx', scale: 0.01 },
+      mma: { label: 'MMA', url: 'modelos/MMA.fbx', scale: 0.0095 },
+      bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx', scale: 0.0105 },
     };
 
     const fighterSlots = {
@@ -362,6 +362,7 @@
         model: null,
         mixer: null,
         requestId: 0,
+        scale: null,
       },
       rival: {
         position: new THREE.Vector3(-2.2, 0, -2.2),
@@ -370,8 +371,14 @@
         model: null,
         mixer: null,
         requestId: 0,
+        scale: null,
       },
     };
+
+    Object.entries(fighterSlots).forEach(([slotKey, slot]) => {
+      const fighter = fighters[slot.current];
+      slot.scale = fighter?.scale ?? 0.01;
+    });
 
     const stageProfiles = {
       Presentación: {
@@ -425,10 +432,10 @@
       console.warn('No se encontró ningún modelo Ring.glb/Ring 2.glb');
     }
 
-    async function loadFighter(url, position, flip = false) {
+    async function loadFighter(url, position, flip = false, scale = 0.01) {
       try {
         const model = await fbxLoader.loadAsync(url);
-        model.scale.setScalar(0.01);
+        model.scale.setScalar(scale);
         model.position.copy(position);
         model.rotation.y = flip ? Math.PI / 4 : -Math.PI / 4;
         setShadows(model);
@@ -460,10 +467,12 @@
       const fighter = fighters[fighterKey];
       if (!slot || !fighter) return;
 
+      slot.scale = fighter.scale ?? slot.scale ?? 0.01;
+
       slot.requestId += 1;
       const requestId = slot.requestId;
 
-      const loaded = await loadFighter(fighter.url, slot.position, slot.flip);
+      const loaded = await loadFighter(fighter.url, slot.position, slot.flip, slot.scale);
       if (!loaded || requestId !== slot.requestId) {
         loaded?.model && disposeModel(loaded.model);
         return;
@@ -485,11 +494,23 @@
       if (loaded.mixer) {
         mixers.add(loaded.mixer);
       }
+
+      if (slotKey === 'player' && playerScaleController) {
+        params.escalaJugador = slot.scale;
+        playerScaleController.setValue(slot.scale);
+      }
+
+      if (slotKey === 'rival' && rivalScaleController) {
+        params.escalaRival = slot.scale;
+        rivalScaleController.setValue(slot.scale);
+      }
     }
 
     const params = {
       camara: 'POV',
       rival: 'tyson',
+      escalaJugador: fighterSlots.player.scale,
+      escalaRival: fighterSlots.rival.scale,
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
@@ -568,12 +589,31 @@
 
     const cameraController = gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange(applyCameraMode);
 
+    let playerScaleController = null;
+    let rivalScaleController = null;
+
     const rivalController = gui
       .add(params, 'rival', rivalOptions)
       .name('Rival')
       .onChange((value) => {
         setFighter('rival', value);
         updateStatusText();
+      });
+
+    playerScaleController = gui
+      .add(params, 'escalaJugador', 0.005, 0.04, 0.001)
+      .name('Escala jugador')
+      .onChange((value) => {
+        fighterSlots.player.scale = value;
+        fighterSlots.player.model?.scale.setScalar(value);
+      });
+
+    rivalScaleController = gui
+      .add(params, 'escalaRival', 0.005, 0.04, 0.001)
+      .name('Escala rival')
+      .onChange((value) => {
+        fighterSlots.rival.scale = value;
+        fighterSlots.rival.model?.scale.setScalar(value);
       });
 
     const pauseController = gui.add(params, 'pausarAnimaciones').name('Pausar animaciones').onChange(() => {
