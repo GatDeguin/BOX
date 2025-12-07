@@ -382,6 +382,7 @@
     scene.add(ambient);
 
     const ledPanels = [];
+    const jumbotrons = [];
     const ledPanelGeometry = new THREE.BoxGeometry(2.6, 1.2, 0.08);
     const ledBaseColor = new THREE.Color('#0ea5e9');
 
@@ -439,6 +440,31 @@
       panel.receiveShadow = true;
       ledPanels.push(panel);
       scene.add(panel);
+    });
+
+    const jumbotronGeometry = new THREE.PlaneGeometry(4.6, 2.5);
+    const jumbotronMaterial = new THREE.MeshStandardMaterial({
+      color: '#0b1020',
+      emissive: '#1d4ed8',
+      emissiveIntensity: 4,
+      roughness: 0.4,
+      metalness: 0.18,
+      side: THREE.DoubleSide,
+    });
+
+    const jumbotronPositions = [
+      { position: new THREE.Vector3(0, 3.4, 12.4), rotation: new THREE.Euler(0, Math.PI, 0) },
+      { position: new THREE.Vector3(-12.4, 3.1, 0), rotation: new THREE.Euler(0, Math.PI / 2, 0) },
+    ];
+
+    jumbotronPositions.forEach(({ position, rotation }) => {
+      const screen = new THREE.Mesh(jumbotronGeometry, jumbotronMaterial.clone());
+      screen.position.copy(position);
+      screen.rotation.copy(rotation);
+      screen.receiveShadow = false;
+      screen.castShadow = false;
+      jumbotrons.push(screen);
+      scene.add(screen);
     });
 
     const cornerLights = [
@@ -800,6 +826,59 @@
       vertexColors: true,
     });
 
+    const phoneGeometry = new THREE.PlaneGeometry(0.08, 0.14);
+    const phoneMaterial = new THREE.MeshStandardMaterial({
+      color: '#9ddcff',
+      emissive: '#bde5ff',
+      emissiveIntensity: 4,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      roughness: 0.35,
+      metalness: 0.05,
+    });
+    let phoneMesh = null;
+    let phoneHolders = [];
+    const phoneDummy = new THREE.Object3D();
+
+    const crowdClusters = [
+      { center: -Math.PI * 0.8, width: Math.PI / 2.4, hueShift: -0.06, luminosity: 0.72, saturation: 0.75 },
+      { center: -Math.PI * 0.25, width: Math.PI / 2.6, hueShift: 0.04, luminosity: 1.08, saturation: 0.98 },
+      { center: Math.PI * 0.2, width: Math.PI / 2.4, hueShift: -0.02, luminosity: 0.9, saturation: 0.85 },
+      { center: Math.PI * 0.85, width: Math.PI / 2.1, hueShift: 0.07, luminosity: 1.2, saturation: 1.05 },
+    ];
+    const clusterLights = [];
+    const clusterLightGroup = new THREE.Group();
+    scene.add(clusterLightGroup);
+
+    crowdClusters.forEach((cluster, index) => {
+      const radius = 9.4;
+      const angle = cluster.center;
+      const position = new THREE.Vector3(Math.cos(angle) * radius, 2.6, Math.sin(angle) * radius);
+      const target = position.clone().setLength(radius - 1.6);
+      const color = new THREE.Color().setHSL(0.58 - index * 0.05, 0.48 + cluster.saturation * 0.15, 0.55);
+      const light = new THREE.SpotLight(color, 0.8, 12, Math.max(Math.PI / 3, cluster.width), 1, 2);
+      light.position.copy(position);
+      light.target.position.copy(target.setY(0.8));
+      light.castShadow = false;
+      clusterLightGroup.add(light);
+      clusterLightGroup.add(light.target);
+      clusterLights.push(light);
+      cluster.light = light;
+    });
+
+    const flashPool = [];
+    let nextFlashTime = 4;
+
+    const flashLightCount = 12;
+    for (let i = 0; i < flashLightCount; i++) {
+      const light = new THREE.PointLight('#dce9ff', 0, 12, 2.2);
+      light.castShadow = false;
+      light.intensity = 0;
+      flashPool.push({ light, active: false, duration: 0.25, timeLeft: 0, baseIntensity: 0 });
+      scene.add(light);
+    }
+
     let spectatorsMesh = null;
     let spectatorData = [];
     const spectatorDummy = new THREE.Object3D();
@@ -983,16 +1062,90 @@
       });
     }
 
+    function updateCrowdLights(time) {
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
+      const crowdVisibility = stageConfig.crowdVisibility ?? 1;
+      const presentationDim = stageName === 'Presentación' ? 0.55 : 1;
+
+      clusterLights.forEach((light, index) => {
+        const cluster = crowdClusters[index];
+        const breathing = Math.sin(time * 0.8 + index) * 0.18;
+        const base = (cluster?.luminosity ?? 1) * crowdVisibility * presentationDim;
+        light.intensity = THREE.MathUtils.clamp(base + fightIntensity * 0.35 + breathing, 0.2, 2.8);
+        light.color.setHSL(0.55 + (cluster?.hueShift ?? 0), 0.5 + (cluster?.saturation ?? 1) * 0.2, 0.45 + fightIntensity * 0.2);
+      });
+    }
+
+    function updateJumbotrons(time) {
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
+      const crowdVisibility = stageConfig.crowdVisibility ?? 1;
+      const screenBoost = stageName === 'Presentación' ? 1.6 : 1;
+
+      jumbotrons.forEach((panel, index) => {
+        const hue = 0.58 - fightIntensity * 0.25 + index * 0.07;
+        const wave = Math.sin(time * 1.6 + index) * 0.15 + Math.sin(time * 3.1 + index) * 0.05;
+        const emissive = new THREE.Color().setHSL(hue, 0.8, 0.5 + wave * 0.2);
+        panel.material.emissive.copy(emissive);
+        panel.material.color.copy(emissive.clone().multiplyScalar(0.55));
+        panel.material.emissiveIntensity = 3.2 * screenBoost + fightIntensity * 2.4 + wave * 2 + crowdVisibility * 1.4;
+      });
+    }
+
+    function triggerFlashBurst(multiplier = 1) {
+      const burstCount = Math.floor(3 + Math.random() * 4 * multiplier);
+
+      for (let i = 0; i < burstCount; i++) {
+        const slot = flashPool.find((flash) => !flash.active || flash.timeLeft <= 0);
+        if (!slot) break;
+
+        const cluster = crowdClusters[Math.floor(Math.random() * crowdClusters.length)];
+        const angle = cluster.center + (Math.random() - 0.5) * cluster.width * 0.6;
+        const radius = 9 + Math.random() * 1.6;
+        const height = 1.4 + Math.random() * 1.2;
+
+        slot.light.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+        slot.light.color.setHSL(0.6 - Math.random() * 0.1, 0.55 + Math.random() * 0.15, 0.9);
+        slot.baseIntensity = 8 + fightIntensity * 10 * multiplier;
+        slot.duration = 0.22 + Math.random() * 0.18;
+        slot.timeLeft = slot.duration;
+        slot.active = true;
+      }
+    }
+
+    function updateFlashes(delta, time) {
+      const cadence = stageName === 'Clímax' ? 3.5 : stageName === 'Combate' ? 5 : 7.5;
+      if (time > nextFlashTime) {
+        triggerFlashBurst(0.8 + fightIntensity * 0.8 + (stageName === 'Clímax' ? 0.6 : 0));
+        nextFlashTime = time + THREE.MathUtils.randFloat(cadence * 0.5, cadence * 1.1);
+      }
+
+      flashPool.forEach((flash) => {
+        if (!flash.active) return;
+        flash.timeLeft -= delta;
+        const t = Math.max(flash.timeLeft, 0) / flash.duration;
+        const falloff = Math.pow(t, 1.6);
+        flash.light.intensity = flash.baseIntensity * falloff;
+        flash.light.distance = 5 + fightIntensity * 6;
+        flash.light.color.offsetHSL(0, 0, -0.01 * delta);
+
+        if (flash.timeLeft <= 0) {
+          flash.active = false;
+          flash.light.intensity = 0;
+        }
+      });
+    }
+
     function updateLedPanels(noise, time) {
       const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
       const vivid = THREE.MathUtils.clamp(noise, 0, 1);
       const crowdVisibility = stageConfig.crowdVisibility ?? 1;
       const reactiveColor = new THREE.Color().setHSL(0.56 - vivid * 0.38, 0.9, 0.55 + vivid * 0.25);
       const emissiveColor = ledBaseColor.clone().lerp(reactiveColor, 0.6);
+      const presentationBoost = stageName === 'Presentación' ? 1.25 : 1;
 
       ledPanels.forEach((panel, index) => {
         const flicker = Math.sin(time * 3 + index) * 0.08 + Math.random() * 0.02;
-        const level = THREE.MathUtils.clamp(1 + vivid * 2.4 + flicker, 0.6, 3.8) * crowdVisibility;
+        const level = THREE.MathUtils.clamp(1 + vivid * 2.4 + flicker, 0.6, 3.8) * crowdVisibility * presentationBoost;
         panel.material.emissive.copy(emissiveColor);
         panel.material.emissiveIntensity = level;
         panel.scale.y = 1 + vivid * 0.25 * crowdVisibility + Math.sin(time * 5 + index) * 0.04;
@@ -1138,22 +1291,45 @@
       ];
     }
 
+    function getClusterIndex(angle) {
+      const wrapped = Math.atan2(Math.sin(angle), Math.cos(angle));
+      for (let i = 0; i < crowdClusters.length; i++) {
+        const cluster = crowdClusters[i];
+        const halfWidth = cluster.width / 2;
+        const delta = Math.atan2(Math.sin(wrapped - cluster.center), Math.cos(wrapped - cluster.center));
+        if (Math.abs(delta) <= halfWidth) return i;
+      }
+      return 0;
+    }
+
     function refreshSpectatorColors() {
       if (!spectatorsMesh) return;
 
       const palette = buildSpectatorPalette(stageProfiles[stageName]?.ledColor ?? ledBaseColor.getStyle());
       const intensityShift = (fightIntensity - 0.5) * 0.08;
-      const crowdVisibility = stageProfiles[stageName]?.crowdVisibility ?? 1;
+      const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
+      const crowdVisibility = stageConfig?.crowdVisibility ?? 1;
+      const presentationDim = stageName === 'Presentación' ? 0.68 : 1;
 
       spectatorData.forEach((data, index) => {
         const base = palette[data.ringIndex % palette.length];
+        const cluster = crowdClusters[data.clusterId] ?? crowdClusters[0];
         const hsl = { h: 0, s: 0, l: 0 };
         base.getHSL(hsl);
 
-        const hue = (hsl.h + intensityShift + data.hueJitter + 1) % 1;
-        const saturation = THREE.MathUtils.clamp(hsl.s * (0.85 + fightIntensity * 0.25) * (0.7 + crowdVisibility * 0.4), 0, 1);
+        const hue = (hsl.h + intensityShift + data.hueJitter + cluster.hueShift + 1) % 1;
+        const saturation = THREE.MathUtils.clamp(
+          hsl.s * cluster.saturation * (0.85 + fightIntensity * 0.25) * (0.7 + crowdVisibility * 0.4),
+          0,
+          1,
+        );
         const lightness = THREE.MathUtils.clamp(
-          hsl.l * (0.82 + data.colorNoise * 0.28) * (0.65 + crowdVisibility * 0.45) + fightIntensity * 0.05 * crowdVisibility,
+          hsl.l
+            * (0.82 + data.colorNoise * 0.28)
+            * (0.65 + crowdVisibility * 0.45)
+            * cluster.luminosity
+            * presentationDim
+            + fightIntensity * 0.05 * crowdVisibility,
           0,
           1,
         );
@@ -1197,6 +1373,7 @@
         for (let i = 0; i < ringCount; i++) {
           const jitter = (Math.random() - 0.5) * angleStep * angleJitterStrength;
           const angle = i * angleStep + jitter;
+          const clusterId = getClusterIndex(angle);
           const offsetRadius = radius + (Math.random() - 0.5) * radialJitter;
 
           const x = Math.cos(angle) * offsetRadius;
@@ -1226,6 +1403,7 @@
             ringIndex,
             hueJitter,
             colorNoise,
+            clusterId,
             scale: new THREE.Vector3(widthScale, heightScale, widthScale),
           });
 
@@ -1243,6 +1421,64 @@
 
       refreshSpectatorColors();
       scene.add(spectatorsMesh);
+
+      rebuildPhones();
+    }
+
+    function rebuildPhones() {
+      if (phoneMesh) {
+        scene.remove(phoneMesh);
+        phoneMesh.dispose?.();
+      }
+
+      const desiredPhones = Math.max(10, Math.min(50, Math.floor((spectatorData.length || 0) * 0.018)));
+      phoneHolders = [];
+      if (!desiredPhones) return;
+
+      const availableIndices = spectatorData.map((_, index) => index);
+      while (phoneHolders.length < desiredPhones && availableIndices.length > 0) {
+        const pick = Math.floor(Math.random() * availableIndices.length);
+        const index = availableIndices.splice(pick, 1)[0];
+        const cluster = crowdClusters[spectatorData[index]?.clusterId ?? 0];
+        if (Math.random() > (cluster?.luminosity ?? 1) * 0.85) continue;
+
+        phoneHolders.push({
+          index,
+          heightJitter: (Math.random() - 0.5) * 0.06,
+          sideOffset: (Math.random() - 0.5) * 0.08,
+          twist: (Math.random() - 0.5) * 0.35,
+        });
+      }
+
+      if (!phoneHolders.length) return;
+
+      phoneMesh = new THREE.InstancedMesh(phoneGeometry, phoneMaterial, phoneHolders.length);
+      phoneMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      phoneMesh.frustumCulled = false;
+      scene.add(phoneMesh);
+    }
+
+    function updatePhones(time) {
+      if (!phoneMesh) return;
+
+      const screenBoost = stageName === 'Presentación' ? 1.6 : 1;
+      phoneMaterial.emissiveIntensity = 3 + fightIntensity * 2.2 + screenBoost;
+
+      phoneHolders.forEach((holder, index) => {
+        const data = spectatorData[holder.index];
+        if (!data) return;
+        const forward = new THREE.Vector3(Math.sin(data.rotationY), 0, Math.cos(data.rotationY));
+
+        phoneDummy.position.copy(data.position);
+        phoneDummy.position.y += 0.28 + holder.heightJitter;
+        phoneDummy.position.addScaledVector(forward, 0.08);
+        phoneDummy.position.x += holder.sideOffset;
+        phoneDummy.rotation.set(-0.42, data.rotationY + holder.twist, 0);
+        phoneDummy.updateMatrix();
+        phoneMesh.setMatrixAt(index, phoneDummy.matrix);
+      });
+
+      phoneMesh.instanceMatrix.needsUpdate = true;
     }
 
     rebuildSpectators();
@@ -1303,7 +1539,11 @@
         spectatorsMesh.instanceMatrix.needsUpdate = true;
       }
 
+      updatePhones(time);
       updateLedPanels(crowdNoiseLevel, time);
+      updateJumbotrons(time);
+      updateCrowdLights(time);
+      updateFlashes(delta, time);
       updateSmoke(delta, time);
       updateDust(delta);
       updatePovMovement(delta);
