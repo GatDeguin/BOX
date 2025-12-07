@@ -1,10 +1,17 @@
-# Progresión de guantes (Box9)
+# Lore y progresión de campaña (Box9)
 
-Esta página resume las condiciones de desbloqueo y la ruta de avance de los guantes dentro de Box9.
+Esta wiki condensa el contexto narrativo de la campaña y el desglose práctico de la progresión de guantes en Box9.
+
+## Índice
+
+- [Lore de campaña](./campana.md): premisa, personajes clave, gimnasios y tono narrativo.
+- [Progresión de guantes](#progresion-de-guantes): tabla y flujo de desbloqueo.
+
+## Progresión de guantes
 
 > Punto de entrada actual: carga `menu.html` (bundle `public/box9.js`) para probar la progresión descrita.
 
-## Tabla de condiciones
+### Tabla de condiciones
 
 | Guantes | Requisito de desbloqueo | Acción clave |
 | --- | --- | --- |
@@ -14,7 +21,7 @@ Esta página resume las condiciones de desbloqueo y la ruta de avance de los gua
 | Pro | Haber desbloqueado el reto de Tyson **y** derrotar a Tyson con guantes amateur. | Otorga los guantes PRO. |
 | Secretos | Haber ganado a MMA, Bodybuilder y Tyson usando guantes PRO. | Equipa automáticamente los guantes secretos (negros/dorados). |
 
-## Flujo narrativo
+### Flujo narrativo
 
 1. **Comienzo en guantes de entrenamiento.** Con ellos puedes enfrentar a cualquier oponente salvo Tyson.
 2. **Prueba tu base.** Consigue al menos una victoria contra MMA y Bodybuilder usando los guantes de entrenamiento para desbloquear los guantes amateur.
