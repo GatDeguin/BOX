@@ -1,24 +1,11 @@
-import {
-  box9Store,
-  Box9Store,
-  RingId,
-  CharacterId,
-  GloveLevel,
-  getDefaultRingForCharacter
-} from './state';
+import { box9Store, Box9Store, RingId, CharacterId, GloveLevel, getDefaultRingForCharacter } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { DEFAULT_AUDIENCE_FLASH_SETTINGS, subscribeAssetManager } from './scene';
 import type { AudienceFlashSettings } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
-import {
-  canFightCharacter,
-  emitFightWin,
-  getFightLockReason,
-  getGloveLabel,
-  nextMilestone,
-  normalizeProgress
-} from './progression';
+import { canFightCharacter, emitFightWin, getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
 import { Box9Settings, loadSettings } from './settings';
+import { Box9ModeId, createModeOverlay } from './ui-modes';
 
 declare global {
   interface Window {
@@ -30,36 +17,6 @@ interface GloveRequirement {
   level: GloveLevel;
   condition: string;
 }
-
-type Box9ModeId = 'seleccion' | 'bolsa' | 'dummy';
-
-interface ModeOption {
-  id: Box9ModeId;
-  title: string;
-  description: string;
-  hint: string;
-}
-
-const MODE_OPTIONS: ModeOption[] = [
-  {
-    id: 'seleccion',
-    title: 'Modo campaña',
-    description: 'Elige rival, ring y activa el travelling guiado del combate.',
-    hint: 'Disponible siempre'
-  },
-  {
-    id: 'bolsa',
-    title: 'Bolsa de golpeo',
-    description: 'Monta la bolsa de boxeo para calentar y practicar combinaciones.',
-    hint: 'Perfecto para probar animaciones'
-  },
-  {
-    id: 'dummy',
-    title: 'Dummy secreto',
-    description: 'Sparring de precisión para guantes negros/dorados y rutas secretas.',
-    hint: 'Requiere desbloquear el set secreto'
-  }
-];
 
 const ringOptions: Record<RingId, string> = {
   mmaGym: 'Gimnasio MMA',
@@ -126,19 +83,29 @@ function createStyles() {
   style.textContent = `
     .box9-ui { position: absolute; inset: 0; pointer-events: none; font-family: 'Inter', system-ui, sans-serif; color: #e9ecf4; }
     .box9-high-contrast .box9-ui { color: #f9fbff; }
-    .box9-high-contrast .box9-overlay, .box9-high-contrast .box9-status, .box9-high-contrast .box9-option-row { background: rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.25); }
+    .box9-high-contrast .box9-mode-overlay, .box9-high-contrast .box9-status, .box9-high-contrast .box9-option-row { background: rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.25); }
     .box9-high-contrast .box9-button { box-shadow: 0 0 0 2px rgba(255,255,255,0.35); border-color: rgba(255,255,255,0.6); }
-    .box9-overlay { position: absolute; inset: 0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.06), transparent), #030508; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; pointer-events: auto; padding: 18px; }
-    .box9-overlay h1 { letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin: 0; color: #f6f7fb; }
-    .box9-overlay p { margin: 0; color: #b4bed4; }
-    .box9-start-panel { background: rgba(5,7,12,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0,0,0,0.42); width: min(960px, 100%); display: grid; gap: 12px; }
-    .box9-mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-    .box9-mode-card { border: 1px solid rgba(255,255,255,0.1); background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(122,155,255,0.08)); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
+    .box9-mode-overlay { position: absolute; inset: 0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.06), transparent), #030508; display: flex; align-items: center; justify-content: center; pointer-events: auto; padding: 18px; }
+    .box9-mode-layout { background: rgba(5,7,12,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px; box-shadow: 0 18px 60px rgba(0,0,0,0.42); width: min(1080px, 100%); display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 340px); gap: 14px; }
+    .box9-mode-header { grid-column: 1 / -1; display: grid; gap: 6px; }
+    .box9-mode-header h1 { margin: 0; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 800; color: #f6f7fb; }
+    .box9-mode-subtitle { margin: 4px 0 0; color: #b4bed4; }
+    .box9-mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; align-self: center; }
+    .box9-mode-card { position: relative; border: 1px solid rgba(255,255,255,0.1); background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(122,155,255,0.08)); border-radius: 12px; padding: 14px; display: grid; gap: 8px; min-height: 200px; box-shadow: 0 12px 40px rgba(0,0,0,0.38); }
+    .box9-mode-card.locked { opacity: 0.6; border-style: dashed; }
     .box9-mode-card h2 { margin: 0; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; }
-    .box9-mode-card p { margin: 0; color: #cbd3e8; line-height: 1.5; }
+    .box9-mode-description { margin: 0; color: #cbd3e8; line-height: 1.5; }
     .box9-mode-hint { color: #9aa3ba; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
-    .box9-mode-actions { display: flex; justify-content: flex-end; }
+    .box9-mode-actions { display: flex; justify-content: flex-end; margin-top: auto; }
     .box9-mode-card .box9-button { width: 100%; }
+    .box9-mode-lock { position: absolute; top: 12px; right: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,107,129,0.6); background: rgba(255,107,129,0.18); color: #ffd4dc; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; font-size: 11px; display: none; }
+    .box9-mode-card.locked .box9-mode-lock { display: inline-flex; align-items: center; gap: 6px; }
+    .box9-mode-sidebar { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 14px; display: grid; gap: 10px; align-self: stretch; box-shadow: 0 12px 36px rgba(0,0,0,0.32); }
+    .box9-mode-sidebar h3 { margin: 0; letter-spacing: 0.06em; text-transform: uppercase; color: #e9ecf4; }
+    .box9-mode-meta { margin: 0; color: #cbd3e8; line-height: 1.5; }
+    .box9-mode-meta-value { color: #f6f7fb; }
+    .box9-mode-milestone { margin: 0; color: #dce2f5; line-height: 1.55; font-size: 14px; }
+    .box9-ghost { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); color: #e9ecf4; box-shadow: none; }
     .box9-button:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
     .box9-button { border: 1px solid #3f5cff; background: linear-gradient(135deg, #3f5cff, #7a9bff); color: #fff; border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 30px rgba(63, 92, 255, 0.3); transition: transform 120ms ease, box-shadow 120ms ease; }
     .box9-button:hover { transform: translateY(-1px); box-shadow: 0 14px 40px rgba(63, 92, 255, 0.35); }
@@ -279,91 +246,6 @@ function createStyles() {
     .box9-secret-progress { margin: 0; color: #c7ffe8; background: rgba(84,255,191,0.12); border: 1px solid rgba(84,255,191,0.4); padding: 10px 12px; border-radius: 10px; line-height: 1.5; font-weight: 700; }
   `;
   document.head.appendChild(style);
-}
-
-function createOverlay(onStart: (mode: Box9ModeId) => void) {
-  const overlay = document.createElement('div');
-  overlay.className = 'box9-overlay';
-
-  const panel = document.createElement('div');
-  panel.className = 'box9-start-panel';
-
-  const title = document.createElement('h1');
-  title.textContent = 'Neon Boxing';
-
-  const subtitle = document.createElement('p');
-  subtitle.textContent = 'Selecciona un modo para entrar al ring o calentar.';
-
-  const playerState = document.createElement('p');
-  playerState.className = 'box9-progress-note';
-
-  const unlockHint = document.createElement('p');
-  unlockHint.className = 'box9-progress-note';
-
-  const grid = document.createElement('div');
-  grid.className = 'box9-mode-grid';
-
-  const buttons = new Map<Box9ModeId, HTMLButtonElement>();
-
-  MODE_OPTIONS.forEach((mode) => {
-    const card = document.createElement('div');
-    card.className = 'box9-mode-card';
-
-    const cardTitle = document.createElement('h2');
-    cardTitle.textContent = mode.title;
-
-    const description = document.createElement('p');
-    description.textContent = mode.description;
-
-    const hint = document.createElement('div');
-    hint.className = 'box9-mode-hint';
-    hint.textContent = mode.hint;
-
-    const actions = document.createElement('div');
-    actions.className = 'box9-mode-actions';
-
-    const button = document.createElement('button');
-    button.className = 'box9-button';
-    button.textContent = mode.id === 'seleccion' ? 'Entrar al ring' : 'Activar modo';
-    button.addEventListener('click', () => onStart(mode.id));
-
-    buttons.set(mode.id, button);
-    actions.appendChild(button);
-    card.append(cardTitle, description, hint, actions);
-    grid.appendChild(card);
-  });
-
-  panel.append(title, subtitle, playerState, unlockHint, grid);
-  overlay.appendChild(panel);
-
-  return {
-    overlay,
-    updateLocks: (progress: ReturnType<typeof normalizeProgress>) => {
-      const dummyButton = buttons.get('dummy');
-      if (dummyButton) {
-        const locked = !progress.unlocks.secreto;
-        dummyButton.disabled = locked;
-        dummyButton.title = locked ? 'Completa la ruta secreta para activar este modo.' : '';
-      }
-
-      const gloveLabel = getGloveLabel(progress.activeGlove);
-      const stageCopy = progress.unlocks.secreto
-        ? 'Ruta secreta completada: set secreto disponible.'
-        : progress.unlocks.pro
-        ? 'Set PRO desbloqueado, avanza hacia el secreto.'
-        : progress.unlocks.amateur
-        ? 'Set amateur listo, reta a Tyson para conseguir el PRO.'
-        : 'Guantes de entrenamiento equipados.';
-
-      playerState.textContent = `Estado actual: ${gloveLabel}. ${stageCopy}`;
-      const secretProgressCopy = `Ruta secreta con guantes PRO → MMA ${progress.wins.pro.mma}/1 · Bodybuilder ${progress.wins.pro.bodybuilder}/1 · Tyson ${progress.wins.pro.tyson}/1.`;
-      unlockHint.textContent = progress.unlocks.secreto
-        ? 'Pista de desbloqueo: ya tienes acceso al dummy secreto, pruébalo para dominar los guantes negros/dorados.'
-        : progress.unlocks.pro
-        ? secretProgressCopy
-        : nextMilestone(progress);
-    }
-  };
 }
 
 function createModal(
@@ -1501,7 +1383,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     syncSettings(detail);
   });
 
-  const { overlay, updateLocks } = createOverlay((mode) => {
+  const { overlay: modeOverlay, update: updateModeOverlay } = createModeOverlay(store, (mode) => {
     const progress = normalizeProgress(store.getState().progress);
     if (mode === 'dummy') {
       if (!progress.unlocks.secreto) return;
@@ -1511,7 +1393,6 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       return;
     }
 
-    emitSceneEvent('mode-selected', { mode });
     store.setState({ selectionStarted: true });
     emitSceneEvent('start-selection', { mode });
   });
@@ -1600,7 +1481,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   };
 
   const syncLayout = (state: Box9State = store.getState()) => {
-    overlay.style.display = !dummyActive && !state.selectionStarted ? 'flex' : 'none';
+    modeOverlay.style.display = !dummyActive && !state.selectionStarted ? 'flex' : 'none';
     hud.style.display = !dummyActive && state.selectionStarted ? 'flex' : 'none';
   };
 
@@ -1709,7 +1590,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       showGloveCinematic();
     }
 
-    updateLocks(progress);
+    updateModeOverlay(progress);
     syncLayout(state);
     updateHud(progress);
     updateGlovePanel(progress);
@@ -1737,7 +1618,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     lastProgress = progress;
   });
 
-  container.append(overlay, hud, backdrop, assetBackdrop, gloveBackdrop, loadingOverlay, dummyOverlay);
+  container.append(modeOverlay, hud, backdrop, assetBackdrop, gloveBackdrop, loadingOverlay, dummyOverlay);
   root.appendChild(container);
   initSelectionControls(store, {
     onStartSelection: (character) => {
