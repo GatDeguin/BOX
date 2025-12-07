@@ -99,9 +99,14 @@
     .lifebar__fill {
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #22d3ee, #10b981, #fbbf24);
       width: 100%;
-      transition: width 0.25s ease;
+      transition: width 0.25s ease, background 0.15s ease, transform 0.25s ease,
+        filter 0.25s ease;
+    }
+
+    .lifebar__fill--hurt {
+      transform: scale(1.04);
+      filter: brightness(1.2);
     }
 
     canvas {
@@ -242,6 +247,7 @@
       player: document.querySelector('#player-bar .lifebar__fill'),
       rival: document.querySelector('#rival-bar .lifebar__fill'),
     };
+    const lifeBarHurtTimers = { player: null, rival: null };
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#030712');
@@ -1057,6 +1063,26 @@
       if (!state || !bar) return;
       const pct = Math.max(0, Math.min(1, state.health / state.maxHealth));
       bar.style.width = `${pct * 100}%`;
+      const hue = 120 * pct;
+      bar.style.background = `hsl(${hue}, 80%, 48%)`;
+    }
+
+    function pulseLifeBar(slotKey) {
+      const bar = lifeBars[slotKey];
+      if (!bar) return;
+
+      bar.classList.remove('lifebar__fill--hurt');
+      void bar.offsetWidth;
+      bar.classList.add('lifebar__fill--hurt');
+
+      if (lifeBarHurtTimers[slotKey]) {
+        clearTimeout(lifeBarHurtTimers[slotKey]);
+      }
+
+      lifeBarHurtTimers[slotKey] = setTimeout(() => {
+        bar.classList.remove('lifebar__fill--hurt');
+        lifeBarHurtTimers[slotKey] = null;
+      }, 260);
     }
 
     const ringMovementLimit = ringRadius - 1.2;
@@ -1707,6 +1733,7 @@
       const damage = attackConfig.damage ?? 10;
       targetState.health = Math.max(0, targetState.health - damage);
       updateLifeBar(targetKey);
+      pulseLifeBar(targetKey);
       playSound('sonidos/golpe_4.mp3', impactAudio, 0.6 + fightIntensity * 0.3);
 
       playAnimation(targetKey, 'damage', true);
