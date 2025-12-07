@@ -1,3 +1,4 @@
+import { attachProgressPersistence } from './persistence';
 import { startIntro } from './scene';
 import { box9Store } from './state';
 import { initBox9UI } from './ui';
@@ -11,9 +12,11 @@ function bootstrap() {
 
   const uiRoot = document.getElementById('box9-ui-root') ?? document.body;
 
-  registerProgressionTriggers(box9Store);
+  const store = attachProgressPersistence(box9Store);
+
+  registerProgressionTriggers(store);
   startIntro(canvasContainer);
-  initBox9UI(uiRoot, box9Store);
+  initBox9UI(uiRoot, store);
 }
 
 if (document.readyState === 'loading') {
