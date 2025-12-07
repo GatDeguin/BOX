@@ -34,22 +34,22 @@ export const gymVariants: Record<
   }
 > = {
   mma: {
-    url: 'box10.html',
+    url: 'gim1.html',
     label: 'BOX 10 · MMA Sparring',
     description: 'Octágono húmedo con clinch, sprawl y cámara pegada a las jaulas.'
   },
   bodybuilder: {
-    url: 'box11.html',
+    url: 'gim2.html',
     label: 'BOX 11 · Golden Pump',
     description: 'Sesión de hipertrofia con luz cálida, cadenas y repeticiones al fallo.'
   },
   tyson: {
-    url: 'box12.html',
+    url: 'gim3.html',
     label: 'BOX 12 · Tyson POV',
     description: 'POV pesado inspirado en Tyson con sombras, uppercuts y respiración cruda.'
   },
   principal: {
-    url: 'box13.html',
+    url: 'gim4.html',
     label: 'BOX 13 · Bolsa Tyson',
     description: 'Warmup guiado en saco con marcador simple y Tyson liderando el ritmo.'
   }
