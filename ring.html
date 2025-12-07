@@ -226,6 +226,7 @@
     import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
     import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+    import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
     import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
     import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
     import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -633,13 +634,36 @@
 
     const gltfLoader = new GLTFLoader(loaderManager);
     const fbxLoader = new FBXLoader(loaderManager);
+    const objLoader = new OBJLoader(loaderManager);
+    const textureLoader = new THREE.TextureLoader(loaderManager);
 
     const fighters = {
-      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx', scale: 1 },
+      tyson: {
+        label: 'Tyson',
+        url: 'modelos/Tyson.fbx',
+        scale: 1,
+        textures: {
+          map: { url: 'texturas/Tyson.jpeg', flipY: false, colorSpace: THREE.SRGBColorSpace },
+        },
+      },
       principal: { label: 'Principal', url: 'modelos/Principal.fbx', scale: 0.01 },
       mma: { label: 'MMA', url: 'modelos/MMA.fbx', scale: 0.0095 },
       bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx', scale: 0.0105 },
     };
+
+    const gloveConfig = {
+      url: 'modelos/Guantes_Amateur.obj',
+      scale: 0.01,
+      baseRotation: new THREE.Euler(-Math.PI / 2, Math.PI, 0),
+      offset: new THREE.Vector3(0, 0, -0.08),
+      textures: {
+        map: { url: 'texturas/Boxing_Gloves_Leather_Tan.jpg', colorSpace: THREE.SRGBColorSpace },
+        normalMap: { url: 'texturas/Boxing_Gloves_BUMP.jpg', colorSpace: THREE.NoColorSpace },
+      },
+    };
+
+    let glovePrototype = null;
+    const playerGloves = { left: null, right: null };
 
     const animationLibrary = {
       idle: { url: 'animaciones/descanso/Action Idle To Fight Idle.fbx', loop: THREE.LoopRepeat },
@@ -728,6 +752,146 @@
           child.receiveShadow = true;
         }
       });
+    }
+
+    const textureCache = new Map();
+    const NON_COLOR_SPACE = THREE.NoColorSpace || THREE.LinearSRGBColorSpace || THREE.SRGBColorSpace;
+
+    function loadTexture(config) {
+      if (!config?.url) return null;
+      const key = JSON.stringify(config);
+      if (textureCache.has(key)) return textureCache.get(key);
+      const tex = textureLoader.load(config.url);
+      tex.flipY = config.flipY ?? false;
+      tex.colorSpace = config.colorSpace ?? (config.slot === 'map' ? THREE.SRGBColorSpace : NON_COLOR_SPACE);
+      textureCache.set(key, tex);
+      return tex;
+    }
+
+    function buildTextureSet(config = {}) {
+      const set = {};
+      Object.entries(config).forEach(([slot, conf]) => {
+        if (!conf || slot.startsWith('__')) return;
+        const opts = typeof conf === 'string' ? { url: conf } : conf;
+        set[slot] = loadTexture({ ...opts, slot });
+      });
+      return set;
+    }
+
+    function applyTexturesToMaterial(material, textureSet) {
+      if (!material || !textureSet) return;
+      const apply = (mat) => {
+        if (!mat) return;
+        Object.entries(textureSet).forEach(([slot, tex]) => {
+          if (!tex) return;
+          if (!mat[slot]) {
+            mat[slot] = tex;
+          }
+        });
+        mat.needsUpdate = true;
+      };
+      if (Array.isArray(material)) material.forEach(apply);
+      else apply(material);
+    }
+
+    function applyFighterTextures(model, fighterConfig) {
+      if (!model || !fighterConfig?.textures) return;
+      const textureSet = buildTextureSet(fighterConfig.textures);
+      model.traverse?.((child) => {
+        if (child.isMesh) {
+          applyTexturesToMaterial(child.material, textureSet);
+        }
+      });
+    }
+
+    function findHandBone(model, side) {
+      if (!model) return null;
+      const target = side === 'left' ? 'lefthand' : 'righthand';
+      let found = null;
+      model.traverse((child) => {
+        if (found || !child.isBone) return;
+        const name = child.name?.toLowerCase?.() ?? '';
+        if (name.includes(target)) {
+          found = child;
+        }
+      });
+      return found;
+    }
+
+    function disposePlayerGloves() {
+      ['left', 'right'].forEach((side) => {
+        const glove = playerGloves[side];
+        if (glove?.parent) glove.parent.remove(glove);
+        playerGloves[side] = null;
+      });
+    }
+
+    async function ensureGlovePrototype() {
+      if (glovePrototype) return glovePrototype;
+      try {
+        const glove = await objLoader.loadAsync(gloveConfig.url);
+        const textureSet = buildTextureSet(gloveConfig.textures);
+        glove.traverse?.((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            applyTexturesToMaterial(child.material, textureSet);
+          }
+        });
+        const bbox = new THREE.Box3().setFromObject(glove);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        glove.position.sub(center);
+        glove.updateMatrixWorld(true);
+        glovePrototype = glove;
+        return glovePrototype;
+      } catch (err) {
+        console.warn('No se pudieron cargar los guantes', err);
+        return null;
+      }
+    }
+
+    function createGloveInstance(side) {
+      if (!glovePrototype) return null;
+      const instance = glovePrototype.clone(true);
+      instance.traverse?.((child) => {
+        if (child.isMesh) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map((mat) => mat?.clone?.() ?? mat);
+          } else if (child.material?.clone) {
+            child.material = child.material.clone();
+          }
+        }
+      });
+      instance.scale.setScalar(gloveConfig.scale);
+      const rotation = new THREE.Quaternion().setFromEuler(gloveConfig.baseRotation);
+      if (side === 'left') {
+        rotation.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0)));
+      }
+      instance.quaternion.copy(rotation);
+      const offset = gloveConfig.offset.clone();
+      if (side === 'left') offset.x *= -1;
+      instance.position.copy(offset);
+      return instance;
+    }
+
+    async function attachGlovesToPlayer(model) {
+      disposePlayerGloves();
+      if (!model) return;
+      const prototype = await ensureGlovePrototype();
+      if (!prototype) return;
+      const leftHand = findHandBone(model, 'left');
+      const rightHand = findHandBone(model, 'right');
+      if (leftHand) {
+        const glove = createGloveInstance('left');
+        leftHand.add(glove);
+        playerGloves.left = glove;
+      }
+      if (rightHand) {
+        const glove = createGloveInstance('right');
+        rightHand.add(glove);
+        playerGloves.right = glove;
+      }
     }
 
     async function loadRing() {
@@ -819,6 +983,7 @@
       if (slot.model) {
         scene.remove(slot.model);
         disposeModel(slot.model);
+        if (slotKey === 'player') disposePlayerGloves();
       }
 
       if (slot.mixer) {
@@ -828,9 +993,14 @@
       slot.current = fighterKey;
       slot.model = loaded.model;
       slot.mixer = loaded.mixer;
+      applyFighterTextures(slot.model, fighter);
       scene.add(loaded.model);
       if (loaded.mixer) {
         mixers.add(loaded.mixer);
+      }
+
+      if (slotKey === 'player') {
+        attachGlovesToPlayer(slot.model);
       }
 
       applyPosition(slotKey);
@@ -1006,6 +1176,8 @@
       return { action, config, clip };
     }
 
+    const PARAM_STORAGE_KEY = 'ring_pov_gui_params';
+
     const params = {
       camara: 'POV',
       rival: 'tyson',
@@ -1024,6 +1196,27 @@
       contraluz: true,
       lucesViga: true,
     };
+
+    function loadStoredParams() {
+      try {
+        const raw = localStorage.getItem(PARAM_STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (err) {
+        console.warn('No se pudo cargar la configuración previa', err);
+        return null;
+      }
+    }
+
+    function persistParams() {
+      try {
+        localStorage.setItem(PARAM_STORAGE_KEY, JSON.stringify(params));
+        status.textContent = 'Configuración guardada ✔';
+        setTimeout(updateStatusText, 1500);
+      } catch (err) {
+        console.warn('No se pudo guardar la configuración', err);
+      }
+    }
 
     fighterSlots.rival.current = params.rival;
 
@@ -1058,6 +1251,14 @@
 
     const gui = new GUI({ width: 320, container: overlay });
     gui.domElement.style.pointerEvents = 'auto';
+    const controllers = {};
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Guardar configuración';
+    saveButton.className = 'pill';
+    saveButton.style.alignSelf = 'stretch';
+    saveButton.addEventListener('click', persistParams);
+    overlay.appendChild(saveButton);
 
     const rivalOptions = {
       Tyson: 'tyson',
@@ -1092,6 +1293,7 @@
     }
 
     const cameraController = gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange(applyCameraMode);
+    controllers.camara = cameraController;
 
     let playerScaleController = null;
     let rivalScaleController = null;
@@ -1103,6 +1305,7 @@
         setFighter('rival', value);
         updateStatusText();
       });
+    controllers.rival = rivalController;
 
     playerScaleController = gui
       .add(params, 'escalaJugador', 0.005, 2, 0.001)
@@ -1111,8 +1314,9 @@
         fighterSlots.player.scale = value;
         fighterSlots.player.model?.scale.setScalar(value);
       });
+    controllers.escalaJugador = playerScaleController;
 
-    gui
+    controllers.alturaJugador = gui
       .add(params, 'alturaJugador', -1, 2, 0.01)
       .name('Altura jugador (Y)')
       .onChange((value) => {
@@ -1127,8 +1331,9 @@
         fighterSlots.rival.scale = value;
         fighterSlots.rival.model?.scale.setScalar(value);
       });
+    controllers.escalaRival = rivalScaleController;
 
-    gui
+    controllers.alturaRival = gui
       .add(params, 'alturaRival', -1, 2, 0.01)
       .name('Altura rival (Y)')
       .onChange((value) => {
@@ -1147,23 +1352,52 @@
       }
       updateStatusText();
     });
-    gui.add(params, 'etapa', Object.keys(stageProfiles)).name('Etapa de pelea').onChange((value) => setStage(value));
-    gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
-    gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
-    gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
-    gui.add(params, 'bloomUmbral', 0.4, 1.5, 0.01).name('Umbral bloom').onChange((v) => unrealBloomPass.threshold = v);
-    gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
-    gui.add(params, 'contraluz').name('Contraluz público').onChange((value) => refreshBacklightIntensity(value));
-    gui.add(params, 'lucesViga').name('Luces vigas superiores').onChange((value) => refreshRigBeamLights(value));
-    gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => {
+    controllers.etapa = gui.add(params, 'etapa', Object.keys(stageProfiles)).name('Etapa de pelea').onChange((value) => setStage(value));
+    controllers.luzDireccional = gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
+    controllers.hemi = gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
+    controllers.niebla = gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
+    controllers.bloomUmbral = gui.add(params, 'bloomUmbral', 0.4, 1.5, 0.01).name('Umbral bloom').onChange((v) => unrealBloomPass.threshold = v);
+    controllers.bloom = gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
+    controllers.contraluz = gui.add(params, 'contraluz').name('Contraluz público').onChange((value) => refreshBacklightIntensity(value));
+    controllers.lucesViga = gui.add(params, 'lucesViga').name('Luces vigas superiores').onChange((value) => refreshRigBeamLights(value));
+    controllers.espectadores = gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => {
       rebuildSpectators();
       updateStatusText();
     });
 
-    const status = document.createElement('div');
+    let status = document.createElement('div');
     status.className = 'pill';
     status.textContent = 'Cargando modelos…';
     overlay.appendChild(status);
+
+    function applyStoredParams(saved) {
+      if (!saved) return;
+      if (saved.camara && saved.camara !== params.camara) {
+        cameraController.setValue(saved.camara);
+      }
+      if (saved.rival) {
+        rivalController.setValue(saved.rival);
+      }
+      ['escalaJugador', 'escalaRival', 'alturaJugador', 'alturaRival', 'luzDireccional', 'hemi', 'niebla', 'bloomUmbral', 'bloom',
+        'espectadores'].forEach((key) => {
+        if (typeof saved[key] === 'number' && params[key] !== saved[key]) {
+          controllers[key]?.setValue(saved[key]);
+        }
+      });
+      if (typeof saved.pausarAnimaciones === 'boolean') {
+        pauseController.setValue(saved.pausarAnimaciones);
+      }
+      if (typeof saved.contraluz === 'boolean') {
+        controllers.contraluz?.setValue(saved.contraluz);
+      }
+      if (typeof saved.lucesViga === 'boolean') {
+        controllers.lucesViga?.setValue(saved.lucesViga);
+      }
+      if (saved.etapa && saved.etapa !== params.etapa) {
+        setStage(saved.etapa);
+        controllers.etapa?.setValue(saved.etapa);
+      }
+    }
 
     function updateStatusText() {
       const rivalLabel = fighters[params.rival]?.label ?? params.rival;
@@ -1175,6 +1409,8 @@
       setFighter('player', fighterSlots.player.current),
       setFighter('rival', params.rival),
     ]).finally(() => {
+      const saved = loadStoredParams();
+      applyStoredParams(saved);
       applyPresentationMode();
       updateStatusText();
     });
@@ -1254,65 +1490,6 @@
     const fallAudio = new THREE.Audio(listener);
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
-
-    const smokeCount = 90;
-    const smokePositions = new Float32Array(smokeCount * 3);
-    const smokeVelocities = new Float32Array(smokeCount);
-    const smokeMaterial = new THREE.PointsMaterial({
-      color: '#9fb3c8',
-      size: 0.55,
-      transparent: true,
-      opacity: 0.32,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const smokeGeometry = new THREE.BufferGeometry();
-    smokeGeometry.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
-    const smokePoints = new THREE.Points(smokeGeometry, smokeMaterial);
-    smokePoints.frustumCulled = false;
-    fxGroup.add(smokePoints);
-
-    function resetSmokeParticle(index, baseY = 0.05) {
-      const radius = 3.2 + Math.random() * 1.1;
-      const angle = Math.random() * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      const y = baseY + Math.random() * 0.35;
-
-      smokePositions[index * 3] = x;
-      smokePositions[index * 3 + 1] = y;
-      smokePositions[index * 3 + 2] = z;
-      smokeVelocities[index] = 0.08 + Math.random() * 0.12;
-    }
-
-    for (let i = 0; i < smokeCount; i++) {
-      resetSmokeParticle(i, Math.random() * 0.2);
-    }
-
-    smokeGeometry.attributes.position.needsUpdate = true;
-
-    const dustCount = 140;
-    const dustPositions = new Float32Array(dustCount * 3);
-    const dustVelocity = new Float32Array(dustCount * 3);
-    const dustLife = new Float32Array(dustCount).fill(0);
-    const dustMaterial = new THREE.PointsMaterial({
-      color: '#f3ddc2',
-      size: 0.085,
-      transparent: true,
-      opacity: 0.06,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const dustGeometry = new THREE.BufferGeometry();
-    dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-    const dustPoints = new THREE.Points(dustGeometry, dustMaterial);
-    dustPoints.frustumCulled = false;
-    fxGroup.add(dustPoints);
-
-    for (let i = 0; i < dustCount; i++) {
-      dustPositions[i * 3 + 1] = -10;
-    }
-    dustGeometry.attributes.position.needsUpdate = true;
 
     const loadedBuffers = new Map();
 
@@ -1742,68 +1919,6 @@
       });
     }
 
-    function updateSmoke(delta, time) {
-      for (let i = 0; i < smokeCount; i++) {
-        smokePositions[i * 3 + 1] += smokeVelocities[i] * delta;
-        smokePositions[i * 3] += Math.sin(time * 0.35 + i) * 0.015 * delta;
-        smokePositions[i * 3 + 2] += Math.cos(time * 0.35 + i) * 0.015 * delta;
-
-        if (smokePositions[i * 3 + 1] > 1) {
-          resetSmokeParticle(i, 0.04);
-        }
-      }
-
-      const swell = 0.2 + fightIntensity * 0.35 + Math.sin(time * 0.5) * 0.05;
-      smokeMaterial.opacity = THREE.MathUtils.clamp(0.22 + swell * 0.25, 0.18, 0.42);
-      smokeGeometry.attributes.position.needsUpdate = true;
-    }
-
-    function spawnDustBurst() {
-      let burstSize = 10 + Math.floor(Math.random() * 12);
-      const radius = 0.6 + Math.random() * 1.2;
-      const centerAngle = Math.random() * Math.PI * 2;
-
-      for (let i = 0; i < dustCount; i++) {
-        if (dustLife[i] > 0) continue;
-        const angle = centerAngle + (Math.random() - 0.5) * 0.7;
-        const dist = radius + (Math.random() - 0.5) * 0.35;
-        dustPositions[i * 3] = Math.cos(angle) * dist;
-        dustPositions[i * 3 + 1] = 0.08 + Math.random() * 0.04;
-        dustPositions[i * 3 + 2] = Math.sin(angle) * dist;
-        dustVelocity[i * 3] = (Math.random() - 0.5) * 0.3;
-        dustVelocity[i * 3 + 1] = 0.45 + Math.random() * 0.4;
-        dustVelocity[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
-        dustLife[i] = 1.2 + Math.random() * 0.4;
-        if (--burstSize <= 0) break;
-      }
-
-      dustGeometry.attributes.position.needsUpdate = true;
-    }
-
-    function updateDust(delta) {
-      let active = 0;
-
-      for (let i = 0; i < dustCount; i++) {
-        if (dustLife[i] <= 0) continue;
-        active++;
-
-        dustPositions[i * 3] += dustVelocity[i * 3] * delta;
-        dustPositions[i * 3 + 1] += dustVelocity[i * 3 + 1] * delta;
-        dustPositions[i * 3 + 2] += dustVelocity[i * 3 + 2] * delta;
-        dustVelocity[i * 3 + 1] -= delta * 0.28;
-        dustLife[i] -= delta * 1.1;
-
-        if (dustLife[i] <= 0 || dustPositions[i * 3 + 1] < 0) {
-          dustLife[i] = 0;
-          dustPositions[i * 3 + 1] = -10;
-        }
-      }
-
-      const pulse = Math.min(active / 40, 1);
-      dustMaterial.opacity = 0.05 + pulse * 0.35;
-      dustGeometry.attributes.position.needsUpdate = true;
-    }
-
     function updatePovMovement(delta) {
       if (params.camara !== 'POV' || !povControls.isLocked) return;
 
@@ -2116,9 +2231,6 @@
 
       if (!params.pausarAnimaciones) {
         mixers.forEach((mixer) => mixer.update(delta));
-        if (Math.random() < 0.02 + fightIntensity * 0.01) {
-          spawnDustBurst();
-        }
       }
 
       if (spectatorsMesh) {
@@ -2140,8 +2252,6 @@
       updateJumbotrons(time);
       updateCrowdLights(time);
       updateFlashes(delta, time);
-      updateSmoke(delta, time);
-      updateDust(delta);
       updatePovMovement(delta);
       updateAtmosphere(time);
       controls.update();
