@@ -25,31 +25,31 @@ const ringDescriptions: Record<RingId, string> = {
   tysonRing: ringOptions.tysonRing.description
 };
 
-const gymVariants: Record<
+export const gymVariants: Record<
   CharacterId,
   {
-    href: string;
+    url: string;
     label: string;
     description: string;
   }
 > = {
   mma: {
-    href: 'box10.html',
+    url: 'box10.html',
     label: 'BOX 10 · MMA Sparring',
     description: 'Octágono húmedo con clinch, sprawl y cámara pegada a las jaulas.'
   },
   bodybuilder: {
-    href: 'box11.html',
+    url: 'box11.html',
     label: 'BOX 11 · Golden Pump',
     description: 'Sesión de hipertrofia con luz cálida, cadenas y repeticiones al fallo.'
   },
   tyson: {
-    href: 'box12.html',
+    url: 'box12.html',
     label: 'BOX 12 · Tyson POV',
     description: 'POV pesado inspirado en Tyson con sombras, uppercuts y respiración cruda.'
   },
   principal: {
-    href: 'box13.html',
+    url: 'box13.html',
     label: 'BOX 13 · Bolsa Tyson',
     description: 'Warmup guiado en saco con marcador simple y Tyson liderando el ritmo.'
   }
@@ -72,7 +72,17 @@ interface CampaignDom {
   ringChips: HTMLElement;
   gymTitle: HTMLElement;
   gymDescription: HTMLElement;
-  gymLink: HTMLAnchorElement;
+  gymOpenButton: HTMLButtonElement;
+  gymEmbedButton: HTMLButtonElement;
+  gymEmbed: HTMLElement;
+  gymIframe: HTMLIFrameElement;
+}
+
+interface GymPanelState {
+  embedVisible: boolean;
+  currentVariant: CharacterId | null;
+  setEmbedVisible: (visible: boolean, url?: string) => void;
+  setCurrentVariant: (variant: CharacterId | null) => void;
 }
 
 function injectCampaignStyles() {
@@ -117,6 +127,10 @@ function injectCampaignStyles() {
     .box9-campaign-lock { color: #ffd4dc; background: rgba(255, 107, 129, 0.16); border: 1px solid rgba(255,107,129,0.45); padding: 10px 12px; border-radius: 10px; display: none; font-weight: 700; letter-spacing: 0.04em; }
     .box9-campaign-lock.visible { display: block; }
     .box9-campaign-gym a { color: #7a9bff; font-weight: 700; text-decoration: none; }
+    .box9-gym-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .box9-gym-actions .box9-button { flex: 1; min-width: 160px; }
+    .box9-gym-embed { display: none; border: 1px solid rgba(122,155,255,0.35); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+    .box9-gym-embed iframe { width: 100%; height: 260px; border: 0; background: #05070c; }
   `;
   document.head.appendChild(style);
 }
@@ -217,10 +231,23 @@ function createCampaignLayout(): CampaignDom {
   gymPanel.className = 'box9-campaign-panel box9-campaign-gym';
   const gymTitle = document.createElement('h4');
   const gymDescription = document.createElement('p');
-  const gymLink = document.createElement('a');
-  gymLink.target = '_blank';
-  gymLink.rel = 'noreferrer';
-  gymPanel.append(gymTitle, gymDescription, gymLink);
+  const gymActions = document.createElement('div');
+  gymActions.className = 'box9-gym-actions';
+  const gymOpenButton = document.createElement('button');
+  gymOpenButton.className = 'box9-button';
+  gymOpenButton.textContent = 'Abrir gimnasio';
+  const gymEmbedButton = document.createElement('button');
+  gymEmbedButton.className = 'box9-button box9-ghost';
+  gymEmbedButton.textContent = 'Ver embebido';
+  gymActions.append(gymOpenButton, gymEmbedButton);
+
+  const gymEmbed = document.createElement('div');
+  gymEmbed.className = 'box9-gym-embed';
+  const gymIframe = document.createElement('iframe');
+  gymIframe.title = 'Entrenamiento embebido';
+  gymEmbed.appendChild(gymIframe);
+
+  gymPanel.append(gymTitle, gymDescription, gymActions, gymEmbed);
 
   panelCard.append(ringPanel, gymPanel);
 
@@ -244,7 +271,10 @@ function createCampaignLayout(): CampaignDom {
     ringChips,
     gymTitle,
     gymDescription,
-    gymLink
+    gymOpenButton,
+    gymEmbedButton,
+    gymEmbed,
+    gymIframe
   };
 }
 
@@ -292,16 +322,55 @@ function updateRingPanel(dom: CampaignDom, store: Box9Store, rival: CharacterId)
   });
 }
 
-function updateGymPanel(dom: CampaignDom, fighter: CharacterId) {
-  const gym = gymVariants[fighter];
-  dom.gymTitle.textContent = gym?.label ?? 'Gimnasio';
-  dom.gymDescription.textContent = gym?.description ?? 'Elige un sparring para calentar antes de la pelea.';
-  dom.gymLink.textContent = gym?.href ? 'Abrir entrenamiento' : '';
-  dom.gymLink.href = gym?.href ?? '#';
-  dom.gymLink.style.display = gym?.href ? 'inline-flex' : 'none';
+function createGymPanelState(dom: CampaignDom): GymPanelState {
+  const state: GymPanelState = {
+    embedVisible: false,
+    currentVariant: null,
+    setEmbedVisible: (visible: boolean, url?: string) => {
+      state.embedVisible = visible;
+      if (visible) {
+        const target = url ? new URL(url, window.location.href).href : dom.gymIframe.src;
+        if (!dom.gymIframe.src || dom.gymIframe.src !== target) {
+          dom.gymIframe.src = target;
+        }
+        dom.gymEmbed.style.display = 'block';
+        dom.gymEmbedButton.textContent = 'Cerrar embebido';
+      } else {
+        dom.gymEmbed.style.display = 'none';
+        dom.gymIframe.src = 'about:blank';
+        dom.gymEmbedButton.textContent = 'Ver embebido';
+      }
+    },
+    setCurrentVariant: (variant: CharacterId | null) => {
+      state.currentVariant = variant;
+    }
+  };
+
+  return state;
 }
 
-function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
+function updateGymPanel(dom: CampaignDom, fighter: CharacterId, state: GymPanelState) {
+  const gym = gymVariants[fighter];
+  dom.gymTitle.textContent = gym ? `Gimnasio · ${gym.label}` : 'Gimnasio';
+  dom.gymDescription.textContent =
+    gym?.description ?? 'Elige un sparring para calentar antes de la pelea.';
+  dom.gymOpenButton.disabled = !gym;
+  dom.gymEmbedButton.disabled = !gym;
+
+  if (!gym) {
+    state.setCurrentVariant(null);
+    state.setEmbedVisible(false);
+    return;
+  }
+
+  if (state.embedVisible && state.currentVariant !== fighter) {
+    state.setEmbedVisible(true, gym.url);
+  }
+
+  state.setCurrentVariant(fighter);
+}
+
+function wireCampaignSelection(dom: CampaignDom, store: Box9Store, gymState: GymPanelState) {
   const items = new Map<CharacterId, HTMLElement>();
 
   const setActive = (character: CharacterId, progress = normalizeProgress(store.getState().progress)) => {
@@ -331,7 +400,7 @@ function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
     }
 
     updateRingPanel(dom, store, character);
-    updateGymPanel(dom, character);
+    updateGymPanel(dom, character, gymState);
   };
 
   fighterOrder.forEach((fighterId) => {
@@ -349,6 +418,23 @@ function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
     });
     items.set(fighterId, card);
     dom.rivalList.appendChild(card);
+  });
+
+  dom.gymOpenButton.addEventListener('click', () => {
+    const variant = gymVariants[store.getState().character];
+    if (!variant) return;
+    window.open(variant.url, '_blank', 'noopener,noreferrer');
+  });
+
+  dom.gymEmbedButton.addEventListener('click', () => {
+    const variant = gymVariants[store.getState().character];
+    if (!variant) return;
+
+    if (gymState.embedVisible) {
+      gymState.setEmbedVisible(false);
+    } else {
+      gymState.setEmbedVisible(true, variant.url);
+    }
   });
 
   dom.startButton.addEventListener('click', () => {
@@ -390,9 +476,12 @@ function wireCampaignSelection(dom: CampaignDom, store: Box9Store) {
 export function initCampaignSelectionView(root: HTMLElement, store: Box9Store = box9Store) {
   injectCampaignStyles();
   const dom = createCampaignLayout();
+  const gymState = createGymPanelState(dom);
   root.appendChild(dom.container);
 
-  const teardownControls = initSelectionControls(store);
+  const teardownControls = initSelectionControls(store, {
+    onIdle: (character) => updateGymPanel(dom, character, gymState)
+  });
 
   window.dispatchEvent(
     new CustomEvent('box9:start-selection', {
@@ -400,7 +489,7 @@ export function initCampaignSelectionView(root: HTMLElement, store: Box9Store = 
     })
   );
 
-  const teardownSelection = wireCampaignSelection(dom, store);
+  const teardownSelection = wireCampaignSelection(dom, store, gymState);
 
   return () => {
     teardownControls();
