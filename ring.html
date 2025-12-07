@@ -156,6 +156,7 @@
         <li><strong>C</strong> • Cambiar POV / Orbital</li>
         <li><strong>P</strong> • Pausar / reanudar animaciones</li>
         <li><strong>R</strong> • Regenerar público</li>
+        <li><strong>Click + WASD</strong> • Moverte en POV</li>
       </ul>
     </div>
     <canvas id="scene"></canvas>
@@ -173,6 +174,7 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
     import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
     import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
@@ -211,6 +213,19 @@
     controls.enableDamping = true;
     controls.enabled = false;
     controls.target.set(0, 1, 0);
+
+    const povControls = new PointerLockControls(povCamera, renderer.domElement);
+    const povMoveState = { forward: false, backward: false, left: false, right: false };
+    const POV_MOVE_SPEED = 3.8;
+
+    function resetPovMovement() {
+      povMoveState.forward = false;
+      povMoveState.backward = false;
+      povMoveState.left = false;
+      povMoveState.right = false;
+    }
+
+    povControls.addEventListener('unlock', resetPovMovement);
 
     const hemiLight = new THREE.HemisphereLight('#dbeafe', '#0f172a', 0.35);
     hemiLight.position.set(0, 8, 0);
@@ -326,11 +341,37 @@
       scene.add(point);
     });
 
-    const mixers = [];
+    const mixers = new Set();
     const loaderManager = new THREE.LoadingManager();
 
     const gltfLoader = new GLTFLoader(loaderManager);
     const fbxLoader = new FBXLoader(loaderManager);
+
+    const fighters = {
+      tyson: { label: 'Tyson', url: 'modelos/Tyson.fbx' },
+      principal: { label: 'Principal', url: 'modelos/Principal.fbx' },
+      mma: { label: 'MMA', url: 'modelos/MMA.fbx' },
+      bodybuilder: { label: 'Bodybuilder', url: 'modelos/Bodybuilder.fbx' },
+    };
+
+    const fighterSlots = {
+      player: {
+        position: new THREE.Vector3(2.2, 0, 2.2),
+        flip: true,
+        current: 'principal',
+        model: null,
+        mixer: null,
+        requestId: 0,
+      },
+      rival: {
+        position: new THREE.Vector3(-2.2, 0, -2.2),
+        flip: false,
+        current: 'tyson',
+        model: null,
+        mixer: null,
+        requestId: 0,
+      },
+    };
 
     const stageProfiles = {
       Presentación: {
@@ -391,20 +432,64 @@
         model.position.copy(position);
         model.rotation.y = flip ? Math.PI / 4 : -Math.PI / 4;
         setShadows(model);
-        scene.add(model);
 
+        let mixer = null;
         if (model.animations?.length) {
-          const mixer = new THREE.AnimationMixer(model);
+          mixer = new THREE.AnimationMixer(model);
           model.animations.forEach((clip) => mixer.clipAction(clip).play());
-          mixers.push(mixer);
         }
+
+        return { model, mixer };
       } catch (err) {
         console.warn('No se pudo cargar', url, err.message);
+        return null;
+      }
+    }
+
+    function disposeModel(model) {
+      model.traverse?.((child) => {
+        if (!child.isMesh) return;
+        child.geometry?.dispose?.();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => material?.dispose?.());
+      });
+    }
+
+    async function setFighter(slotKey, fighterKey) {
+      const slot = fighterSlots[slotKey];
+      const fighter = fighters[fighterKey];
+      if (!slot || !fighter) return;
+
+      slot.requestId += 1;
+      const requestId = slot.requestId;
+
+      const loaded = await loadFighter(fighter.url, slot.position, slot.flip);
+      if (!loaded || requestId !== slot.requestId) {
+        loaded?.model && disposeModel(loaded.model);
+        return;
+      }
+
+      if (slot.model) {
+        scene.remove(slot.model);
+        disposeModel(slot.model);
+      }
+
+      if (slot.mixer) {
+        mixers.delete(slot.mixer);
+      }
+
+      slot.current = fighterKey;
+      slot.model = loaded.model;
+      slot.mixer = loaded.mixer;
+      scene.add(loaded.model);
+      if (loaded.mixer) {
+        mixers.add(loaded.mixer);
       }
     }
 
     const params = {
       camara: 'POV',
+      rival: 'tyson',
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
@@ -414,6 +499,8 @@
       bloomUmbral: 0.82,
       etapa: stageName,
     };
+
+    fighterSlots.rival.current = params.rival;
 
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, activeCamera);
@@ -447,6 +534,13 @@
     const gui = new GUI({ width: 320, container: overlay });
     gui.domElement.style.pointerEvents = 'auto';
 
+    const rivalOptions = {
+      Tyson: 'tyson',
+      Principal: 'principal',
+      MMA: 'mma',
+      Bodybuilder: 'bodybuilder',
+    };
+
     function applyCameraMode(mode) {
       params.camara = mode;
       const useOrbit = mode === 'Orbital';
@@ -457,6 +551,11 @@
       if (!useOrbit) {
         povCamera.position.set(0, 1.6, 0.35);
         povCamera.lookAt(0, 1.4, -1);
+        povControls.getObject().position.copy(povCamera.position);
+        povControls.getObject().rotation.copy(povCamera.rotation);
+      } else {
+        povControls.unlock();
+        resetPovMovement();
       }
       updateStatusText();
     }
@@ -468,6 +567,14 @@
     }
 
     const cameraController = gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange(applyCameraMode);
+
+    const rivalController = gui
+      .add(params, 'rival', rivalOptions)
+      .name('Rival')
+      .onChange((value) => {
+        setFighter('rival', value);
+        updateStatusText();
+      });
 
     const pauseController = gui.add(params, 'pausarAnimaciones').name('Pausar animaciones').onChange(() => {
       params.pausarAnimaciones = !!params.pausarAnimaciones;
@@ -490,13 +597,14 @@
     overlay.appendChild(status);
 
     function updateStatusText() {
-      status.textContent = `Listo • ${params.camara} • ${stageName} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
+      const rivalLabel = fighters[params.rival]?.label ?? params.rival;
+      status.textContent = `Listo • ${params.camara} • ${stageName} • Rival: ${rivalLabel} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
     }
 
     Promise.all([
       loadRing(),
-      loadFighter('modelos/Principal.fbx', new THREE.Vector3(2.2, 0, 2.2), true),
-      loadFighter('modelos/Tyson.fbx', new THREE.Vector3(-2.2, 0, -2.2)),
+      setFighter('player', fighterSlots.player.current),
+      setFighter('rival', params.rival),
     ]).finally(() => {
       updateStatusText();
     });
@@ -749,6 +857,16 @@
       dustGeometry.attributes.position.needsUpdate = true;
     }
 
+    function updatePovMovement(delta) {
+      if (params.camara !== 'POV' || !povControls.isLocked) return;
+
+      const distance = POV_MOVE_SPEED * delta;
+      if (povMoveState.forward) povControls.moveForward(distance);
+      if (povMoveState.backward) povControls.moveForward(-distance);
+      if (povMoveState.left) povControls.moveRight(-distance);
+      if (povMoveState.right) povControls.moveRight(distance);
+    }
+
     updateAtmosphere(0);
 
     let audioPrimed = false;
@@ -759,6 +877,43 @@
       playCrowdAudio(stageName);
     }
     window.addEventListener('pointerdown', resumeCrowdAudio, { once: true });
+
+    renderer.domElement.addEventListener('click', () => {
+      if (params.camara === 'POV' && !povControls.isLocked) {
+        povControls.lock();
+      }
+    });
+
+    function handleMoveKey(key, pressed, event) {
+      let handled = true;
+      switch (key) {
+        case 'w':
+        case 'arrowup':
+          povMoveState.forward = pressed;
+          break;
+        case 's':
+        case 'arrowdown':
+          povMoveState.backward = pressed;
+          break;
+        case 'a':
+        case 'arrowleft':
+          povMoveState.left = pressed;
+          break;
+        case 'd':
+        case 'arrowright':
+          povMoveState.right = pressed;
+          break;
+        default:
+          handled = false;
+          break;
+      }
+
+      if (handled && params.camara === 'POV') {
+        event?.preventDefault?.();
+      }
+
+      return handled;
+    }
 
     function rebuildSpectators() {
       if (spectatorsMesh) {
@@ -838,6 +993,8 @@
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
       const key = event.key.toLowerCase();
+      if (handleMoveKey(key, true, event)) return;
+
       if (key === 'c') {
         const nextMode = params.camara === 'POV' ? 'Orbital' : 'POV';
         cameraController.setValue(nextMode);
@@ -848,6 +1005,10 @@
         rebuildSpectators();
         updateStatusText();
       }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      handleMoveKey(event.key.toLowerCase(), false, event);
     });
 
     function render() {
@@ -884,6 +1045,7 @@
       updateLedPanels(crowdNoiseLevel, time);
       updateSmoke(delta, time);
       updateDust(delta);
+      updatePovMovement(delta);
       updateAtmosphere(time);
       controls.update();
       renderPass.camera = activeCamera;
