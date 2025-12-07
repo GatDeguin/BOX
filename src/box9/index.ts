@@ -1,6 +1,6 @@
 import { attachProgressPersistence } from './persistence';
 import { startIntro } from './scene';
-import { box9Store, CharacterId } from './state';
+import { box9Store, CharacterId, getDefaultRingForCharacter } from './state';
 import { initBox9UI } from './ui';
 import { initCampaignSelectionView } from './ui-campaign-selection';
 import { registerProgressionTriggers, normalizeProgress } from './progression';
@@ -127,10 +127,22 @@ function bootstrap() {
       uiInitialized = true;
     }
 
-    if (detail?.character) {
-      store.setState({ character: detail.character, selectionStarted: true });
-    } else {
-      store.setState({ selectionStarted: true });
+    const opponent = detail?.character ?? store.getState().character;
+    const state = store.getState();
+    const preferredRing = getDefaultRingForCharacter(opponent);
+    const ringOverride = state.ringOverride ?? null;
+    const resolvedRing = ringOverride ?? preferredRing;
+    const previousRing = state.ring;
+
+    store.setState({
+      character: opponent,
+      selectionStarted: true,
+      ring: resolvedRing,
+      ringOverride
+    });
+
+    if (previousRing !== resolvedRing) {
+      window.dispatchEvent(new CustomEvent('box9:ring-change', { detail: { ring: resolvedRing } }));
     }
 
     const progress = normalizeProgress(store.getState().progress);
