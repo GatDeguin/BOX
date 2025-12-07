@@ -362,7 +362,7 @@
       const reflector = new THREE.SpotLight(color, 2.2, 28, angle, 0.5, 1.1);
       reflector.position.copy(position);
       reflector.target.position.copy(target);
-      reflector.castShadow = true;
+      reflector.castShadow = false;
       reflector.shadow.mapSize.set(1024, 1024);
       reflector.shadow.bias = -0.00035;
       reflector.penumbra = 0.55;
@@ -1171,7 +1171,7 @@
     }
 
     function spawnDustBurst() {
-      const burstSize = 10 + Math.floor(Math.random() * 12);
+      let burstSize = 10 + Math.floor(Math.random() * 12);
       const radius = 0.6 + Math.random() * 1.2;
       const centerAngle = Math.random() * Math.PI * 2;
 
