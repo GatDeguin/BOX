@@ -4,6 +4,7 @@ import { box9Store, CharacterId, getDefaultRingForCharacter } from './state';
 import { initBox9UI } from './ui';
 import { initCampaignSelectionView } from './ui-campaign-selection';
 import { registerProgressionTriggers, normalizeProgress } from './progression';
+import { attachFightIntegration } from './integration';
 import { initBox9Options } from './ui-options';
 import type { Box9ModeId } from './ui-modes';
 import { createModeOverlay } from './ui-modes';
@@ -27,6 +28,7 @@ function bootstrap() {
   const store = attachProgressPersistence(box9Store);
   store.setState({ progress: normalizeProgress(store.getState().progress) });
   registerProgressionTriggers(store);
+  attachFightIntegration(store);
   const optionsController = initBox9Options();
 
   let uiInitialized = false;

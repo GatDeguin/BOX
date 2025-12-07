@@ -111,10 +111,13 @@ export function recordFightWin(store: Box9Store, opponent: CharacterId): Progres
   return next;
 }
 
-export function emitFightWin(opponent: CharacterId) {
+export function emitFightWin(
+  opponent: CharacterId,
+  detail: { source?: string; progress?: ProgressionState } = {}
+) {
   window.dispatchEvent(
     new CustomEvent('box9:fight-win', {
-      detail: { opponent }
+      detail: { opponent, ...detail }
     })
   );
 }
@@ -151,8 +154,9 @@ export function getGloveLabel(level: GloveLevel): string {
 
 export function registerProgressionTriggers(store: Box9Store = box9Store): () => void {
   const onFightWin = (event: Event) => {
-    const detail = (event as CustomEvent<{ opponent?: CharacterId }>).detail;
+    const detail = (event as CustomEvent<{ opponent?: CharacterId; source?: string }>).detail;
     if (!detail?.opponent) return;
+    if (detail.source === 'integration') return;
     recordFightWin(store, detail.opponent);
   };
 
