@@ -72,6 +72,9 @@ const ringDescriptions: Record<RingId, string> = {
   tysonRing: 'Ring oscuro con focos fríos, cuerdas tensas y ritmo agresivo a corta distancia.'
 };
 
+const DEFAULT_FOG_DENSITY = 0.065;
+const DEFAULT_BLOOM_MULTIPLIER = 1.2;
+
 const gymVariants: Record<
   CharacterId,
   {
@@ -341,8 +344,16 @@ function createOverlay(onStart: (mode: Box9ModeId) => void) {
 
 function createModal(
   onClose: () => void,
-  onApply: (ring: RingId, freeCamera: boolean, flashSettings: AudienceFlashSettings) => void,
-  initialFlashSettings: AudienceFlashSettings
+  onApply: (
+    ring: RingId,
+    freeCamera: boolean,
+    flashSettings: AudienceFlashSettings,
+    fogDensity: number,
+    bloomMultiplier: number
+  ) => void,
+  initialFlashSettings: AudienceFlashSettings,
+  initialFogDensity: number,
+  initialBloomMultiplier: number
 ) {
   const backdrop = document.createElement('div');
   backdrop.className = 'box9-modal-backdrop';
@@ -433,6 +444,46 @@ function createModal(
 
   flashField.append(flashLabel, flashMeta, flashFrequency, flashValuesRow, flashIntensity);
 
+  const fogField = document.createElement('div');
+  fogField.className = 'box9-field';
+  const fogLabel = document.createElement('label');
+  fogLabel.textContent = 'Niebla en gradas';
+  const fogDensity = document.createElement('input');
+  fogDensity.type = 'range';
+  fogDensity.min = '0.01';
+  fogDensity.max = '0.2';
+  fogDensity.step = '0.001';
+  const fogDensityValue = document.createElement('small');
+  fogDensityValue.style.color = '#cbd3e8';
+
+  const updateFogInfo = () => {
+    fogDensityValue.textContent = `${Number.parseFloat(fogDensity.value).toFixed(3)}`;
+  };
+  fogDensity.addEventListener('input', updateFogInfo);
+  fogDensity.value = initialFogDensity.toString();
+  updateFogInfo();
+  fogField.append(fogLabel, fogDensityValue, fogDensity);
+
+  const bloomField = document.createElement('div');
+  bloomField.className = 'box9-field';
+  const bloomLabel = document.createElement('label');
+  bloomLabel.textContent = 'Intensidad de bloom';
+  const bloomStrength = document.createElement('input');
+  bloomStrength.type = 'range';
+  bloomStrength.min = '0.5';
+  bloomStrength.max = '2';
+  bloomStrength.step = '0.05';
+  const bloomStrengthValue = document.createElement('small');
+  bloomStrengthValue.style.color = '#cbd3e8';
+
+  const updateBloomInfo = () => {
+    bloomStrengthValue.textContent = `${Number.parseFloat(bloomStrength.value).toFixed(2)}x`;
+  };
+  bloomStrength.addEventListener('input', updateBloomInfo);
+  bloomStrength.value = initialBloomMultiplier.toString();
+  updateBloomInfo();
+  bloomField.append(bloomLabel, bloomStrengthValue, bloomStrength);
+
   const actions = document.createElement('div');
   actions.className = 'box9-modal-actions';
   const cancelButton = document.createElement('button');
@@ -449,15 +500,32 @@ function createModal(
       intensity: parseFloat(flashIntensity.value)
     };
 
-    onApply(ringSelect.value as RingId, freeCamToggle.checked, flashSettings);
+    onApply(
+      ringSelect.value as RingId,
+      freeCamToggle.checked,
+      flashSettings,
+      parseFloat(fogDensity.value),
+      parseFloat(bloomStrength.value)
+    );
     onClose();
   });
 
   actions.append(cancelButton, applyButton);
-  modal.append(heading, ringField, freeCamField, flashField, actions);
+  modal.append(heading, ringField, freeCamField, flashField, fogField, bloomField, actions);
   backdrop.appendChild(modal);
 
-  return { backdrop, ringSelect, freeCamToggle, setFlashSettings };
+  return {
+    backdrop,
+    ringSelect,
+    freeCamToggle,
+    setFlashSettings,
+    setAtmosphereSettings: (fog: number, bloom: number) => {
+      fogDensity.value = fog.toString();
+      updateFogInfo();
+      bloomStrength.value = bloom.toString();
+      updateBloomInfo();
+    }
+  };
 }
 
 function createLoadingOverlay() {
@@ -1406,6 +1474,8 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   let dummyActive = false;
   let openDummyScene: (() => void) | null = null;
   let flashSettings: AudienceFlashSettings = { ...DEFAULT_AUDIENCE_FLASH_SETTINGS };
+  let fogDensity = DEFAULT_FOG_DENSITY;
+  let bloomMultiplier = DEFAULT_BLOOM_MULTIPLIER;
 
   const container = document.createElement('div');
   container.className = 'box9-ui';
@@ -1476,24 +1546,32 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
   const helpPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-help]'));
   const cardPanels = Array.from(document.querySelectorAll<HTMLElement>('[data-box9-card]'));
 
-  const { backdrop, ringSelect, freeCamToggle, setFlashSettings } = createModal(
+  const { backdrop, ringSelect, freeCamToggle, setFlashSettings, setAtmosphereSettings } = createModal(
     () => {
       backdrop.style.display = 'none';
     },
-    (ring, freeCamera, flashes) => {
+    (ring, freeCamera, flashes, fog, bloom) => {
       const preferredRing = getDefaultRingForCharacter(store.getState().character);
       const ringOverride = ring !== preferredRing;
 
       flashSettings = flashes;
+      fogDensity = fog;
+      bloomMultiplier = bloom;
       store.setState({ ring, ringOverride, freeCamera });
       emitSceneEvent('ring-change', { ring });
       emitSceneEvent('freecam-change', { enabled: freeCamera });
       emitSceneEvent('flash-settings', { settings: flashSettings });
+      emitSceneEvent('fog-density', { density: fogDensity });
+      emitSceneEvent('bloom-strength', { multiplier: bloomMultiplier });
     },
-    flashSettings
+    flashSettings,
+    fogDensity,
+    bloomMultiplier
   );
 
   emitSceneEvent('flash-settings', { settings: flashSettings });
+  emitSceneEvent('fog-density', { density: fogDensity });
+  emitSceneEvent('bloom-strength', { multiplier: bloomMultiplier });
 
   const { backdrop: assetBackdrop } = createAssetModal(() => {
     assetBackdrop.style.display = 'none';
@@ -1518,6 +1596,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
       ringSelect.value = state.ring;
       freeCamToggle.checked = state.freeCamera;
       setFlashSettings(flashSettings);
+      setAtmosphereSettings(fogDensity, bloomMultiplier);
       backdrop.style.display = 'flex';
     },
     () => {

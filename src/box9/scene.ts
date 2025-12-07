@@ -21,7 +21,8 @@ import {
   AdditiveBlending,
   Sprite,
   SpriteMaterial,
-  Fog
+  FogExp2,
+  AmbientLight
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
@@ -31,7 +32,14 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass';
-import { EffectProfileName, applyEffects, registerEffectsContext } from './effects';
+import {
+  EffectProfileName,
+  applyEffects,
+  createFilmPass,
+  createVignettePass,
+  registerEffectsContext,
+  setBloomStrengthMultiplier
+} from './effects';
 
 export interface AudienceFlashSettings {
   frequency: number;
@@ -56,6 +64,8 @@ interface SceneFlowContext {
   composer: EffectComposer;
   renderPass: RenderPass;
   bokehPass: BokehPass;
+  filmPass: ReturnType<typeof createFilmPass>;
+  vignettePass: ReturnType<typeof createVignettePass>;
   outputPass: OutputPass;
   travelingCamera: PerspectiveCamera;
   freeCamera: PerspectiveCamera;
@@ -73,6 +83,8 @@ interface SceneFlowContext {
   pendingResize: number | null;
   clock: Clock;
   selectionLight: SpotLight | null;
+  ringSpotlights: SpotLight[];
+  bleacherFill: AmbientLight | null;
   ringAccentLight: PointLight | null;
   ringHighlightParticles: Points | null;
   audienceFlashSystem: AudienceFlashSystem | null;
@@ -145,11 +157,14 @@ const FIGHTER_ANCHORS: Record<CharacterId, FighterAnchor> = {
 };
 
 const DEFAULT_OPTIONS: Required<Pick<SceneFlowOptions, 'backgroundColor' | 'focus' | 'aperture' | 'maxBlur'>> = {
-  backgroundColor: '#05070c',
+  backgroundColor: '#0a1426',
   focus: 10,
   aperture: 0.025,
   maxBlur: 0.01
 };
+
+const DEFAULT_FOG_DENSITY = 0.065;
+const DEFAULT_BLOOM_MULTIPLIER = 1.2;
 
 const RING_EFFECT_PROFILES: Record<RingId, EffectProfileName> = {
   mmaGym: 'mmaGym',
@@ -352,6 +367,13 @@ function applyRingVisualState(ring: RingId, options: { updateEffects?: boolean }
     context.selectionLight.intensity = visuals.selectionLight.intensity;
   }
 
+  if (context.ringSpotlights?.length) {
+    context.ringSpotlights.forEach((spot) => {
+      spot.color.set(visuals.selectionLight.color);
+      spot.intensity = Math.max(1.6, visuals.selectionLight.intensity * 1.2);
+    });
+  }
+
   const accentLight = ensureRingAccentLight();
   if (accentLight) {
     accentLight.color.set(visuals.accentLight.color);
@@ -436,16 +458,24 @@ function createRenderer(container: HTMLElement, backgroundColor: string | number
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.setClearColor(new Color(backgroundColor));
+  renderer.shadowMap.enabled = true;
   container.appendChild(renderer.domElement);
   return renderer;
 }
 
 function createScene(backgroundColor: string | number): Scene {
   const scene = new Scene();
-  const background = new Color(backgroundColor);
+  const background = new Color(backgroundColor ?? '#0a1426');
+  const fogColor = background.clone().lerp(new Color('#0c1c33'), 0.25);
   scene.background = background;
-  scene.fog = new Fog(background.getHex(), 8, 32);
+  scene.fog = new FogExp2(fogColor.getHex(), DEFAULT_FOG_DENSITY);
   return scene;
+}
+
+function updateFogDensity(density: number) {
+  if (!context?.scene.fog) return;
+  const clamped = Math.max(0.01, Math.min(density, 0.2));
+  (context.scene.fog as FogExp2).density = clamped;
 }
 
 function createCameras(aspect: number, travelingStart?: Vector3, freeCamStart?: Vector3) {
@@ -478,13 +508,48 @@ function createComposer(
     width,
     height
   });
+  const filmPass = createFilmPass();
+  const vignettePass = createVignettePass();
   const outputPass = new OutputPass();
 
   composer.addPass(renderPass);
   composer.addPass(bokehPass);
+  composer.addPass(filmPass);
+  composer.addPass(vignettePass);
   composer.addPass(outputPass);
 
-  return { composer, renderPass, bokehPass, outputPass };
+  return { composer, renderPass, bokehPass, filmPass, vignettePass, outputPass };
+}
+
+function createRingSpotlights(scene: Scene): SpotLight[] {
+  const ringRadius = 2.5;
+  const height = 7.2;
+  const color = '#dce7ff';
+  const positions = [
+    new Vector3(0, height, ringRadius + 1.2),
+    new Vector3(0, height, -(ringRadius + 1.2)),
+    new Vector3(ringRadius + 1.4, height, 0),
+    new Vector3(-(ringRadius + 1.4), height, 0)
+  ];
+
+  return positions.map((position) => {
+    const light = new SpotLight(color, 1.85, 18, Math.PI / 5, 0.65, 1.4);
+    light.position.copy(position);
+    light.target.position.set(0, 1.5, 0);
+    light.castShadow = true;
+    light.shadow.bias = -0.00035;
+    light.shadow.mapSize.set(1024, 1024);
+    light.layers.enable(1);
+    scene.add(light.target);
+    scene.add(light);
+    return light;
+  });
+}
+
+function createBleacherFill(): AmbientLight {
+  const light = new AmbientLight('#0c1224', 0.22);
+  light.layers.enable(1);
+  return light;
 }
 
 function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): SceneFlowContext {
@@ -500,7 +565,10 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     options.travelingStart,
     options.freeCamStart
   );
-  const { composer, renderPass, bokehPass, outputPass } = createComposer(
+  travelingCamera.layers.enable(1);
+  freeCamera.layers.enable(1);
+
+  const { composer, renderPass, bokehPass, filmPass, vignettePass, outputPass } = createComposer(
     renderer,
     scene,
     travelingCamera,
@@ -515,8 +583,13 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
   const selectionLight = new SpotLight('#7a9bff', 1.4, 18, Math.PI / 6, 0.4, 1.2);
   selectionLight.position.set(0, 4, 4);
   selectionLight.target.position.set(0, 1.5, 0);
+  selectionLight.layers.enable(1);
   scene.add(selectionLight);
   scene.add(selectionLight.target);
+
+  const ringSpotlights = createRingSpotlights(scene);
+  const bleacherFill = createBleacherFill();
+  scene.add(bleacherFill);
 
   const audienceFlashSystem = new AudienceFlashSystem(scene);
 
@@ -529,6 +602,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     composer,
     renderPass,
     bokehPass,
+    filmPass,
+    vignettePass,
     outputPass,
     travelingCamera,
     freeCamera,
@@ -546,6 +621,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     pendingResize: null,
     clock: new Clock(),
     selectionLight,
+    ringSpotlights,
+    bleacherFill,
     audienceFlashSystem,
     flashSettings: { ...DEFAULT_AUDIENCE_FLASH_SETTINGS },
     ringAccentLight: null,
@@ -558,7 +635,8 @@ function ensureContext(container: HTMLElement, options: SceneFlowOptions = {}): 
     activeFighterAction: null
   };
 
-  registerEffectsContext({ renderer, composer, bokehPass, outputPass });
+  setBloomStrengthMultiplier(DEFAULT_BLOOM_MULTIPLIER);
+  registerEffectsContext({ renderer, composer, renderPass, bokehPass, filmPass, vignettePass, outputPass });
   applyRingVisualState(box9Store.getState().ring, { updateEffects: false });
   applyPhaseEffects('intro');
 
@@ -655,6 +733,17 @@ function registerSceneEvents(): Record<string, EventListener> {
       const detail = (event as CustomEvent<{ settings?: Partial<AudienceFlashSettings> }>).detail;
       if (!detail?.settings) return;
       context.flashSettings = { ...context.flashSettings, ...detail.settings };
+    },
+    'box9:fog-density': (event: Event) => {
+      const detail = (event as CustomEvent<{ density?: number }>).detail;
+      if (typeof detail?.density !== 'number') return;
+      updateFogDensity(detail.density);
+    },
+    'box9:bloom-strength': (event: Event) => {
+      const detail = (event as CustomEvent<{ multiplier?: number }>).detail;
+      if (typeof detail?.multiplier !== 'number') return;
+      setBloomStrengthMultiplier(detail.multiplier);
+      applyPhaseEffects(context?.phase ?? 'intro');
     }
   };
 
@@ -1221,6 +1310,19 @@ export function destroy(): void {
   if (context.selectionLight) {
     context.scene.remove(context.selectionLight);
     context.scene.remove(context.selectionLight.target);
+  }
+
+  if (context.ringSpotlights?.length) {
+    context.ringSpotlights.forEach((light) => {
+      context.scene.remove(light.target);
+      context.scene.remove(light);
+    });
+    context.ringSpotlights = [];
+  }
+
+  if (context.bleacherFill) {
+    context.scene.remove(context.bleacherFill);
+    context.bleacherFill = null;
   }
 
   if (context.ringHighlightParticles) {
