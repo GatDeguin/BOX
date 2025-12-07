@@ -657,8 +657,8 @@
       url: 'modelos/Guantes_PRO/mesh.obj',
       mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
       scale: 0.025,
-      baseRotation: new THREE.Euler(1.8675022996339319, -1.3788101090755194, 0.03490658503988602),
-      offset: new THREE.Vector3(0.35, 0.25, 0.05),
+      baseRotation: new THREE.Euler(2.844886680750757, 1.7627825445142729, 0.03490658503988659),
+      offset: new THREE.Vector3(0.35, 0.25, 0.13),
     };
 
     let glovePrototype = null;
@@ -1199,6 +1199,22 @@
       return { action, config, clip };
     }
 
+    function waitForActionFinish(slotKey, action, config) {
+      const slot = fighterSlots[slotKey];
+      if (!slot?.mixer || !action || config?.loop !== THREE.LoopOnce) return Promise.resolve({ action, config });
+
+      return new Promise((resolve) => {
+        const mixer = slot.mixer;
+        const onFinished = (event) => {
+          if (event.action !== action) return;
+          mixer.removeEventListener('finished', onFinished);
+          resolve({ action, config });
+        };
+
+        mixer.addEventListener('finished', onFinished);
+      });
+    }
+
     const PARAM_STORAGE_KEY = 'ring_pov_gui_params';
 
     const params = {
@@ -1511,6 +1527,7 @@
     const bellAudio = new THREE.Audio(listener);
     const impactAudio = new THREE.Audio(listener);
     const fallAudio = new THREE.Audio(listener);
+    const countdownAudio = new THREE.Audio(listener);
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
 
@@ -1592,6 +1609,21 @@
       });
     }
 
+    function stopCountdownAudio() {
+      if (countdownAudio.isPlaying) {
+        countdownAudio.stop();
+      }
+    }
+
+    function refreshCountdownAudio() {
+      const anyDown = Object.values(fighterStates).some((state) => state.down);
+      if (anyDown) {
+        playSound('sonidos/cuenta_atras.wav', countdownAudio, 0.85, true);
+      } else {
+        stopCountdownAudio();
+      }
+    }
+
     function declareVictory(winnerKey, reason = 'Finalización') {
       if (fightEnded) return;
       fightEnded = true;
@@ -1615,7 +1647,17 @@
       params.etapa = 'Clímax';
       const label = winnerKey === 'player' ? 'Jugador' : 'Rival';
       status.textContent = `${label} gana • ${reason}`;
+      stopCountdownAudio();
       playAnimation(winnerKey, 'rest', true);
+      const loserKey = winnerKey === 'player' ? 'rival' : 'player';
+      const loseAnimation = Math.random() > 0.5 ? 'fall' : 'damage';
+      playAnimation(loserKey, loseAnimation, true).then((result) => {
+        if (loseAnimation === 'damage' && result?.action) {
+          result.action.loop = THREE.LoopPingPong;
+          result.action.clampWhenFinished = false;
+          result.action.play();
+        }
+      });
     }
 
     function clearAi(slotKey) {
@@ -1633,6 +1675,7 @@
         clearTimeout(bellRestartTimer);
         bellRestartTimer = null;
       }
+      stopCountdownAudio();
       Object.keys(fighterStates).forEach((slotKey) => {
         const state = fighterStates[slotKey];
         state.mode = 'Presentación';
@@ -1681,6 +1724,7 @@
       const opponentKey = slotKey === 'player' ? 'rival' : 'player';
       state.down = true;
       state.knockdowns = (state.knockdowns ?? 0) + 1;
+      refreshCountdownAudio();
       clearAi(slotKey);
       pauseFightForKnockdown(opponentKey);
       playSound('sonidos/impacto_grave.wav', fallAudio, 0.9);
@@ -1712,10 +1756,13 @@
           return;
         }
 
-        await playAnimation(slotKey, 'getup', true);
+        const getupResult = await playAnimation(slotKey, 'getup', true);
+        await waitForActionFinish(slotKey, getupResult?.action, getupResult?.config);
         state.health = Math.max(state.maxHealth * 0.6, state.health || state.maxHealth * 0.6);
         updateLifeBar(slotKey);
         state.down = false;
+        playAnimation(slotKey, 'idle', true);
+        refreshCountdownAudio();
         sendFighterToCorner(slotKey);
         queueRestartAfterBell();
       }, Math.min(countdownMs - 1500, duration * 1000 + 2200));
