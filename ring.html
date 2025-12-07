@@ -91,6 +91,56 @@
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
       pointer-events: auto;
     }
+
+    .hud {
+      position: absolute;
+      left: 14px;
+      bottom: 18px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      max-width: 260px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      box-shadow: 0 15px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .hud__title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      color: #cbd5f5;
+      letter-spacing: 0.01em;
+    }
+
+    .hud ul {
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      padding-left: 0;
+    }
+
+    .hud li {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      color: #d1d5db;
+    }
+
+    .hud strong {
+      display: inline-flex;
+      width: 28px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      font-weight: 700;
+      color: #f8fafc;
+    }
   </style>
 </head>
 <body>
@@ -100,6 +150,14 @@
   </header>
   <main>
     <div id="overlay"></div>
+    <div class="hud">
+      <div class="hud__title">Controles rápidos</div>
+      <ul>
+        <li><strong>C</strong> • Cambiar POV / Orbital</li>
+        <li><strong>P</strong> • Pausar / reanudar animaciones</li>
+        <li><strong>R</strong> • Regenerar público</li>
+      </ul>
+    </div>
     <canvas id="scene"></canvas>
   </main>
 
@@ -303,8 +361,9 @@
     const gui = new GUI({ width: 320, container: overlay });
     gui.domElement.style.pointerEvents = 'auto';
 
-    gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange((value) => {
-      const useOrbit = value === 'Orbital';
+    function applyCameraMode(mode) {
+      params.camara = mode;
+      const useOrbit = mode === 'Orbital';
       controls.enabled = useOrbit;
       activeCamera = useOrbit ? orbitCamera : povCamera;
       renderPass.camera = activeCamera;
@@ -312,27 +371,46 @@
         povCamera.position.set(0, 1.6, 0.35);
         povCamera.lookAt(0, 1.4, -1);
       }
-    });
+      updateStatusText();
+    }
 
-    gui.add(params, 'pausarAnimaciones').name('Pausar animaciones');
+    function toggleAnimations() {
+      params.pausarAnimaciones = !params.pausarAnimaciones;
+      pauseController.setValue(params.pausarAnimaciones);
+      updateStatusText();
+    }
+
+    const cameraController = gui.add(params, 'camara', ['POV', 'Orbital']).name('Modo de cámara').onChange(applyCameraMode);
+
+    const pauseController = gui.add(params, 'pausarAnimaciones').name('Pausar animaciones').onChange(() => {
+      params.pausarAnimaciones = !!params.pausarAnimaciones;
+      updateStatusText();
+    });
     gui.add(params, 'luzDireccional', 0, 2, 0.05).name('Luz direccional').onChange((v) => dirLight.intensity = v);
     gui.add(params, 'hemi', 0, 1.5, 0.05).name('Luz ambiente').onChange((v) => hemiLight.intensity = v);
     gui.add(params, 'niebla', 0, 0.25, 0.005).name('Densidad niebla').onChange((v) => scene.fog.density = v);
     gui.add(params, 'bloomUmbral', 0.4, 1.5, 0.01).name('Umbral bloom').onChange((v) => unrealBloomPass.threshold = v);
     gui.add(params, 'bloom', 0, 3, 0.05).name('Intensidad bloom').onChange((v) => unrealBloomPass.strength = v);
-    gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => rebuildSpectators());
+    gui.add(params, 'espectadores', 400, 4000, 50).name('Espectadores').onChange(() => {
+      rebuildSpectators();
+      updateStatusText();
+    });
 
     const status = document.createElement('div');
     status.className = 'pill';
     status.textContent = 'Cargando modelos…';
     overlay.appendChild(status);
 
+    function updateStatusText() {
+      status.textContent = `Listo • ${params.camara} • Animaciones: ${params.pausarAnimaciones ? 'Pausadas' : 'Activas'} • ${params.espectadores} espectadores`;
+    }
+
     Promise.all([
       loadRing(),
       loadFighter('modelos/Principal.fbx', new THREE.Vector3(2.2, 0, 2.2), true),
       loadFighter('modelos/Tyson.fbx', new THREE.Vector3(-2.2, 0, -2.2)),
     ]).finally(() => {
-      status.textContent = 'Listo • GUI para ajustar vista y animaciones';
+      updateStatusText();
     });
 
     const clock = new THREE.Clock();
@@ -419,6 +497,24 @@
     }
 
     rebuildSpectators();
+
+    window.addEventListener('keydown', (event) => {
+      if (event.repeat) return;
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'c') {
+        const nextMode = params.camara === 'POV' ? 'Orbital' : 'POV';
+        cameraController.setValue(nextMode);
+        applyCameraMode(nextMode);
+      } else if (key === 'p') {
+        toggleAnimations();
+      } else if (key === 'r') {
+        rebuildSpectators();
+        updateStatusText();
+      }
+    });
 
     function render() {
       requestAnimationFrame(render);
