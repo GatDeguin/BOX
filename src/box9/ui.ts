@@ -3,20 +3,23 @@ import { getFighterDetails, initSelectionControls } from './selection';
 import { DEFAULT_AUDIENCE_FLASH_SETTINGS, subscribeAssetManager } from './scene';
 import type { AudienceFlashSettings } from './scene';
 import { BOX9_ASSET_SECTIONS } from './inventory';
-import { canFightCharacter, emitFightWin, getFightLockReason, getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+import {
+  canFightCharacter,
+  emitFightWin,
+  getFightLockReason,
+  getGloveLabel,
+  nextMilestone,
+  normalizeProgress
+} from './progression';
 import { Box9Settings, loadSettings } from './settings';
 import { Box9ModeId, createModeOverlay } from './ui-modes';
 import { gymVariants } from './ui-campaign-selection';
+import { attachGloveModal } from './ui-gloves';
 
 declare global {
   interface Window {
     box9RegisterWin?: (opponent: CharacterId) => void;
   }
-}
-
-interface GloveRequirement {
-  level: GloveLevel;
-  condition: string;
 }
 
 const ringOptions: Record<RingId, string> = {
@@ -199,6 +202,10 @@ function createStyles() {
     .box9-glove-status.unlocked { background: rgba(63,92,255,0.16); color: #d8e2ff; border: 1px solid rgba(122,155,255,0.6); }
     .box9-glove-status.active { background: rgba(84,255,191,0.16); color: #c7ffe8; border: 1px solid rgba(84,255,191,0.6); }
     .box9-glove-condition { color: #cbd3e8; margin: 0; line-height: 1.5; position: relative; z-index: 1; }
+    .box9-glove-requirements { position: relative; z-index: 1; }
+    .box9-glove-reqs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .box9-glove-reqs li { color: #cbd3e8; line-height: 1.5; }
+    .box9-glove-reqs li.done { color: #c7ffe8; }
     .box9-checklist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
     .box9-check-item { display: flex; gap: 8px; align-items: flex-start; color: #cbd3e8; font-size: 13px; line-height: 1.4; }
     .box9-check-icon { width: 18px; height: 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #9aa3ba; background: rgba(255,255,255,0.04); flex-shrink: 0; }
@@ -663,159 +670,12 @@ function createDummyExperience(onClose: () => void) {
   return { overlay, open, close };
 }
 
-function isGloveUnlocked(level: GloveLevel, progress: ReturnType<typeof normalizeProgress>): boolean {
-  if (level === 'entrenamiento') return true;
-  if (level === 'amateur') return progress.unlocks.amateur;
-  if (level === 'pro') return progress.unlocks.pro;
-  return progress.unlocks.secreto;
-}
-
-function getGloveRequirementCopy(level: GloveLevel, progress: ReturnType<typeof normalizeProgress>): string {
-  if (level === 'entrenamiento') {
-    return 'Guantes base disponibles desde el inicio de la campaña.';
-  }
-
-  if (level === 'amateur') {
-    return `Entrenamiento: gana a MMA (${progress.wins.entrenamiento.mma}/1) y Bodybuilder (${progress.wins.entrenamiento.bodybuilder}/1) con guantes base.`;
-  }
-
-  if (level === 'pro') {
-    return `Reto Tyson: derrótalo con los guantes amateur (${progress.wins.amateur.tyson}/1) para conseguir el set PRO.`;
-  }
-
-  return `Ruta secreta: vence con guantes PRO a MMA (${progress.wins.pro.mma}/1), Bodybuilder (${progress.wins.pro.bodybuilder}/1) y Tyson (${progress.wins.pro.tyson}/1).`;
-}
-
-function createGlovePanel(onClose: () => void, onSelect: (level: GloveLevel) => void) {
-  const requirements: GloveRequirement[] = [
-    { level: 'entrenamiento', condition: 'Guantes base disponibles desde el inicio de la campaña.' },
-    { level: 'amateur', condition: 'Gana a MMA y Bodybuilder con los guantes de entrenamiento para desbloquearlos.' },
-    { level: 'pro', condition: 'Derrota a Tyson usando los guantes amateur para conseguir el set PRO.' },
-    { level: 'secreto', condition: 'Vence nuevamente a MMA, Bodybuilder y Tyson con los guantes PRO para revelar el set secreto.' }
-  ];
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'box9-modal-backdrop';
-
-  const modal = document.createElement('div');
-  modal.className = 'box9-modal box9-glove-modal';
-
-  const heading = document.createElement('h2');
-  heading.textContent = 'Progresión de guantes';
-
-  const description = document.createElement('p');
-  description.className = 'box9-progress-note';
-  description.textContent = 'Revisa qué set está activo, qué necesitas para desbloquear cada nivel y sigue la ruta secreta.';
-
-  const list = document.createElement('div');
-  list.className = 'box9-glove-list';
-
-  const cardRefs = new Map<
-    GloveLevel,
-    {
-      card: HTMLDivElement;
-      status: HTMLSpanElement;
-      selectButton: HTMLButtonElement;
-      condition: HTMLParagraphElement;
-      stateCopy: HTMLSpanElement;
-    }
-  >();
-
-  requirements.forEach((item) => {
-    const card = document.createElement('div');
-    card.className = 'box9-glove-card';
-    card.dataset.level = item.level;
-
-    const header = document.createElement('div');
-    header.className = 'box9-glove-header';
-
-    const title = document.createElement('h3');
-    title.className = 'box9-glove-title';
-    title.textContent = getGloveLabel(item.level);
-
-    const status = document.createElement('span');
-    status.className = 'box9-glove-status locked';
-    status.textContent = 'Bloqueado';
-
-    header.append(title, status);
-
-    const condition = document.createElement('p');
-    condition.className = 'box9-glove-condition';
-    condition.textContent = item.condition;
-
-    const actionRow = document.createElement('div');
-    actionRow.className = 'box9-row';
-
-    const selectButton = document.createElement('button');
-    selectButton.className = 'box9-button box9-secondary';
-    selectButton.textContent = 'Activar';
-    selectButton.addEventListener('click', () => {
-      if (selectButton.disabled) return;
-      onSelect(item.level);
-    });
-
-    actionRow.appendChild(selectButton);
-
-    const stateCopy = document.createElement('small');
-    stateCopy.className = 'box9-progress-note';
-
-    card.append(header, condition, actionRow, stateCopy);
-    list.appendChild(card);
-    cardRefs.set(item.level, { card, status, selectButton, condition, stateCopy });
-  });
-
-  const actions = document.createElement('div');
-  actions.className = 'box9-modal-actions';
-
-  const closeButton = document.createElement('button');
-  closeButton.className = 'box9-button box9-secondary';
-  closeButton.textContent = 'Cerrar';
-  closeButton.addEventListener('click', () => onClose());
-
-  actions.append(closeButton);
-  modal.append(heading, description, list, actions);
-  backdrop.appendChild(modal);
-
-  return {
-    backdrop,
-    update: (progress: ReturnType<typeof normalizeProgress>) => {
-      requirements.forEach((item) => {
-        const ref = cardRefs.get(item.level);
-        if (!ref) return;
-
-        const unlocked = isGloveUnlocked(item.level, progress);
-        const isActive = progress.activeGlove === item.level;
-        const label = getGloveLabel(item.level);
-
-        ref.card.classList.toggle('active', isActive);
-        ref.card.classList.toggle('locked', !unlocked);
-
-        ref.status.className = 'box9-glove-status ' + (isActive ? 'active' : unlocked ? 'unlocked' : 'locked');
-        ref.status.textContent = isActive ? 'Activo' : unlocked ? 'Desbloqueado' : 'Bloqueado';
-
-        ref.selectButton.disabled = !unlocked || isActive;
-        ref.selectButton.textContent = isActive ? `${label} equipados` : `Equipar ${label}`;
-        ref.selectButton.style.display = unlocked && !isActive ? '' : 'none';
-
-        ref.stateCopy.textContent = isActive
-          ? `${label} activos`
-          : unlocked
-            ? `${label} desbloqueados`
-            : `${label} bloqueados`;
-
-        ref.condition.textContent = getGloveRequirementCopy(item.level, progress);
-      });
-    }
-  };
-}
-
 function createHud(
   store: Box9Store,
   onOpenModal: () => void,
   onOpenAssets: () => void,
   onToggleFreeCam: () => void,
   onPreviewFromChin: () => void,
-  onOpenGlovePanel: () => void,
   onSelectCharacter: (character: CharacterId) => void
 ) {
   const hud = document.createElement('div');
@@ -894,7 +754,9 @@ function createHud(
   const glovesButton = document.createElement('button');
   glovesButton.className = 'box9-button';
   glovesButton.textContent = 'Guantes';
-  glovesButton.addEventListener('click', () => onOpenGlovePanel());
+  glovesButton.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('box9:open-gloves'));
+  });
 
   actions.append(freeCamButton, chinPreviewButton, victoryButton, optionsButton, assetsButton, glovesButton);
   topBar.append(status, actions);
@@ -1431,17 +1293,7 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     assetBackdrop.style.display = 'none';
   });
 
-  const { backdrop: gloveBackdrop, update: updateGlovePanel } = createGlovePanel(
-    () => {
-      gloveBackdrop.style.display = 'none';
-    },
-    (level) => {
-      const progress = normalizeProgress(store.getState().progress);
-      if (!isGloveUnlocked(level, progress)) return;
-      const nextProgress = normalizeProgress({ ...progress, activeGlove: level });
-      store.setState({ progress: nextProgress });
-    }
-  );
+  const { backdrop: gloveBackdrop } = attachGloveModal(store, container);
 
   const { hud, update: updateHud } = createHud(
     store,
@@ -1467,11 +1319,6 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
         emitSceneEvent('freecam-change', { enabled: false });
       }
       emitSceneEvent('chin-preview', { character: state.character });
-    },
-    () => {
-      const progress = normalizeProgress(store.getState().progress);
-      updateGlovePanel(progress);
-      gloveBackdrop.style.display = 'flex';
     },
     (character) => {
       store.setState({ character });
@@ -1617,7 +1464,6 @@ export function initBox9UI(root: HTMLElement, store: Box9Store = box9Store) {
     updateModeOverlay(progress);
     syncLayout(state);
     updateHud(progress);
-    updateGlovePanel(progress);
 
     if (state.selectionStarted !== lastSelectionStarted) {
       emitSceneEvent('animation-toggle', { active: state.selectionStarted });
