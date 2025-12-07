@@ -1,4 +1,4 @@
-import { box9Store, Box9Store, RingId, CharacterId, GloveLevel, getDefaultRingForCharacter } from './state';
+import { box9Store, Box9Store, RingId, CharacterId, getDefaultRingForCharacter } from './state';
 import { getFighterDetails, initSelectionControls } from './selection';
 import { DEFAULT_AUDIENCE_FLASH_SETTINGS, subscribeAssetManager } from './scene';
 import type { AudienceFlashSettings } from './scene';
@@ -8,13 +8,14 @@ import {
   emitFightWin,
   getFightLockReason,
   getGloveLabel,
-  nextMilestone,
   normalizeProgress
 } from './progression';
 import { Box9Settings, loadSettings } from './settings';
 import { Box9ModeId, createModeOverlay } from './ui-modes';
 import { gymVariants } from './ui-campaign-selection';
 import { attachGloveModal } from './ui-gloves';
+import { createProgressPanel } from './ui-progress';
+import { createHudGloveChip } from './ui-hud';
 
 declare global {
   interface Window {
@@ -217,6 +218,9 @@ function createStyles() {
     .box9-progress-title strong { letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
     .box9-progress-title small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
     .box9-progress-chip { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(122,155,255,0.4); background: rgba(63,92,255,0.14); color: #dce2f5; letter-spacing: 0.04em; font-weight: 800; text-transform: uppercase; }
+    .box9-progress-meta { display: flex; align-items: center; justify-content: space-between; color: #cbd3e8; }
+    .box9-progress-meta small { letter-spacing: 0.06em; text-transform: uppercase; color: #9aa3ba; font-weight: 700; }
+    .box9-progress-gloves { display: grid; gap: 10px; }
     .box9-progress-wins { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .box9-progress-wins li { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; color: #cbd3e8; font-size: 13px; }
     .box9-progress-wins small { color: #9aa3ba; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
@@ -758,7 +762,9 @@ function createHud(
     window.dispatchEvent(new CustomEvent('box9:open-gloves'));
   });
 
-  actions.append(freeCamButton, chinPreviewButton, victoryButton, optionsButton, assetsButton, glovesButton);
+  const gloveChip = createHudGloveChip(store);
+
+  actions.append(freeCamButton, chinPreviewButton, victoryButton, optionsButton, assetsButton, glovesButton, gloveChip.chip);
   topBar.append(status, actions);
 
   const chipsRow = document.createElement('div');
@@ -870,81 +876,6 @@ function createHud(
   fighterMeta.append(gymMeta, ringMeta);
   fighterCard.appendChild(fighterMeta);
 
-  const progressNote = document.createElement('div');
-  progressNote.className = 'box9-progress-note';
-  progressNote.textContent = 'Completa las peleas base para desbloquear a Tyson y los guantes secretos.';
-
-  const checklist = document.createElement('ul');
-  checklist.className = 'box9-checklist';
-
-  const checklistItems: {
-    id: GloveLevel | 'tyson';
-    element: HTMLLIElement;
-    icon?: HTMLSpanElement;
-    text?: HTMLSpanElement;
-    label: (progress: ReturnType<typeof normalizeProgress>) => string;
-    done: (progress: ReturnType<typeof normalizeProgress>) => boolean;
-  }[] = [
-    {
-      id: 'amateur',
-      element: document.createElement('li'),
-      label: (progress) =>
-        `Base completada: MMA (${progress.wins.entrenamiento.mma}/1) y Bodybuilder (${progress.wins.entrenamiento.bodybuilder}/1) con guantes de entrenamiento.`,
-      done: (progress) => progress.unlocks.amateur
-    },
-    {
-      id: 'tyson',
-      element: document.createElement('li'),
-      label: (progress) =>
-        `Desafío Tyson: repite las victorias con guantes amateur (MMA ${progress.wins.amateur.mma}/1, Bodybuilder ${progress.wins.amateur.bodybuilder}/1) para abrir el combate.`,
-      done: (progress) => progress.unlocks.tyson
-    },
-    {
-      id: 'pro',
-      element: document.createElement('li'),
-      label: (progress) => `Guantes PRO: vence a Tyson con guantes amateur (${progress.wins.amateur.tyson}/1).`,
-      done: (progress) => progress.unlocks.pro
-    },
-    {
-      id: 'secreto',
-      element: document.createElement('li'),
-      label: (progress) =>
-        `Ruta secreta: gana con guantes PRO a MMA (${progress.wins.pro.mma}/1), Bodybuilder (${progress.wins.pro.bodybuilder}/1) y Tyson (${progress.wins.pro.tyson}/1).`,
-      done: (progress) => progress.unlocks.secreto
-    }
-  ];
-
-  checklistItems.forEach((item) => {
-    item.element.className = 'box9-check-item';
-    const icon = document.createElement('span');
-    icon.className = 'box9-check-icon';
-    const text = document.createElement('span');
-    item.element.append(icon, text);
-    item.icon = icon;
-    item.text = text;
-    checklist.appendChild(item.element);
-  });
-
-  const tysonLockCopy = document.createElement('div');
-  tysonLockCopy.className = 'box9-progress-note';
-  tysonLockCopy.style.fontSize = '12px';
-
-  const winsRow = document.createElement('div');
-  winsRow.className = 'box9-row';
-  winsRow.style.justifyContent = 'space-between';
-
-  const winsMMA = document.createElement('small');
-  const winsBodybuilder = document.createElement('small');
-  const winsTyson = document.createElement('small');
-  const winsPrincipal = document.createElement('small');
-  [winsMMA, winsBodybuilder, winsTyson, winsPrincipal].forEach((el) => {
-    el.style.color = '#b4bed4';
-    el.style.fontWeight = '700';
-    el.style.letterSpacing = '0.06em';
-  });
-
-  winsRow.append(winsMMA, winsBodybuilder, winsTyson, winsPrincipal);
-  fighterCard.append(progressNote, checklist, tysonLockCopy, winsRow);
 
   const gymPanel = document.createElement('div');
   gymPanel.className = 'box9-gym-panel';
@@ -1023,59 +954,9 @@ function createHud(
   gymActions.append(gymTabButton, gymIframeButton);
   gymPanel.append(gymTitle, gymDescription, gymActions, gymEmbed);
 
-  const progressPanel = document.createElement('div');
-  progressPanel.className = 'box9-progress-panel';
+  const progressPanel = createProgressPanel(store);
 
-  const progressHeader = document.createElement('div');
-  progressHeader.className = 'box9-progress-header';
-
-  const progressTitle = document.createElement('div');
-  progressTitle.className = 'box9-progress-title';
-  const progressTitleLabel = document.createElement('strong');
-  progressTitleLabel.textContent = 'Panel de progreso';
-  const progressSubtitle = document.createElement('small');
-  progressSubtitle.textContent = 'Resumen de campaña';
-  progressTitle.append(progressTitleLabel, progressSubtitle);
-
-  const activeGloveChip = document.createElement('span');
-  activeGloveChip.className = 'box9-progress-chip';
-  activeGloveChip.textContent = 'Guantes activos';
-
-  progressHeader.append(progressTitle, activeGloveChip);
-
-  const winsList = document.createElement('ul');
-  winsList.className = 'box9-progress-wins';
-
-  const opponents: { id: CharacterId; label: string; total: HTMLSpanElement }[] = [
-    { id: 'mma', label: 'MMA', total: document.createElement('span') },
-    { id: 'bodybuilder', label: 'Bodybuilder', total: document.createElement('span') },
-    { id: 'tyson', label: 'Tyson', total: document.createElement('span') },
-    { id: 'principal', label: 'Principal', total: document.createElement('span') }
-  ];
-
-  opponents.forEach((opponent) => {
-    const item = document.createElement('li');
-
-    const label = document.createElement('small');
-    label.textContent = opponent.label;
-
-    opponent.total.className = 'box9-progress-counter';
-    opponent.total.textContent = '0 victorias';
-
-    item.append(label, opponent.total);
-    winsList.appendChild(item);
-  });
-
-  const secretRouteProgress = document.createElement('p');
-  secretRouteProgress.className = 'box9-secret-progress';
-
-  const milestoneCopy = document.createElement('p');
-  milestoneCopy.className = 'box9-progress-milestone';
-  milestoneCopy.textContent = nextMilestone(normalizeProgress(store.getState().progress));
-
-  progressPanel.append(progressHeader, winsList, secretRouteProgress, milestoneCopy);
-
-  hud.append(topBar, chipsRow, fighterCard, gymPanel, progressPanel);
+  hud.append(topBar, chipsRow, fighterCard, gymPanel, progressPanel.panel);
 
   const update = (progressOverride?: ReturnType<typeof normalizeProgress>) => {
     const state = store.getState();
@@ -1094,7 +975,6 @@ function createHud(
     const cameraLabel = state.freeCamera ? 'Libre' : chinPreviewActive ? 'POV mentón' : 'Viaje guiado';
     cameraValue.textContent = cameraLabel;
     gloveValue.textContent = getGloveLabel(progress.activeGlove);
-    activeGloveChip.textContent = getGloveLabel(progress.activeGlove);
 
     const fighter = getFighterDetails(state.character);
     fighterName.textContent = fighter.name;
@@ -1130,39 +1010,9 @@ function createHud(
       hideGymEmbed();
     }
 
-    winsMMA.textContent = `Entrenamiento → MMA: ${progress.wins.entrenamiento.mma} · Bodybuilder: ${progress.wins.entrenamiento.bodybuilder} · Principal: ${progress.wins.entrenamiento.principal}`;
-    winsBodybuilder.textContent = `Amateur → MMA: ${progress.wins.amateur.mma} · Bodybuilder: ${progress.wins.amateur.bodybuilder} · Principal: ${progress.wins.amateur.principal}`;
-    winsTyson.textContent = `PRO → MMA: ${progress.wins.pro.mma} · Bodybuilder: ${progress.wins.pro.bodybuilder} · Tyson: ${progress.wins.pro.tyson} · Principal: ${progress.wins.pro.principal}`;
-    winsPrincipal.textContent = `Secreto → MMA: ${progress.wins.secreto.mma} · Bodybuilder: ${progress.wins.secreto.bodybuilder} · Tyson: ${progress.wins.secreto.tyson} · Principal: ${progress.wins.secreto.principal}`;
-    progressNote.textContent = nextMilestone(progress);
-    milestoneCopy.textContent = nextMilestone(progress);
-
-    opponents.forEach((opponent) => {
-      const totalWins =
-        progress.wins.entrenamiento[opponent.id] +
-        progress.wins.amateur[opponent.id] +
-        progress.wins.pro[opponent.id] +
-        progress.wins.secreto[opponent.id];
-      opponent.total.textContent = `${totalWins} ${totalWins === 1 ? 'victoria' : 'victorias'}`;
-    });
-
-    const secretSteps: CharacterId[] = ['mma', 'bodybuilder', 'tyson'];
-    const proWins = progress.wins.pro;
-    const completedSecret = secretSteps.filter((id) => proWins[id] > 0).length;
-    secretRouteProgress.textContent = progress.unlocks.secreto
-      ? 'Ruta secreta completada: dummy secreto habilitado.'
-      : `Ruta secreta con guantes PRO: ${completedSecret}/3 · MMA ${proWins.mma}/1 · Bodybuilder ${proWins.bodybuilder}/1 · Tyson ${proWins.tyson}/1.`;
-
-    checklistItems.forEach((item) => {
-      const completed = item.done(progress);
-      item.element.classList.toggle('done', completed);
-      if (item.icon) item.icon.textContent = completed ? '✔' : '•';
-      if (item.text) item.text.textContent = item.label(progress);
-    });
+    progressPanel.update();
 
     const tysonReason = getFightLockReason('tyson', progress);
-    tysonLockCopy.textContent = !progress.unlocks.tyson && tysonReason ? tysonReason : '';
-    tysonLockCopy.style.display = !progress.unlocks.tyson && tysonReason ? 'block' : 'none';
 
     chipList.querySelectorAll<HTMLElement>('.box9-chip').forEach((chip) => {
       const id = chip.dataset.character as CharacterId;

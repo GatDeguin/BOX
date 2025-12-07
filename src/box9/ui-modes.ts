@@ -1,5 +1,6 @@
-import { getGloveLabel, nextMilestone, normalizeProgress } from './progression';
+import { getGloveLabel, normalizeProgress } from './progression';
 import { Box9Store } from './state';
+import { createProgressPanel } from './ui-progress';
 
 export type Box9ModeId = 'campaign' | 'bolsa' | 'dummy';
 
@@ -121,15 +122,14 @@ export function createModeOverlay(
   gloveLabel.className = 'box9-mode-meta-value';
   gloveMeta.append('Guante activo: ', gloveLabel);
 
-  const milestone = document.createElement('p');
-  milestone.className = 'box9-mode-milestone';
+  const progressPanel = createProgressPanel(store);
 
   const gloveButton = document.createElement('button');
   gloveButton.className = 'box9-button box9-ghost';
   gloveButton.textContent = 'Ver guantes';
   gloveButton.addEventListener('click', () => dispatchOpenGloves());
 
-  sidebar.append(sidebarTitle, gloveMeta, milestone, gloveButton);
+  sidebar.append(sidebarTitle, gloveMeta, progressPanel.panel, gloveButton);
 
   layout.append(header, grid, sidebar);
   overlay.appendChild(layout);
@@ -146,7 +146,7 @@ export function createModeOverlay(
     }
 
     gloveLabel.textContent = getGloveLabel(progress.activeGlove);
-    milestone.textContent = nextMilestone(progress);
+    progressPanel.update();
   };
 
   update(normalizeProgress(store.getState().progress));
