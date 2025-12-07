@@ -1481,6 +1481,9 @@
     });
 
     const clock = new THREE.Clock();
+    let visualTime = 0;
+    let slowMoTime = 0;
+    const slowMoFactor = 0.35;
 
     const spectatorGeometry = new THREE.CapsuleGeometry(0.12, 0.35, 8, 16);
     const spectatorMaterial = new THREE.MeshStandardMaterial({
@@ -1557,6 +1560,11 @@
     const audioLoader = new THREE.AudioLoader();
     povCamera.add(listener);
 
+    let baseCrowdVolume = 0.8;
+    let currentCrowdVolume = baseCrowdVolume;
+    const baseCountdownVolume = 0.85;
+    let currentCountdownVolume = baseCountdownVolume;
+
     const loadedBuffers = new Map();
 
     function playSound(url, audio, volume = 1, loop = false) {
@@ -1597,7 +1605,13 @@
         }
         crowdAudio.setBuffer(buffer);
         crowdAudio.setLoop(true);
-        crowdAudio.setVolume(volume);
+        baseCrowdVolume = volume;
+        if (slowMoTime > 0) {
+          currentCrowdVolume = baseCrowdVolume * 0.35;
+        } else {
+          currentCrowdVolume = baseCrowdVolume;
+        }
+        crowdAudio.setVolume(currentCrowdVolume);
         crowdAudio.play();
       };
 
@@ -1644,10 +1658,25 @@
     function refreshCountdownAudio() {
       const anyDown = Object.values(fighterStates).some((state) => state.down);
       if (anyDown) {
-        playSound('sonidos/cuenta_atras.wav', countdownAudio, 0.85, true);
+        playSound('sonidos/cuenta_atras.wav', countdownAudio, baseCountdownVolume, true);
       } else {
         stopCountdownAudio();
       }
+    }
+
+    function applyAudioMix(delta) {
+      const slowMoActive = slowMoTime > 0;
+      const targetCrowdVolume = slowMoActive ? baseCrowdVolume * 0.35 : baseCrowdVolume;
+      const targetCountdownVolume = slowMoActive ? baseCountdownVolume * 1.05 : baseCountdownVolume;
+
+      const lerpFactor = Math.min(1, delta ? 1 - Math.pow(0.2, delta * 60) : 0.18);
+      currentCrowdVolume = THREE.MathUtils.lerp(currentCrowdVolume, targetCrowdVolume, lerpFactor);
+      currentCountdownVolume = THREE.MathUtils.lerp(currentCountdownVolume, targetCountdownVolume, lerpFactor);
+
+      if (crowdAudio.buffer) {
+        crowdAudio.setVolume(currentCrowdVolume);
+      }
+      countdownAudio.setVolume(currentCountdownVolume);
     }
 
     function declareVictory(winnerKey, reason = 'Finalización') {
@@ -1750,11 +1779,12 @@
       if (!state || state.down) return;
       const opponentKey = slotKey === 'player' ? 'rival' : 'player';
       state.down = true;
+      slowMoTime = 0.4;
       state.knockdowns = (state.knockdowns ?? 0) + 1;
       refreshCountdownAudio();
       clearAi(slotKey);
       pauseFightForKnockdown(opponentKey);
-      playSound('sonidos/impacto_grave.wav', fallAudio, 0.9);
+      playSound('sonidos/impacto_grave.wav', fallAudio, 1.05);
       const fallAction = await playAnimation(slotKey, 'fall', true);
       const duration = fallAction?.clip?.duration ?? 1.6;
 
@@ -2361,7 +2391,14 @@
     function render() {
       requestAnimationFrame(render);
       const delta = clock.getDelta();
-      const time = clock.elapsedTime;
+      const slowMoActive = slowMoTime > 0;
+      if (slowMoActive) {
+        slowMoTime = Math.max(0, slowMoTime - delta);
+      }
+
+      const animationDelta = slowMoActive ? delta * slowMoFactor : delta;
+      visualTime += animationDelta;
+      const time = visualTime;
 
       const stageConfig = stageProfiles[stageName] ?? stageProfiles.Presentación;
       const rhythmicPulse = (Math.sin(time * (1.1 + fightIntensity * 0.4)) + 1) * 0.12;
@@ -2370,7 +2407,7 @@
       crowdNoiseLevel = THREE.MathUtils.lerp(crowdNoiseLevel, targetNoise, 0.04);
 
       if (!params.pausarAnimaciones) {
-        mixers.forEach((mixer) => mixer.update(delta));
+        mixers.forEach((mixer) => mixer.update(animationDelta));
       }
 
       if (spectatorsMesh) {
@@ -2391,9 +2428,10 @@
       updateLedPanels(crowdNoiseLevel, time);
       updateJumbotrons(time);
       updateCrowdLights(time);
-      updateFlashes(delta, time);
-      updatePovMovement(delta);
+      updateFlashes(animationDelta, time);
+      updatePovMovement(animationDelta);
       updateAtmosphere(time);
+      applyAudioMix(delta);
       controls.update();
       renderPass.camera = activeCamera;
       composer.render();
