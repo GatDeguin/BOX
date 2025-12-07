@@ -690,6 +690,7 @@
     const fighterSlots = {
       player: {
         position: new THREE.Vector3(2.2, 0, 2.2),
+        corner: new THREE.Vector3(2.2, 0, 2.2),
         target: 'rival',
         current: 'principal',
         model: null,
@@ -699,6 +700,7 @@
       },
       rival: {
         position: new THREE.Vector3(-2.2, 0, -2.2),
+        corner: new THREE.Vector3(-2.2, 0, -2.2),
         target: 'player',
         current: 'tyson',
         model: null,
@@ -744,6 +746,8 @@
     let crowdNoiseLevel = stageProfiles.Presentación.noise;
     let stageName = 'Presentación';
     let fightEnded = false;
+    let knockdownBreak = false;
+    let bellRestartTimer = null;
 
     function setShadows(object) {
       object.traverse?.((child) => {
@@ -1081,6 +1085,15 @@
       nextPosition.y = slot.position.y;
       slot.position.copy(nextPosition);
       applyPosition(slotKey);
+    }
+
+    function sendFighterToCorner(slotKey) {
+      const slot = fighterSlots[slotKey];
+      if (!slot) return;
+      const corner = clampToRingBounds((slot.corner ?? slot.position).clone());
+      slot.position.copy(corner);
+      applyPosition(slotKey);
+      faceTarget(slotKey, slotKey === 'player' ? 'rival' : 'player');
     }
 
     function getHorizontalDistance(slotA, slotB) {
@@ -1574,6 +1587,11 @@
       fightEnded = true;
       params.pausarAnimaciones = true;
       pauseController?.setValue(true);
+      knockdownBreak = false;
+      if (bellRestartTimer) {
+        clearTimeout(bellRestartTimer);
+        bellRestartTimer = null;
+      }
       Object.keys(fighterStates).forEach((slotKey) => {
         clearAi(slotKey);
         fighterStates[slotKey].blocking = false;
@@ -1600,6 +1618,11 @@
 
     function applyPresentationMode() {
       fightEnded = false;
+      knockdownBreak = false;
+      if (bellRestartTimer) {
+        clearTimeout(bellRestartTimer);
+        bellRestartTimer = null;
+      }
       Object.keys(fighterStates).forEach((slotKey) => {
         const state = fighterStates[slotKey];
         state.mode = 'Presentación';
@@ -1649,6 +1672,7 @@
       state.down = true;
       state.knockdowns = (state.knockdowns ?? 0) + 1;
       clearAi(slotKey);
+      pauseFightForKnockdown(opponentKey);
       playSound('sonidos/impacto_grave.wav', fallAudio, 0.9);
       const fallAction = await playAnimation(slotKey, 'fall', true);
       const duration = fallAction?.clip?.duration ?? 1.6;
@@ -1682,20 +1706,19 @@
         state.health = Math.max(state.maxHealth * 0.6, state.health || state.maxHealth * 0.6);
         updateLifeBar(slotKey);
         state.down = false;
-        if (stageName === 'Combate' && !fightEnded) {
-          scheduleAi(slotKey);
-        }
+        sendFighterToCorner(slotKey);
+        queueRestartAfterBell();
       }, Math.min(countdownMs - 1500, duration * 1000 + 2200));
     }
 
     function scheduleAi(slotKey) {
       const state = fighterStates[slotKey];
-      if (!state || stageName !== 'Combate' || params.pausarAnimaciones || fightEnded) return;
+      if (!state || stageName !== 'Combate' || params.pausarAnimaciones || fightEnded || knockdownBreak) return;
       clearAi(slotKey);
 
       const delay = 480 + Math.random() * 820;
       state.aiTimer = setTimeout(async () => {
-        if (state.down || stageName !== 'Combate' || fightEnded) return;
+        if (state.down || stageName !== 'Combate' || fightEnded || knockdownBreak) return;
         const targetKey = slotKey === 'player' ? 'rival' : 'player';
         const targetState = fighterStates[targetKey];
         faceTarget(slotKey, targetKey);
@@ -1745,7 +1768,7 @@
           state.blocking = false;
           state.dodging = false;
           state.activeAction = null;
-          if (!state.down && stageName === 'Combate' && !fightEnded) {
+          if (!state.down && stageName === 'Combate' && !fightEnded && !knockdownBreak) {
             playAnimation(slotKey, 'idle', true);
             scheduleAi(slotKey);
           }
@@ -1753,8 +1776,41 @@
       }, delay);
     }
 
+    function pauseFightForKnockdown(activeKey) {
+      knockdownBreak = true;
+      clearAi('player');
+      clearAi('rival');
+
+      const activeState = fighterStates[activeKey];
+      if (activeState) {
+        activeState.blocking = false;
+        activeState.dodging = false;
+        activeState.activeAction = null;
+      }
+
+      sendFighterToCorner(activeKey);
+      playAnimation(activeKey, 'idle', true);
+    }
+
+    function queueRestartAfterBell() {
+      if (fightEnded || stageName !== 'Combate') return;
+      if (bellRestartTimer) {
+        clearTimeout(bellRestartTimer);
+      }
+
+      bellRestartTimer = setTimeout(() => {
+        if (fightEnded || stageName !== 'Combate') return;
+        playBell();
+        knockdownBreak = false;
+        scheduleAi('player');
+        scheduleAi('rival');
+        bellRestartTimer = null;
+      }, 1200);
+    }
+
     function applyCombatMode() {
       fightEnded = false;
+      knockdownBreak = false;
       Object.keys(fighterStates).forEach((slotKey) => {
         const state = fighterStates[slotKey];
         state.mode = 'Combate';
