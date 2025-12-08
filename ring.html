@@ -975,6 +975,13 @@
       activeRing = null;
     }
 
+    function applyRingTransform() {
+      if (!activeRing) return;
+      const currentY = activeRing.position.y;
+      activeRing.scale.setScalar(params.tamanoRing);
+      activeRing.position.set(params.ringPosX, params.ringPosY ?? currentY ?? 0, params.ringPosZ);
+    }
+
     async function setRing(key = 'clasico') {
       const config = ringCatalog[key] ?? ringCatalog.clasico;
       params.ring = key;
@@ -990,6 +997,7 @@
         setShadows(ring);
         scene.add(ring);
         activeRing = ring;
+        applyRingTransform();
         updateStatusText();
       } catch (err) {
         console.warn('No se pudo cargar', config.url, err.message);
@@ -1319,6 +1327,10 @@
       escalaRival: fighterSlots.rival.scale,
       alturaJugador: fighterSlots.player.position.y,
       alturaRival: fighterSlots.rival.position.y,
+      tamanoRing: 1,
+      ringPosX: 0,
+      ringPosY: 0,
+      ringPosZ: 0,
       pausarAnimaciones: false,
       luzDireccional: dirLight.intensity,
       hemi: hemiLight.intensity,
@@ -1460,6 +1472,26 @@
       .name('Guantes')
       .onChange((value) => setGloveStyle(value));
 
+    controllers.tamanoRing = gui
+      .add(params, 'tamanoRing', 0.2, 3, 0.01)
+      .name('Tamaño ring')
+      .onChange(() => applyRingTransform());
+
+    controllers.ringPosX = gui
+      .add(params, 'ringPosX', -10, 10, 0.05)
+      .name('Ring posición X')
+      .onChange(() => applyRingTransform());
+
+    controllers.ringPosY = gui
+      .add(params, 'ringPosY', -3, 3, 0.05)
+      .name('Ring posición Y')
+      .onChange(() => applyRingTransform());
+
+    controllers.ringPosZ = gui
+      .add(params, 'ringPosZ', -10, 10, 0.05)
+      .name('Ring posición Z')
+      .onChange(() => applyRingTransform());
+
     playerScaleController = gui
       .add(params, 'escalaJugador', 0.005, 2, 0.001)
       .name('Escala jugador')
@@ -1543,7 +1575,7 @@
         setGloveStyle(saved.guantes);
       }
       ['escalaJugador', 'escalaRival', 'alturaJugador', 'alturaRival', 'luzDireccional', 'hemi', 'niebla', 'bloomUmbral', 'bloom',
-        'espectadores'].forEach((key) => {
+        'espectadores', 'tamanoRing', 'ringPosX', 'ringPosY', 'ringPosZ'].forEach((key) => {
         if (typeof saved[key] === 'number' && params[key] !== saved[key]) {
           controllers[key]?.setValue(saved[key]);
         }
