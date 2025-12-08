@@ -757,14 +757,15 @@
         model: null,
         mixer: null,
         requestId: 0,
-        scale: 2,
+        scale: null,
       },
     };
 
     Object.entries(fighterSlots).forEach(([slotKey, slot]) => {
       const fighter = fighters[slot.current];
-      if (slot.scale == null) {
-        slot.scale = fighter?.scale ?? 0.01;
+      const defaultScale = fighter?.scale ?? 0.01;
+      if (slot.scale == null || !(slot.scale > 0)) {
+        slot.scale = defaultScale;
       }
     });
 
