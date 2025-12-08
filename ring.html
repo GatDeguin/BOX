@@ -864,16 +864,25 @@
 
     function findHandBone(model, side) {
       if (!model) return null;
-      const target = side === 'left' ? 'lefthand' : 'righthand';
-      let found = null;
+      const sideKey = side === 'left' ? 'left' : 'right';
+      const directTarget = `${sideKey}hand`;
+      let fallback = null;
+
       model.traverse((child) => {
-        if (found || !child.isBone) return;
-        const name = child.name?.toLowerCase?.() ?? '';
-        if (name.includes(target)) {
-          found = child;
+        if (!child.isBone || fallback) return;
+        const name = (child.name || '').toLowerCase();
+        const normalized = name.replace(/[^a-z]/g, '');
+
+        if (normalized.includes(directTarget) || normalized.includes(`hand${sideKey}`)) {
+          fallback = child;
+        } else if (sideKey === 'left' && (normalized.includes('lhand') || normalized.includes('handl'))) {
+          fallback = child;
+        } else if (sideKey === 'right' && (normalized.includes('rhand') || normalized.includes('handr'))) {
+          fallback = child;
         }
       });
-      return found;
+
+      return fallback;
     }
 
     function disposePlayerGloves() {
@@ -959,10 +968,35 @@
       }
     }
 
+    function syncGloveParamsFromConfig(config) {
+      const baseRotation = config?.baseRotation ?? new THREE.Euler();
+      const offset = config?.offset ?? new THREE.Vector3();
+      params.gloveScale = config?.scale ?? 1;
+      params.gloveRotX = THREE.MathUtils.radToDeg(baseRotation.x);
+      params.gloveRotY = THREE.MathUtils.radToDeg(baseRotation.y);
+      params.gloveRotZ = THREE.MathUtils.radToDeg(baseRotation.z);
+      params.glovePosX = offset.x;
+      params.glovePosY = offset.y;
+      params.glovePosZ = offset.z;
+    }
+
+    function applyGloveParamsFromUI() {
+      gloveConfig.scale = params.gloveScale;
+      gloveConfig.baseRotation = new THREE.Euler(
+        THREE.MathUtils.degToRad(params.gloveRotX),
+        THREE.MathUtils.degToRad(params.gloveRotY),
+        THREE.MathUtils.degToRad(params.gloveRotZ),
+      );
+      gloveConfig.offset = new THREE.Vector3(params.glovePosX, params.glovePosY, params.glovePosZ);
+      glovePrototype = null;
+      attachGlovesToPlayer(fighterSlots.player.model);
+    }
+
     function setGloveStyle(style = 'pro') {
       const config = gloveStyles[style] ?? gloveStyles.pro;
       params.guantes = style;
       gloveConfig = { ...config };
+      syncGloveParamsFromConfig(gloveConfig);
       glovePrototype = null;
       attachGlovesToPlayer(fighterSlots.player.model);
       updateStatusText();
@@ -1323,6 +1357,13 @@
       rival: 'tyson',
       ring: 'clasico',
       guantes: 'pro',
+      gloveScale: gloveStyles.pro.scale,
+      gloveRotX: THREE.MathUtils.radToDeg(gloveStyles.pro.baseRotation.x),
+      gloveRotY: THREE.MathUtils.radToDeg(gloveStyles.pro.baseRotation.y),
+      gloveRotZ: THREE.MathUtils.radToDeg(gloveStyles.pro.baseRotation.z),
+      glovePosX: gloveStyles.pro.offset.x,
+      glovePosY: gloveStyles.pro.offset.y,
+      glovePosZ: gloveStyles.pro.offset.z,
       escalaJugador: fighterSlots.player.scale,
       escalaRival: fighterSlots.rival.scale,
       alturaJugador: fighterSlots.player.position.y,
@@ -1472,6 +1513,36 @@
       .name('Guantes')
       .onChange((value) => setGloveStyle(value));
 
+    const gloveFolder = gui.addFolder('Ajustes de guantes');
+    controllers.gloveScale = gloveFolder
+      .add(params, 'gloveScale', 0.01, 0.2, 0.001)
+      .name('Escala')
+      .onChange(applyGloveParamsFromUI);
+    controllers.gloveRotX = gloveFolder
+      .add(params, 'gloveRotX', -360, 360, 1)
+      .name('Rotación X')
+      .onChange(applyGloveParamsFromUI);
+    controllers.gloveRotY = gloveFolder
+      .add(params, 'gloveRotY', -360, 360, 1)
+      .name('Rotación Y')
+      .onChange(applyGloveParamsFromUI);
+    controllers.gloveRotZ = gloveFolder
+      .add(params, 'gloveRotZ', -360, 360, 1)
+      .name('Rotación Z')
+      .onChange(applyGloveParamsFromUI);
+    controllers.glovePosX = gloveFolder
+      .add(params, 'glovePosX', -1, 1, 0.01)
+      .name('Offset X')
+      .onChange(applyGloveParamsFromUI);
+    controllers.glovePosY = gloveFolder
+      .add(params, 'glovePosY', -1, 1, 0.01)
+      .name('Offset Y')
+      .onChange(applyGloveParamsFromUI);
+    controllers.glovePosZ = gloveFolder
+      .add(params, 'glovePosZ', -1, 1, 0.01)
+      .name('Offset Z')
+      .onChange(applyGloveParamsFromUI);
+
     controllers.tamanoRing = gui
       .add(params, 'tamanoRing', 0.2, 3, 0.01)
       .name('Tamaño ring')
@@ -1575,7 +1646,7 @@
         setGloveStyle(saved.guantes);
       }
       ['escalaJugador', 'escalaRival', 'alturaJugador', 'alturaRival', 'luzDireccional', 'hemi', 'niebla', 'bloomUmbral', 'bloom',
-        'espectadores', 'tamanoRing', 'ringPosX', 'ringPosY', 'ringPosZ'].forEach((key) => {
+        'espectadores', 'tamanoRing', 'ringPosX', 'ringPosY', 'ringPosZ', 'gloveScale', 'gloveRotX', 'gloveRotY', 'gloveRotZ', 'glovePosX', 'glovePosY', 'glovePosZ'].forEach((key) => {
         if (typeof saved[key] === 'number' && params[key] !== saved[key]) {
           controllers[key]?.setValue(saved[key]);
         }
