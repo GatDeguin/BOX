@@ -689,7 +689,7 @@
         label: 'Pro (rojo)',
         url: 'modelos/Guantes_PRO/mesh.obj',
         mtlUrl: 'modelos/Guantes_PRO/mesh.mtl',
-        scale: 0.025,
+        scale: 0.25,
         baseRotation: new THREE.Euler(2.844886680750757, 1.7627825445142729, 0.03490658503988659),
         offset: new THREE.Vector3(0.35, 0.25, 0.13),
         textures: {
@@ -1515,7 +1515,7 @@
 
     const gloveFolder = gui.addFolder('Ajustes de guantes');
     controllers.gloveScale = gloveFolder
-      .add(params, 'gloveScale', 0.01, 0.2, 0.001)
+      .add(params, 'gloveScale', 0.01, 0.3, 0.001)
       .name('Escala')
       .onChange(applyGloveParamsFromUI);
     controllers.gloveRotX = gloveFolder
