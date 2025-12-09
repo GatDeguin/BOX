@@ -746,6 +746,7 @@
         current: 'principal',
         model: null,
         mixer: null,
+        currentAction: null,
         requestId: 0,
         scale: 0.01,
       },
@@ -756,6 +757,7 @@
         current: 'tyson',
         model: null,
         mixer: null,
+        currentAction: null,
         requestId: 0,
         scale: null,
       },
@@ -1122,6 +1124,7 @@
       slot.current = fighterKey;
       slot.model = loaded.model;
       slot.mixer = loaded.mixer;
+      slot.currentAction = null;
       applyFighterTextures(slot.model, fighter);
       scene.add(loaded.model);
       if (loaded.mixer) {
@@ -1321,16 +1324,22 @@
       const clip = await loadClip(key);
       if (!config || !clip) return null;
 
-      slot.mixer.stopAllAction();
       const action = slot.mixer.clipAction(clip);
       action.loop = config.loop ?? THREE.LoopRepeat;
       action.clampWhenFinished = config.loop === THREE.LoopOnce;
       action.reset();
-      if (fade) {
-        action.fadeIn(0.2).play();
+      const previousAction = slot.currentAction;
+      const hasPrevious = previousAction && previousAction !== action;
+
+      if (fade && hasPrevious) {
+        action.play();
+        previousAction.crossFadeTo(action, 0.25, true);
       } else {
+        if (hasPrevious) previousAction.stop();
         action.play();
       }
+
+      slot.currentAction = action;
       return { action, config, clip };
     }
 
